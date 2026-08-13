@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body {
+        padding: 0;
+        margin: 0;
+      }
+      .hero {
+        background: linear-gradient(135deg, #7c3aed 0%, #ec4899 55%, #f97316 100%);
+        padding: 48px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .card {
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      }
+      .card-title {
+        font-size: 28px;
+        font-weight: 700;
+        color: #111827;
+      }
+      .card-body {
+        font-size: 16px;
+        color: #374151;
+      }
+      .pill {
+        background: radial-gradient(circle at 30% 30%, #fde68a, #d97706);
+        width: 96px;
+        height: 96px;
+        border-radius: 48px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="hero">
+      <div class="card">
+        <div class="card-title">Gradient + shadow</div>
+        <div class="card-body">A linear gradient behind a translucent rounded card with a drop shadow.</div>
+      </div>
+      <div class="pill"></div>
+    </div>
+  </body>
+</html>

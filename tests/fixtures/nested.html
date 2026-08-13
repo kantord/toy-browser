@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body {
+        background: #f3f4f6;
+        padding: 20px;
+        font-size: 16px;
+        color: #111827;
+      }
+      .outer {
+        border: 2px solid #111827;
+        padding: 16px;
+        background: #ffffff;
+      }
+      .middle {
+        border: 2px dashed #2563eb;
+        padding: 16px;
+        background: #eff6ff;
+      }
+      .inner {
+        border: 2px solid #16a34a;
+        padding: 16px;
+        background: #f0fdf4;
+      }
+      ul {
+        margin: 0;
+      }
+      .label {
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="outer">
+      <div class="label">outer</div>
+      <div class="middle">
+        <div class="label">middle</div>
+        <div class="inner">
+          <div class="label">inner</div>
+          <ul>
+            <li>first item</li>
+            <li>second item</li>
+            <li>third item</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
