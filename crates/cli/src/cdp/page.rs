@@ -12,6 +12,11 @@ use toy_browser::{NavigationError, PageId, Remote};
 pub struct Page {
     pub target_id: String,
     pub cdp_session_id: String,
+    /// Sessions a client attached explicitly, on top of the one it was given
+    /// when the target appeared. A browser mints a fresh id for each, and a
+    /// client routes replies by it — reusing the first id makes its router
+    /// see two conversations as one.
+    pub extra_sessions: Vec<String>,
     /// The main frame's id. Must equal `target_id`: clients key a page's
     /// session by target id and then look it up by frame id, so a page whose
     /// main frame is named anything else reads as detached.
@@ -43,6 +48,7 @@ impl Page {
             frame_id: target_id.clone(),
             target_id,
             cdp_session_id: format!("SESSION{index}"),
+            extra_sessions: Vec::new(),
             loader_id: format!("LOADER{index}-0"),
             utility_world: None,
             main_context_id: 1,
@@ -54,6 +60,19 @@ impl Page {
             context_count: 2,
             next_object: 0,
         }
+    }
+
+    /// Mints another session id addressing this same page.
+    pub fn attach(&mut self) -> String {
+        let id = format!("{}-cdp{}", self.cdp_session_id, self.extra_sessions.len() + 1);
+        self.extra_sessions.push(id.clone());
+        id
+    }
+
+    /// Whether `session_id` is one of the conversations about this page.
+    pub fn answers_to(&self, session_id: &str) -> bool {
+        self.cdp_session_id == session_id
+            || self.extra_sessions.iter().any(|extra| extra == session_id)
     }
 
     /// Issues the loader id a client uses to tell one navigation from the next.

@@ -68,7 +68,7 @@ test("counts elements through a locator", async () => {
 // Web-first assertions poll through Playwright's injected script, which is the
 // part of it this browser cannot yet host. The plain-API forms of both of these
 // pass above; only the polling wrappers fail.
-test.fixme("web-first assertions poll via the injected script", async () => {
+test("web-first assertions poll via the injected script", async () => {
   await page.goto(fixture("hello.html"));
   await expect(page).toHaveTitle("Hello");
   await expect(page.locator("p")).toHaveCount(2);
@@ -86,4 +86,27 @@ test("runs an init script before the page's own", async () => {
   });
   await page.goto(fixture("hello.html"));
   expect(await page.evaluate(() => globalThis.__initRan)).toBe("yes");
+});
+
+test("web-first assertions", async () => {
+  await page.goto(fixture("hello.html"));
+  await expect(page).toHaveTitle("Hello");
+  await expect(page.locator("p")).toHaveCount(2);
+  await expect(page.locator("h1")).toBeVisible();
+  await expect(page.locator("h1")).toHaveText("Hello, toy browser");
+  await expect(page.locator("h1")).toContainText("toy");
+});
+
+test("locators find and read elements", async () => {
+  await page.goto(fixture("hello.html"));
+  expect(await page.textContent("h1")).toBe("Hello, toy browser");
+  expect(await page.getByText("toy browser").count()).toBeGreaterThan(0);
+  await expect(page.locator("p.muted")).toHaveAttribute("class", "muted");
+});
+
+// Actions need a hit-testing and input model this browser does not have, and
+// innerText needs layout-aware text. See docs/cdp-surface.md.
+test.fixme("actions and innerText", async () => {
+  await page.locator("h1").innerText();
+  await page.locator("h1").click();
 });

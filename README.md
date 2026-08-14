@@ -137,22 +137,23 @@ pnpm install && pnpm test
 ✓ screenshots at the requested viewport
 ✓ measures where elements ended up
 ✓ counts elements through a locator
-- web-first assertions poll via the injected script
+✓ web-first assertions poll via the injected script
 ✓ rejects a scheme it cannot load
 ✓ runs an init script before the page's own
+✓ web-first assertions
+✓ locators find and read elements
+- actions and innerText
 ```
 
-The dividing line: **plain APIs work, `expect()` matchers do not.**
-`await page.title()` passes, `await expect(page).toHaveTitle(…)` fails — every
-web-first assertion polls through Playwright's injected script, which this
-browser cannot yet host. Working: `goto`, `screenshot`, `title()`, `content()`,
-`url()`, `evaluate()` with functions and arguments, `evaluateHandle()`,
-`locator.count()`, `locator.isVisible()`, and `getBoundingClientRect()` backed
-by a real layout pass. Not working: clicking, typing, `textContent()`.
+The dividing line is **reads versus actions**. Working: `goto`, `screenshot`,
+`evaluate()` and `evaluateHandle()`, `title()`, `content()`, `textContent()`,
+`getByText()`, `locator.count()`, `getBoundingClientRect()` backed by a real
+layout pass, and the web-first assertions — `toHaveTitle`, `toHaveCount`,
+`toBeVisible`, `toHaveText`, `toContainText`, `toHaveAttribute`.
 
-That is the honest usability limit: you cannot yet write a normal Playwright
-test, because a normal Playwright test is made of `expect()`.
-`docs/cdp-surface.md` records what is missing and what is known about why.
+Not working: anything that moves a mouse or a caret — `click`, `fill`, `hover`
+— plus `innerText()` and `waitForSelector()`. `docs/cdp-surface.md` records the
+full list and how the assertion blocker was found.
 
 Navigation handles `about:` and `file://` only; anything else comes back as
 `net::ERR_UNKNOWN_URL_SCHEME`.

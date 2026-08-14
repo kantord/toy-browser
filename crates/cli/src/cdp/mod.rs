@@ -98,6 +98,9 @@ struct Session<'b> {
     browser: &'b mut Browser,
     pages: Vec<Page>,
     next_index: u32,
+    /// Session ids a client attached to the browser itself. Commands arriving
+    /// on one are browser commands, exactly as if they carried no id at all.
+    browser_sessions: Vec<String>,
 }
 
 impl<'b> Session<'b> {
@@ -106,6 +109,7 @@ impl<'b> Session<'b> {
             browser,
             pages: Vec::new(),
             next_index: 1,
+            browser_sessions: Vec::new(),
         }
     }
 
@@ -116,9 +120,11 @@ impl<'b> Session<'b> {
         let params = &request["params"];
         let session_id = request["sessionId"].as_str();
 
+        let addressed_to_browser = session_id
+            .is_none_or(|session| self.browser_sessions.iter().any(|id| id == session));
         let outcome = match session_id {
-            Some(session) => self.page_command(method, params, session)?,
-            None => self.browser_command(method, params)?,
+            Some(session) if !addressed_to_browser => self.page_command(method, params, session)?,
+            _ => self.browser_command(method, params)?,
         };
 
         let mut outgoing = outcome.before;
@@ -166,10 +172,24 @@ impl<'b> Session<'b> {
                 }
             }
 
+            // A client attaching to the browser expects an id to hold the
+            // conversation on. Answering without one makes it register a
+            // session under `undefined` and misroute every reply after.
+            "Target.attachToBrowserTarget" => {
+                let id = format!("BROWSER-cdp{}", self.browser_sessions.len() + 1);
+                self.browser_sessions.push(id.clone());
+                Outcome::ok(json!({ "sessionId": id }))
+            }
+
             "Target.attachToTarget" => {
-                let target_id = params["targetId"].as_str().unwrap_or_default();
-                Outcome::ok(match self.page_by_target(target_id) {
-                    Some(page) => json!({ "sessionId": page.cdp_session_id }),
+                let target_id = params["targetId"].as_str().unwrap_or_default().to_owned();
+                let attached = self
+                    .pages
+                    .iter_mut()
+                    .find(|page| page.target_id == target_id)
+                    .map(|page| page.attach());
+                Outcome::ok(match attached {
+                    Some(session) => json!({ "sessionId": session }),
                     None => json!({}),
                 })
             }
@@ -209,7 +229,7 @@ impl<'b> Session<'b> {
         let Some(index) = self
             .pages
             .iter()
-            .position(|page| page.cdp_session_id == session_id)
+            .position(|page| page.answers_to(session_id))
         else {
             return Ok(Outcome::ok(json!({})));
         };
@@ -386,9 +406,6 @@ impl<'b> Session<'b> {
         })
     }
 
-    fn page_by_target(&self, target_id: &str) -> Option<&Page> {
-        self.pages.iter().find(|page| page.target_id == target_id)
-    }
 }
 
 fn navigation_events(page: &Page, url: &str) -> Vec<Value> {

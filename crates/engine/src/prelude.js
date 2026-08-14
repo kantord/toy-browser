@@ -62,8 +62,12 @@
       return __dom.queryAll(String(selector)).includes(this.__id);
     }
 
+    // Anything that is not one of our nodes cannot be inside one of ours, so
+    // it is not contained. Callers pass all sorts of things here.
     contains(other) {
-      return other != null && (other.__id === this.__id || isDescendant(other.__id, this.__id));
+      const id = other?.__id;
+      if (typeof id !== "number") return false;
+      return id === this.__id || isDescendant(id, this.__id);
     }
 
     get nodeType() {
@@ -393,9 +397,49 @@
 
   // `class extends HTMLElement` has to resolve to something.
   class HTMLElement extends Node {}
+  // The node-type constants live on the constructor, and code compares
+  // `child.nodeType === Node.TEXT_NODE` far more often than it calls anything.
+  Node.ELEMENT_NODE = 1;
+  Node.TEXT_NODE = 3;
+  Node.CDATA_SECTION_NODE = 4;
+  Node.PROCESSING_INSTRUCTION_NODE = 7;
+  Node.COMMENT_NODE = 8;
+  Node.DOCUMENT_NODE = 9;
+  Node.DOCUMENT_TYPE_NODE = 10;
+  Node.DOCUMENT_FRAGMENT_NODE = 11;
   globals.Node = Node;
   globals.HTMLElement = HTMLElement;
   globals.Element = HTMLElement;
+
+  // The per-tag interfaces. They carry no behaviour — they exist so that
+  // `instanceof` answers, which code branches on constantly. Anything not
+  // listed stays a plain HTMLElement, as it would in a browser.
+  const INTERFACES = {};
+  const defineInterface = (name, tags = []) => {
+    const interface_ = class extends HTMLElement {};
+    Object.defineProperty(interface_, "name", { value: name });
+    globals[name] = interface_;
+    for (const tag of tags) INTERFACES[tag] = interface_;
+  };
+
+  defineInterface("HTMLInputElement", ["input"]);
+  defineInterface("HTMLTextAreaElement", ["textarea"]);
+  defineInterface("HTMLSelectElement", ["select"]);
+  defineInterface("HTMLOptionElement", ["option"]);
+  defineInterface("HTMLButtonElement", ["button"]);
+  defineInterface("HTMLAnchorElement", ["a"]);
+  defineInterface("HTMLImageElement", ["img"]);
+  defineInterface("HTMLFormElement", ["form"]);
+  defineInterface("HTMLLabelElement", ["label"]);
+  defineInterface("HTMLIFrameElement", ["iframe"]);
+  defineInterface("HTMLSlotElement", ["slot"]);
+  defineInterface("HTMLBodyElement", ["body"]);
+  defineInterface("HTMLHtmlElement", ["html"]);
+  defineInterface("SVGElement", ["svg"]);
+  defineInterface("Text");
+  defineInterface("Comment");
+  defineInterface("DocumentFragment");
+  defineInterface("ShadowRoot");
 
   // Nothing observes anything here: the DOM only changes while script is
   // running, and no client is watching when it does. These exist because
@@ -427,7 +471,6 @@
   globals.CSSStyleSheet = CSSStyleSheet;
   globals.CSSRule = CSSRule;
   globals.CSSGroupingRule = CSSGroupingRule;
-  globals.ShadowRoot = class ShadowRoot {};
 
   globals.NodeFilter = {
     SHOW_ALL: 0xffffffff,
@@ -441,9 +484,17 @@
   globals.ResizeObserver = MutationObserver;
   globals.IntersectionObserver = MutationObserver;
 
+  /// Which interface a node presents, by what it is.
+  const interfaceFor = (id) => {
+    if (__dom.nodeType(id) === 3) return globals.Text;
+    if (__dom.nodeType(id) === 8) return globals.Comment;
+    return INTERFACES[__dom.tagName(id)] ?? HTMLElement;
+  };
+
   /// Whether `id` sits anywhere under `ancestorId`.
   const isDescendant = (id, ancestorId) => {
-    for (let at = __dom.parent(id); at !== null; at = __dom.parent(at)) {
+    if (typeof id !== "number" || typeof ancestorId !== "number") return false;
+    for (let at = __dom.parent(id); at !== null && at !== undefined; at = __dom.parent(at)) {
       if (at === ancestorId) return true;
     }
     return false;
@@ -473,6 +524,8 @@
     let wrapper = wrappers.get(id);
     if (!wrapper) {
       wrapper = new HTMLElement(id);
+      const interface_ = interfaceFor(id);
+      if (interface_ !== HTMLElement) Object.setPrototypeOf(wrapper, interface_.prototype);
       wrappers.set(id, wrapper);
     }
     return wrapper;
@@ -635,16 +688,35 @@
     // Fonts are registered before a page loads, so they are never pending.
     fonts: { ready: Promise.resolve(), status: "loaded" },
 
+    // The pre-constructor way of making an event. Still reached for by code
+    // that supports old engines.
+    createEvent: () => {
+      const event = new CustomEvent("");
+      event.initCustomEvent = (type, bubbles, cancelable, detail) => {
+        event.type = String(type);
+        event.bubbles = !!bubbles;
+        event.cancelable = !!cancelable;
+        event.detail = detail ?? null;
+      };
+      event.initEvent = (type, bubbles, cancelable) =>
+        event.initCustomEvent(type, bubbles, cancelable, null);
+      return event;
+    },
+
     getElementById: (id) => wrap(__dom.getElementById(id)),
     getElementsByTagName: (tag) => __dom.elementsByTag(tag).map(wrap),
     querySelectorAll: (selector) => __dom.queryAll(String(selector)).map(wrap),
     querySelector: (selector) => wrap(__dom.queryAll(String(selector))[0] ?? null),
-    contains: (node) => node != null,
+    contains: (node) => typeof node?.__id === "number",
     createElement: (tag) => wrap(__dom.createElement(String(tag))),
     createTextNode: (text) => wrap(__dom.createTextNode(String(text))),
 
     addEventListener: (type, listener) => addListener(document.__id, type, listener),
     removeEventListener: (type, listener) => removeListener(document.__id, type, listener),
+    dispatchEvent: (event) => {
+      dispatch(document.__id, event);
+      return !event.defaultPrevented;
+    },
 
     // Parsing is already over by the time anything runs, so written markup can
     // only go at the end of the body.
@@ -700,6 +772,10 @@
 
   globals.addEventListener = (type, listener) => addListener(WINDOW, type, listener);
   globals.removeEventListener = (type, listener) => removeListener(WINDOW, type, listener);
+  globals.dispatchEvent = (event) => {
+    dispatch(WINDOW, event);
+    return !event.defaultPrevented;
+  };
 
   // ------------------------------------------------------------- lifecycle
 

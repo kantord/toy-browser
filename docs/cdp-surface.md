@@ -30,7 +30,8 @@ level of the envelope; the browser itself is addressed by omitting it.
 | browser | `Browser.getVersion` | reports product and user agent |
 | browser | `Target.getTargetInfo` | describes the browser target |
 | browser | `Target.createTarget` | creates a Page |
-| browser | `Target.attachToTarget` | hands back an existing Page's session id |
+| browser | `Target.attachToTarget` | mints a session id for a Page |
+| browser | `Target.attachToBrowserTarget` | mints a session id for the browser |
 | browser | `Target.closeTarget` | destroys a Page |
 | page | `Page.getFrameTree` | describes the Page's single frame |
 | page | `Page.navigate` | performs the Load |
@@ -99,10 +100,10 @@ Everything below was measured, not guessed.
 | Works | Does not |
 | --- | --- |
 | `page.goto`, `page.screenshot` | `locator.click` and every other action |
-| `page.title()`, `page.content()`, `page.url()` | `locator.textContent()`, `innerText()` |
-| `page.evaluate()` — expressions, functions, arguments | `page.$()` |
-| `page.evaluateHandle()`, and handles passed back as arguments | |
-| `locator.count()`, `locator.isVisible()` | |
+| `page.title()`, `page.content()`, `page.url()` | `locator.innerText()` |
+| `page.evaluate()`, `page.evaluateHandle()`, handles as arguments | `page.waitForSelector()` |
+| **`expect(...).toHaveTitle / toHaveCount / toBeVisible / toHaveText / toContainText / toHaveAttribute`** | |
+| `page.textContent()`, `page.getByText()`, `locator.count()` | |
 | `getBoundingClientRect()` — real measured geometry | |
 
 Playwright evaluates through two bundles it injects into the page. The
@@ -112,8 +113,14 @@ actions. Getting it to bootstrap took globals it constructs on load —
 `MutationObserver`, `Element`, `NodeFilter`, the `Event`/`CustomEvent`
 constructors, `document.fonts` — plus `querySelectorAll` and element geometry.
 
-What remains is a long tail of DOM surface, not one missing piece — see
-"What is still missing" below for the measured list.
+Web-first assertions work. What blocked them was a single missing member:
+`document.dispatchEvent`. Playwright's `markTargetElements` dispatches a reset
+event on the document before every locator resolution, and our `document` had
+`addEventListener` but nothing to dispatch with — so every `expect()` failed on
+the first thing it did.
+
+What remains is actions and a long tail of DOM surface — see "What is still
+missing" below.
 
 The prelude's stubs are honest about being stubs. `MutationObserver` observes
 nothing, because the DOM only changes while script is running and nobody is
@@ -125,11 +132,9 @@ class, for the same reason.
 `tests/playwright/specs/` runs under `@playwright/test` itself — the real
 runner, real config, real reporter. `pnpm test` starts the browser and runs it.
 
-The dividing line is sharp and worth stating precisely: **plain APIs work,
-web-first assertions do not.** `await page.title()` passes;
-`await expect(page).toHaveTitle(...)` fails. `await locator.count()` passes;
-`await expect(locator).toHaveCount(...)` fails. Every `expect()` matcher polls
-through the injected script, so they all fail together, for the one reason.
+The dividing line is now **reads versus actions**, not plain versus web-first.
+Assertions, locators and text all work; anything that would move a mouse or a
+caret does not.
 
 Playwright's own `webServer` option cannot start this browser: it probes with an
 HTTP GET and the port only speaks WebSocket, so readiness never registers. A
@@ -175,9 +180,10 @@ window in a loaded page and reports what is undefined.
 
 | Missing | What it blocks |
 | --- | --- |
+| `click`, `elementFromPoint`, `elementsFromPoint`, input events | every action: click, type, hover, drag |
+| `page.waitForSelector` | waiting for something to appear |
 | `getComputedStyle`, `checkVisibility` | correct visibility; see below |
 | `innerText` | `toHaveText`, `getByText`, `locator.innerText()` |
-| `click`, `elementFromPoint`, `elementsFromPoint` | clicking anything |
 | `scrollWidth`/`scrollHeight`, `scrollTop`/`scrollLeft`, `scrollingElement` | scrolling, and scroll-into-view before an action |
 | `createTreeWalker`, `createRange`, `getSelection` | text-range work, and the trace snapshotter |
 | `activeElement`, `hasFocus`, `labels` | focus tracking, `getByLabel` |
@@ -202,24 +208,29 @@ and `measure.rs` already walks those nodes, so style could ride the same
 marker-class join the boxes do — `Environment` gaining a `styles` map beside
 `boxes`.
 
-## Why web-first assertions still fail
+## How the assertion blocker was found
 
-`expect(page).toHaveTitle(…)` and `expect(locator).toHaveCount(…)` fail with a
-bare `not a function` thrown inside Playwright's injected script, while the
-plain forms — `page.title()`, `locator.count()` — both pass.
+Worth recording, because the same method will find the next one.
 
-What is known:
+Reading the injected script's source was a dead end twice over: Playwright 1.62
+bundles it, and the readable copy sitting in another checkout was a 1.58-era
+build — so every line number and frame name chased came from code that was not
+running. QuickJS's stack was accurate all along; the source being compared
+against was not.
 
-- It is not the availability of any name we have probed for.
-- QuickJS's stack names a function whose body runs correctly in isolation, and
-  its line numbers do not land on the code that runs, so the stack cannot be
-  trusted to locate it.
-- Playwright 1.62 bundles its injected script; the readable copy in
-  `lib/generated/` is a 1.58-era layout. Any analysis of that source is against
-  a different build than the one under test.
+What worked was never reading the source at all. The client builds its own
+injected script and we hand it an objectId; a diagnostic attaches its own CDP
+session and calls methods on that object one at a time. `markTargetElements`
+threw even when handed an empty set, which put the failure in its preamble —
+and the preamble's only call is `this.document.dispatchEvent`.
 
-Pinning it needs the injected script for the version actually running,
-constructed inside the page and stepped through one call at a time.
+Two protocol bugs surfaced on the way, both real:
+
+- `Target.attachToBrowserTarget` answered `{}`. A client needs a session id
+  back; without one it registers a session under `undefined` and misroutes
+  every reply after it.
+- `Target.attachToTarget` returned the session id the client already had, so
+  its router saw two conversations as one. Each attach now mints a fresh id.
 
 ## Where geometry comes from
 
