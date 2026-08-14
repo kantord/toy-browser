@@ -1,5 +1,6 @@
 //! A toy "browser": renders HTML files to PNG through blitz-dom, takumi and resvg.
 
+mod cdp;
 mod fonts;
 mod js;
 mod pipeline;
@@ -9,26 +10,37 @@ mod serialize;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
-use pipeline::{Artifacts, RenderOptions};
+use pipeline::{Document, Raster, Viewport};
 
 #[derive(Parser)]
-#[command(
-    about = "Render HTML files to PNG via blitz-dom -> takumi -> SVG -> resvg",
-    version
-)]
+#[command(about = "Render HTML to PNG via blitz-dom -> takumi -> SVG -> resvg", version)]
 struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Render HTML files to PNG.
+    Render(RenderArgs),
+    /// Serve the Chrome DevTools Protocol so Playwright can drive this browser.
+    Serve(ServeArgs),
+}
+
+#[derive(clap::Args)]
+struct RenderArgs {
     /// HTML files to render.
     #[arg(required = true)]
     inputs: Vec<PathBuf>,
 
-    /// Directory for the `.dom.html`, `.svg` and `.png` artifacts.
+    /// Directory for the `.dom.html`, `.scripts.md`, `.svg` and `.png` artifacts.
     #[arg(long, default_value = "out")]
     out_dir: PathBuf,
 
     /// Viewport width in px.
-    #[arg(long, default_value_t = 800)]
+    #[arg(long, default_value_t = Viewport::DEFAULT_WIDTH)]
     width: u32,
 
     /// Viewport height in px. Omitted, the page is sized to its content.
@@ -44,49 +56,68 @@ struct Cli {
     no_scripts: bool,
 }
 
+#[derive(clap::Args)]
+struct ServeArgs {
+    /// Port to listen on. Connect with `chromium.connectOverCDP("ws://127.0.0.1:<port>/")`.
+    #[arg(long, default_value_t = 9222)]
+    port: u16,
+
+    /// Font files to register. Defaults to an auto-detected system sans-serif.
+    #[arg(long = "font", value_name = "PATH")]
+    fonts: Vec<PathBuf>,
+}
+
 fn main() -> Result<()> {
-    let cli = Cli::parse();
-    let fonts = fonts::load(&cli.fonts)?;
-    let options = RenderOptions {
-        width: cli.width,
-        height: cli.height,
-        run_scripts: !cli.no_scripts,
+    match Cli::parse().command {
+        Command::Render(args) => render(args),
+        Command::Serve(args) => cdp::serve(args.port, fonts::load(&args.fonts)?),
+    }
+}
+
+fn render(args: RenderArgs) -> Result<()> {
+    let fonts = fonts::load(&args.fonts)?;
+    let viewport = Viewport {
+        width: args.width,
+        height: args.height,
     };
 
-    for input in &cli.inputs {
-        let source =
-            std::fs::read_to_string(input).with_context(|| format!("reading {}", input.display()))?;
+    for input in &args.inputs {
+        let source = std::fs::read_to_string(input)
+            .with_context(|| format!("reading {}", input.display()))?;
+        let base_dir = input.parent().unwrap_or(Path::new("."));
         let stem = input
             .file_stem()
             .and_then(|stem| stem.to_str())
             .unwrap_or("page");
 
-        let base_dir = input.parent().unwrap_or(Path::new("."));
-
-        let artifacts = pipeline::render(&source, base_dir, &fonts, &options)
+        let document = pipeline::load(&source, base_dir, !args.no_scripts)
+            .with_context(|| format!("loading {}", input.display()))?;
+        let raster = pipeline::render(&document, &fonts, viewport)
             .with_context(|| format!("rendering {}", input.display()))?;
-        let png_path = pipeline::write_artifacts(&artifacts, &cli.out_dir, stem)?;
+        let png_path = pipeline::write_artifacts(&document, &raster, &args.out_dir, stem)?;
 
         println!("{} -> {}", input.display(), png_path.display());
-        report(&artifacts);
+        report(&document, &raster);
     }
 
     Ok(())
 }
 
 /// One indented line per thing worth knowing about the render.
-fn report(artifacts: &Artifacts) {
-    let scripts = &artifacts.scripts;
-    if !scripts.entry_points.is_empty() {
-        println!(
-            "  {} JS entry point(s); {} external script(s) loaded, {} unresolved",
-            scripts.entry_points.len(),
-            scripts.loaded_count(),
-            scripts.unresolved_count(),
-        );
+fn report(document: &Document, raster: &Raster) {
+    let scripts = &document.scripts;
+    if scripts.entry_points.is_empty() {
+        return;
     }
 
-    if let Some(js) = artifacts.js.as_ref().filter(|_| !scripts.entry_points.is_empty()) {
+    println!(
+        "  {} JS entry point(s); {} external script(s) loaded, {} unresolved",
+        scripts.entry_points.len(),
+        scripts.loaded_count(),
+        scripts.unresolved_count(),
+    );
+
+    if let Some(js) = &document.js {
         println!("  js: {} script(s) run, {} skipped", js.executed, js.skipped);
         for line in &js.console {
             println!("    {line}");
@@ -97,7 +128,7 @@ fn report(artifacts: &Artifacts) {
     }
 
     // A page that needed script it did not get renders as one flat color.
-    if let Some([r, g, b, a]) = artifacts.uniform_color {
+    if let Some([r, g, b, a]) = raster.uniform_color {
         println!("  blank: every pixel is rgba({r}, {g}, {b}, {a})");
     }
 }

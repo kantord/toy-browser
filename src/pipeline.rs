@@ -9,29 +9,46 @@ use anyhow::{Context, Result};
 use blitz_dom::DocumentConfig;
 use blitz_html::{HtmlDocument, HtmlProvider};
 use resvg::{tiny_skia, usvg};
-use takumi_core::{Fonts, style::StyleSheet, viewport::Viewport};
+use takumi_core::{Fonts, style::StyleSheet, viewport::Viewport as TakumiViewport};
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_svg::SvgOptions;
 
 use crate::{js::JsReport, scripts::ScriptSurvey};
 
-/// Rendering knobs shared by every input file.
-pub struct RenderOptions {
+/// The size a document is laid out and rendered at.
+#[derive(Clone, Copy)]
+pub struct Viewport {
     pub width: u32,
-    /// Viewport height in px; `None` lets the content decide.
+    /// Height in px; `None` lets the layout size the output to its content.
     pub height: Option<u32>,
-    /// Whether to execute the page's scripts before rendering.
-    pub run_scripts: bool,
 }
 
-/// Every intermediate artifact, kept so each stage can be inspected on disk.
-pub struct Artifacts {
+impl Viewport {
+    pub const DEFAULT_WIDTH: u32 = 800;
+}
+
+impl Default for Viewport {
+    fn default() -> Self {
+        Self {
+            width: Self::DEFAULT_WIDTH,
+            height: None,
+        }
+    }
+}
+
+/// A page's HTML after parsing and after its scripts have run, plus what
+/// happened on the way. The handoff between [`load`] and [`render`].
+pub struct Document {
     /// HTML as blitz-dom serialized it back out.
-    pub dom_html: String,
+    pub html: String,
     /// JavaScript entry points found in the document, and the scripts loaded.
     pub scripts: ScriptSurvey,
     /// What the engine did, when scripts were run.
     pub js: Option<JsReport>,
+}
+
+/// A rendered document.
+pub struct Raster {
     /// Vector SVG emitted by takumi-svg.
     pub svg: String,
     /// PNG bytes rasterized by resvg.
@@ -41,15 +58,10 @@ pub struct Artifacts {
     pub uniform_color: Option<[u8; 4]>,
 }
 
-/// Runs the full pipeline over one HTML source string.
+/// Parses `source`, runs its scripts, and serializes the resulting DOM.
 ///
 /// `base_dir` is the directory external references resolve against.
-pub fn render(
-    source: &str,
-    base_dir: &Path,
-    fonts: &Fonts,
-    options: &RenderOptions,
-) -> Result<Artifacts> {
+pub fn load(source: &str, base_dir: &Path, run_scripts: bool) -> Result<Document> {
     let doc = HtmlDocument::from_html(
         source,
         DocumentConfig {
@@ -64,29 +76,27 @@ pub fn render(
     );
 
     let scripts = crate::scripts::survey(&doc, base_dir);
-    let (doc, js) = if options.run_scripts {
+    let (doc, js) = if run_scripts {
         let (doc, report) = crate::js::run(doc, base_dir, &scripts)?;
         (doc, Some(report))
     } else {
         (doc, None)
     };
 
-    // Deliberately redundant: serializing the DOM back out puts a real tree in
-    // the middle of the pipeline, so later stages see a normalized document
-    // rather than the author's markup.
-    let dom_html = crate::serialize::document_to_html(&doc);
-
-    let svg = to_svg(&dom_html, fonts, options)?;
-    let raster = to_png(&svg)?;
-
-    Ok(Artifacts {
-        dom_html,
+    Ok(Document {
+        // Deliberately redundant: serializing the DOM back out puts a real tree
+        // in the middle of the pipeline, so later stages see a normalized
+        // document rather than the author's markup.
+        html: crate::serialize::document_to_html(&doc),
         scripts,
         js,
-        svg,
-        png: raster.png,
-        uniform_color: raster.uniform_color,
     })
+}
+
+/// Lays out a document at `viewport` and rasterizes it.
+pub fn render(document: &Document, fonts: &Fonts, viewport: Viewport) -> Result<Raster> {
+    let svg = to_svg(&document.html, fonts, viewport)?;
+    to_png(svg)
 }
 
 /// A `file://` URL for `dir`, with the trailing slash relative URLs need.
@@ -96,16 +106,15 @@ fn file_base_url(dir: &Path) -> Option<String> {
 }
 
 /// Converts serialized HTML into a takumi node tree and renders it to SVG.
-fn to_svg(html: &str, fonts: &Fonts, options: &RenderOptions) -> Result<String> {
+fn to_svg(html: &str, fonts: &Fonts, viewport: Viewport) -> Result<String> {
     let node = from_html(html, FromHtmlOptions::default()).context("building takumi node tree")?;
     // takumi-html drops `<style>` elements, so the CSS is handed to the
     // renderer separately as a stylesheet.
     let stylesheet = StyleSheet::parse_list_loosy(extract_style_blocks(html));
-    let viewport = Viewport::new((options.width, options.height));
 
     takumi_svg::render(
         SvgOptions::builder()
-            .viewport(viewport)
+            .viewport(TakumiViewport::new((viewport.width, viewport.height)))
             .fonts(fonts)
             .node(node)
             .stylesheet(Arc::new(stylesheet))
@@ -114,14 +123,9 @@ fn to_svg(html: &str, fonts: &Fonts, options: &RenderOptions) -> Result<String> 
     .context("rendering SVG")
 }
 
-struct Raster {
-    png: Vec<u8>,
-    uniform_color: Option<[u8; 4]>,
-}
-
 /// Rasterizes an SVG document at its intrinsic size.
-fn to_png(svg: &str) -> Result<Raster> {
-    let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).context("parsing SVG")?;
+fn to_png(svg: String) -> Result<Raster> {
+    let tree = usvg::Tree::from_str(&svg, &usvg::Options::default()).context("parsing SVG")?;
     let size = tree.size().to_int_size();
     let mut pixmap = tiny_skia::Pixmap::new(size.width(), size.height())
         .with_context(|| format!("allocating {}x{} pixmap", size.width(), size.height()))?;
@@ -131,7 +135,11 @@ fn to_png(svg: &str) -> Result<Raster> {
     let uniform_color = uniform_color(&pixmap);
     let png = pixmap.encode_png().context("encoding PNG")?;
 
-    Ok(Raster { png, uniform_color })
+    Ok(Raster {
+        svg,
+        png,
+        uniform_color,
+    })
 }
 
 /// The single color filling the pixmap, if there is one.
@@ -164,24 +172,29 @@ fn extract_style_blocks(html: &str) -> Vec<&str> {
     blocks
 }
 
-/// Writes `artifacts` next to each other as `<stem>.dom.html`, `<stem>.scripts.md`,
+/// Writes every stage's output as `<stem>.dom.html`, `<stem>.scripts.md`,
 /// `<stem>.svg` and `<stem>.png`, returning the PNG path.
-pub fn write_artifacts(artifacts: &Artifacts, out_dir: &Path, stem: &str) -> Result<PathBuf> {
+pub fn write_artifacts(
+    document: &Document,
+    raster: &Raster,
+    out_dir: &Path,
+    stem: &str,
+) -> Result<PathBuf> {
     std::fs::create_dir_all(out_dir).with_context(|| format!("creating {}", out_dir.display()))?;
 
-    let script_report = artifacts.scripts.to_markdown(stem);
+    let script_report = document.scripts.to_markdown(stem);
     let png_path = out_dir.join(format!("{stem}.png"));
     let files: [(PathBuf, &[u8]); 4] = [
         (
             out_dir.join(format!("{stem}.dom.html")),
-            artifacts.dom_html.as_bytes(),
+            document.html.as_bytes(),
         ),
         (
             out_dir.join(format!("{stem}.scripts.md")),
             script_report.as_bytes(),
         ),
-        (out_dir.join(format!("{stem}.svg")), artifacts.svg.as_bytes()),
-        (png_path.clone(), &artifacts.png),
+        (out_dir.join(format!("{stem}.svg")), raster.svg.as_bytes()),
+        (png_path.clone(), &raster.png),
     ];
 
     for (path, contents) in files {

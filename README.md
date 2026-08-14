@@ -5,22 +5,25 @@ A toy "browser": point it at an HTML file, get a PNG.
 ## Pipeline
 
 ```
-HTML file
-  -> blitz-dom      parse into a real DOM
-  -> scripts        find JS entry points, load external script files
-  -> QuickJS        run the page's scripts against that DOM
-  -> HTML           serialize the mutated DOM back out
-  -> takumi-html    parse into a takumi node tree
-  -> takumi-svg     lay out and emit vector SVG
-  -> resvg          rasterize to PNG
+Load                              Render
+  HTML file                         Document
+  -> blitz-dom   parse into a DOM   -> takumi-html   node tree
+  -> scripts     find entry points  -> takumi-svg    layout, vector SVG
+  -> QuickJS     run the scripts    -> resvg         rasterize to PNG
+  -> HTML        serialize back out
+  = Document
 ```
+
+A **Load** turns a URL into a **Document**; a **Render** turns that Document
+into pixels at a given viewport. They are separate so the same Document can be
+rendered more than once — see `CONTEXT.md` for the vocabulary.
 
 Each stage's output is written to disk so it can be inspected.
 
 ## Usage
 
 ```sh
-cargo run -- tests/fixtures/*.html tests/fixtures/js/*.html
+cargo run -- render tests/fixtures/*.html tests/fixtures/js/*.html
 ```
 
 Writes `out/<name>.dom.html`, `out/<name>.scripts.md`, `out/<name>.svg` and
@@ -74,6 +77,41 @@ selectors, no node traversal, and no computed style.
 
 `docs/js-entry-points.md` is the full checklist of entry points with what runs,
 what is only discovered, and what is missing entirely.
+
+## Driving it from Playwright
+
+`toy-browser serve` speaks enough Chrome DevTools Protocol for Playwright to
+connect, open a page, navigate and screenshot:
+
+```sh
+cargo run -- serve --port 9222
+```
+
+```js
+const browser = await chromium.connectOverCDP("ws://127.0.0.1:9222/");
+const page = await browser.contexts()[0].newPage();
+await page.setViewportSize({ width: 800, height: 600 });   // required, see below
+await page.goto("file:///…/tests/fixtures/hello.html");
+await page.screenshot({ path: "out/pw-hello.png" });
+```
+
+`setViewportSize` is not optional: `connectOverCDP` contexts have no default
+viewport, so without it Playwright tries to read `window.innerWidth` out of a
+page it cannot evaluate in, and waits forever.
+
+The acceptance test is `tests/playwright/smoke.mjs` — it starts the server,
+drives both a static and a JavaScript-built fixture, checks that an unsupported
+scheme is rejected, and shuts down:
+
+```sh
+cd tests/playwright && npm install && node smoke.mjs
+```
+
+Navigation handles `about:` and `file://`; anything else comes back as
+`net::ERR_UNKNOWN_URL_SCHEME`. There is no network, no `Runtime.evaluate`, and
+therefore no locators, clicking or `page.content()`.
+`docs/cdp-surface.md` records the whole protocol surface and the four
+non-obvious things Playwright requires.
 
 ## Notes from the first run
 

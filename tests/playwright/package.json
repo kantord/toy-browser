@@ -1,0 +1,12 @@
+{
+  "name": "toy-browser-playwright-smoke",
+  "private": true,
+  "type": "module",
+  "description": "Drives toy-browser's CDP endpoint with Playwright.",
+  "scripts": {
+    "test": "node smoke.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.58.0"
+  }
+}
