@@ -3,6 +3,7 @@
 mod cdp;
 mod fonts;
 mod js;
+mod measure;
 mod pipeline;
 mod scripts;
 mod serialize;
@@ -90,7 +91,7 @@ fn render(args: RenderArgs) -> Result<()> {
             .and_then(|stem| stem.to_str())
             .unwrap_or("page");
 
-        let document = pipeline::load(&source, base_dir, !args.no_scripts)
+        let document = pipeline::load(&source, base_dir, !args.no_scripts, &[])
             .with_context(|| format!("loading {}", input.display()))?;
         let raster = pipeline::render(&document, &fonts, viewport)
             .with_context(|| format!("rendering {}", input.display()))?;

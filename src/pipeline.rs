@@ -63,6 +63,13 @@ impl Document {
         &self.engine
     }
 
+    /// Where every element sits when laid out at `viewport`.
+    pub fn boxes(&self, fonts: &Fonts, viewport: Viewport) -> Result<crate::measure::Boxes> {
+        let keyed = self.engine.keyed_html();
+        let stylesheet = StyleSheet::parse_list_loosy(extract_style_blocks(&keyed));
+        crate::measure::boxes(&keyed, stylesheet, fonts, viewport)
+    }
+
     /// What the engine did during the load, or `None` if scripts were skipped.
     pub fn js_report(&self) -> Option<std::cell::Ref<'_, JsReport>> {
         self.ran_scripts.then(|| self.engine.report())
@@ -83,7 +90,12 @@ pub struct Raster {
 /// Parses `source`, runs its scripts, and serializes the resulting DOM.
 ///
 /// `base_dir` is the directory external references resolve against.
-pub fn load(source: &str, base_dir: &Path, run_scripts: bool) -> Result<Document> {
+pub fn load(
+    source: &str,
+    base_dir: &Path,
+    run_scripts: bool,
+    init_scripts: &[String],
+) -> Result<Document> {
     let doc = HtmlDocument::from_html(
         source,
         DocumentConfig {
@@ -98,7 +110,7 @@ pub fn load(source: &str, base_dir: &Path, run_scripts: bool) -> Result<Document
     );
 
     let scripts = crate::scripts::survey(&doc, base_dir);
-    let engine = Engine::start(doc, base_dir, &scripts, run_scripts)?;
+    let engine = Engine::start(doc, base_dir, &scripts, run_scripts, init_scripts)?;
 
     Ok(Document {
         scripts,

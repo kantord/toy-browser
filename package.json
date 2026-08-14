@@ -8,6 +8,9 @@
     "build": "cargo build",
     "render": "cargo run -- render tests/fixtures/*.html tests/fixtures/js/*.html",
     "serve": "cargo run -- serve",
-    "test": "pnpm --filter @toy-browser/playwright test"
+    "test": "pnpm --filter @toy-browser/playwright test",
+    "test:smoke": "pnpm --filter @toy-browser/playwright test:smoke",
+    "ui": "pnpm --filter @toy-browser/playwright ui",
+    "report": "pnpm --filter @toy-browser/playwright report"
   }
 }

@@ -87,6 +87,17 @@ try {
     ["locator visibility", () => page.locator("h1").isVisible(), true],
   ];
 
+  // Geometry comes from a real layout pass, so the heading must sit inside the
+  // body's 32px padding and span the rest of the 800px viewport.
+  const rect = await page.evaluate(() => {
+    const { x, y, width } = document.querySelectorAll("h1")[0].getBoundingClientRect();
+    return { x, y, width };
+  });
+  if (rect.width <= 0 || rect.y <= 0 || rect.x !== 40) {
+    throw new Error(`heading geometry looks wrong: ${JSON.stringify(rect)}`);
+  }
+  checks.push(["heading measured", () => Promise.resolve(rect.width), 720]);
+
   for (const [name, run, expected] of checks) {
     const actual = await run();
     if (actual !== expected) {

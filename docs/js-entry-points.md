@@ -161,9 +161,13 @@ Since then, driving it from a real client forced more: `querySelector`,
 `CustomEvent`, and do-nothing `MutationObserver`, `ResizeObserver` and
 `IntersectionObserver`.
 
-What it still does not: `insertBefore`, cloning, sibling traversal, computed
-style, and layout geometry — no element knows where it is or how big it is.
-Style is inline-only, so a script cannot observe what a stylesheet decided.
+Geometry is real: `getBoundingClientRect`, `getClientRects`, `offsetWidth` and
+`offsetHeight` come from an actual layout pass (see `docs/cdp-surface.md`).
+
+What it still does not: `insertBefore`, cloning, `createTreeWalker`, and
+computed style — nothing runs the cascade, so a script cannot observe what a
+stylesheet decided. Inline elements have no box of their own and measure as
+empty.
 
 ## What this means for the next step
 

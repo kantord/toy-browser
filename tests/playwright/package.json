@@ -4,9 +4,16 @@
   "type": "module",
   "description": "Drives toy-browser's CDP endpoint with Playwright.",
   "scripts": {
-    "test": "node smoke.mjs"
+    "test": "playwright test",
+    "test:smoke": "node smoke.mjs",
+    "ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "trace": "playwright show-trace"
   },
   "dependencies": {
     "playwright-core": "^1.58.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
   }
 }

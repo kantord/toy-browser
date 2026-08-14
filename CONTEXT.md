@@ -27,6 +27,16 @@ The width and height a Document is laid out and rendered at. A height of "none"
 means the layout decides, sizing the output to its content.
 _Avoid_: window size, canvas, screen
 
+**Measure**:
+Laying a Document out to find where each element ended up, without painting it.
+Separate from Render, which paints but reports nothing about what it drew.
+_Avoid_: layout (that is the renderer's internal step), reflow
+
+**Box**:
+One element's rectangle after a Measure, in CSS pixels from the top-left of the
+document. Elements the layout produced no box for have none, not an empty one.
+_Avoid_: rect, bounds, geometry
+
 ### Scripting
 
 **Entry point**:

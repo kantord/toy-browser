@@ -98,9 +98,95 @@
       return this.children[0] ?? null;
     }
 
+    // Geometry is measured outside and published before anything reads it. An
+    // element the layout never produced a box for reports an empty rect, the
+    // same as a display:none element in a browser.
+    getBoundingClientRect() {
+      const [x = 0, y = 0, width = 0, height = 0] = globalThis.__boxes?.[this.__id] ?? [];
+      return {
+        x,
+        y,
+        width,
+        height,
+        top: y,
+        left: x,
+        right: x + width,
+        bottom: y + height,
+        toJSON() {
+          return this;
+        },
+      };
+    }
+
+    getClientRects() {
+      const rect = this.getBoundingClientRect();
+      return rect.width === 0 && rect.height === 0 ? [] : [rect];
+    }
+
+    scrollIntoView() {}
+
+    get offsetWidth() {
+      return this.getBoundingClientRect().width;
+    }
+
+    get offsetHeight() {
+      return this.getBoundingClientRect().height;
+    }
+
     getAttribute(name) {
       return __dom.getAttribute(this.__id, name);
     }
+
+    hasAttribute(name) {
+      return __dom.getAttribute(this.__id, name) !== null;
+    }
+
+    removeAttribute(name) {
+      __dom.setAttribute(this.__id, name, "");
+    }
+
+    closest(selector) {
+      for (let at = this; at !== null; at = at.parentNode) {
+        if (at.matches?.(selector)) return at;
+      }
+      return null;
+    }
+
+    getRootNode() {
+      return document;
+    }
+
+    get localName() {
+      return __dom.tagName(this.__id);
+    }
+
+    get namespaceURI() {
+      return "http://www.w3.org/1999/xhtml";
+    }
+
+    get nextElementSibling() {
+      return sibling(this, 1);
+    }
+
+    get previousElementSibling() {
+      return sibling(this, -1);
+    }
+
+    get childNodes() {
+      return this.children;
+    }
+
+    get firstChild() {
+      return this.children[0] ?? null;
+    }
+
+    get nodeValue() {
+      return null;
+    }
+
+    // No element is ever focused: there is no input to give focus to.
+    focus() {}
+    blur() {}
 
     get tagName() {
       const tag = __dom.tagName(this.__id);
@@ -209,6 +295,36 @@
     }
   }
   globals.MutationObserver = MutationObserver;
+  // Constants only. Nothing here walks a tree with them yet, but code that
+  // means to reads them at load time.
+  // Stylesheets are parsed outside the engine, so these are names to reach for
+  // rather than working objects. Tooling reads their prototypes on load and
+  // fails on the whole script if they are missing.
+  class StyleSheet {}
+  class CSSStyleSheet extends StyleSheet {
+    constructor() {
+      super();
+      this.cssRules = [];
+    }
+  }
+  class CSSRule {}
+  class CSSGroupingRule extends CSSRule {}
+
+  globals.StyleSheet = StyleSheet;
+  globals.CSSStyleSheet = CSSStyleSheet;
+  globals.CSSRule = CSSRule;
+  globals.CSSGroupingRule = CSSGroupingRule;
+  globals.ShadowRoot = class ShadowRoot {};
+
+  globals.NodeFilter = {
+    SHOW_ALL: 0xffffffff,
+    SHOW_ELEMENT: 1,
+    SHOW_TEXT: 4,
+    SHOW_COMMENT: 128,
+    FILTER_ACCEPT: 1,
+    FILTER_REJECT: 2,
+    FILTER_SKIP: 3,
+  };
   globals.ResizeObserver = MutationObserver;
   globals.IntersectionObserver = MutationObserver;
 
@@ -218,6 +334,15 @@
       if (at === ancestorId) return true;
     }
     return false;
+  };
+
+  /// The element `offset` places after `node` among its parent's elements.
+  const sibling = (node, offset) => {
+    const parent = node.parentNode;
+    if (!parent) return null;
+    const siblings = parent.children;
+    const index = siblings.findIndex((candidate) => candidate.__id === node.__id);
+    return index < 0 ? null : (siblings[index + offset] ?? null);
   };
 
   const wrap = (id) => {
@@ -384,6 +509,9 @@
 
     nodeType: 9,
 
+    // Fonts are registered before a page loads, so they are never pending.
+    fonts: { ready: Promise.resolve(), status: "loaded" },
+
     getElementById: (id) => wrap(__dom.getElementById(id)),
     getElementsByTagName: (tag) => __dom.elementsByTag(tag).map(wrap),
     querySelectorAll: (selector) => __dom.queryAll(String(selector)).map(wrap),
@@ -439,6 +567,11 @@
   // knows how big the page is until it is rendered.
   globals.innerWidth = 0;
   globals.innerHeight = 0;
+  globals.scrollX = 0;
+  globals.scrollY = 0;
+  globals.pageXOffset = 0;
+  globals.pageYOffset = 0;
+  globals.__boxes = {};
   globals.devicePixelRatio = 1;
   globals.location = { href: "about:blank", protocol: "about:", toString: () => globals.location.href };
 

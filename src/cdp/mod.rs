@@ -298,10 +298,33 @@ impl<'f> Browser<'f> {
                 }
             }
 
+            // Kept and replayed into every document this page loads. Clients
+            // register page setup this way, and trace recorders register the
+            // machinery that captures DOM snapshots.
+            "Page.addScriptToEvaluateOnNewDocument" => {
+                let source = params["source"].as_str().unwrap_or_default();
+                page.init_scripts.push(source.to_owned());
+                Outcome::ok(json!({
+                    "identifier": format!("INIT{}", page.init_scripts.len()),
+                }))
+            }
+
+            "Page.removeScriptToEvaluateOnNewDocument" => {
+                if let Some(index) = params["identifier"]
+                    .as_str()
+                    .and_then(|id| id.strip_prefix("INIT"))
+                    .and_then(|index| index.parse::<usize>().ok())
+                    .filter(|index| (1..=page.init_scripts.len()).contains(index))
+                {
+                    page.init_scripts.remove(index - 1);
+                }
+                Outcome::ok(json!({}))
+            }
+
             "Runtime.evaluate" => {
                 let expression = params["expression"].as_str().unwrap_or_default();
                 let by_value = params["returnByValue"].as_bool().unwrap_or(false);
-                Outcome::ok(remote_object(page.evaluate(expression, by_value)))
+                Outcome::ok(remote_object(page.evaluate(fonts, expression, by_value)))
             }
 
             "Runtime.callFunctionOn" => {
@@ -320,7 +343,7 @@ impl<'f> Browser<'f> {
                     .collect();
 
                 Outcome::ok(remote_object(
-                    page.call(declaration, receiver, &arguments, by_value),
+                    page.call(fonts, declaration, receiver, &arguments, by_value),
                 ))
             }
 
@@ -411,7 +434,11 @@ fn remote_object(evaluated: Evaluated) -> Value {
         Evaluated::Handle(id) => json!({
             "result": { "type": "object", "objectId": id },
         }),
-        Evaluated::Threw(message) => json!({
+        Evaluated::Threw(message) => {
+            // Clients report these as bare protocol errors with no page context,
+            // so the server is the only place the real message can be seen.
+            eprintln!("cdp: evaluation threw: {message}");
+            json!({
             "result": { "type": "undefined" },
             "exceptionDetails": {
                 "exceptionId": 1,
@@ -420,7 +447,8 @@ fn remote_object(evaluated: Evaluated) -> Value {
                 "columnNumber": 0,
                 "exception": { "type": "object", "subtype": "error", "description": message },
             },
-        }),
+            })
+        }
     }
 }
 

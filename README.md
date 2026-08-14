@@ -112,19 +112,36 @@ await page.screenshot({ path: "out/pw-hello.png" });
 viewport, so without it Playwright tries to read `window.innerWidth` out of a
 page it cannot evaluate in, and waits forever.
 
-The acceptance test is `tests/playwright/smoke.mjs`. It starts the server,
-drives a static and a JavaScript-built fixture, evaluates in the page, checks
-that an unsupported scheme is rejected, and shuts down:
+A real `@playwright/test` suite runs against it:
 
 ```sh
 pnpm install && pnpm test
 ```
 
-What works: `goto`, `screenshot`, `title()`, `content()`, `url()`, `evaluate()`
-with functions and arguments, and the read-only parts of locators
-(`count()`, `isVisible()`). What does not: clicking, typing, `textContent()` —
-anything needing box geometry. Navigation handles `about:` and `file://` only;
-anything else comes back as `net::ERR_UNKNOWN_URL_SCHEME`.
+```
+✓ navigates to a static page and reads its title
+✓ runs the page's JavaScript before we see it
+✓ screenshots at the requested viewport
+✓ measures where elements ended up
+✓ counts elements through a locator
+- web-first assertions poll via the injected script
+✓ rejects a scheme it cannot load
+✓ runs an init script before the page's own
+```
+
+The dividing line: **plain APIs work, `expect()` matchers do not.**
+`await page.title()` passes, `await expect(page).toHaveTitle(…)` fails — every
+web-first assertion polls through Playwright's injected script, which this
+browser cannot yet host. Working: `goto`, `screenshot`, `title()`, `content()`,
+`url()`, `evaluate()` with functions and arguments, `evaluateHandle()`,
+`locator.count()`, `locator.isVisible()`, and `getBoundingClientRect()` backed
+by a real layout pass. Not working: clicking, typing, `textContent()`.
+
+Navigation handles `about:` and `file://` only; anything else comes back as
+`net::ERR_UNKNOWN_URL_SCHEME`.
+
+`pnpm test:smoke` runs a lower-level script that drives the same protocol
+without the test runner.
 
 `docs/cdp-surface.md` records the protocol surface, how much of Playwright
 works, and the non-obvious things it requires.

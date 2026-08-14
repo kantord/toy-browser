@@ -38,6 +38,8 @@ level of the envelope; the browser itself is addressed by omitting it.
 | page | `Page.getLayoutMetrics` | reports that Viewport back |
 | page | `Page.captureScreenshot` | performs the Render, returns base64 PNG |
 | page | `Page.createIsolatedWorld` | names a world and announces its context |
+| page | `Page.addScriptToEvaluateOnNewDocument` | stores a script to run in every document |
+| page | `Page.removeScriptToEvaluateOnNewDocument` | forgets one |
 | page | `Runtime.evaluate` | runs an expression in the page |
 | page | `Runtime.callFunctionOn` | calls a function with `this` and arguments |
 | page | `Runtime.releaseObject` | forgets a retained value |
@@ -99,20 +101,96 @@ Everything below was measured, not guessed.
 | `page.goto`, `page.screenshot` | `locator.click` and every other action |
 | `page.title()`, `page.content()`, `page.url()` | `locator.textContent()`, `innerText()` |
 | `page.evaluate()` — expressions, functions, arguments | `page.$()` |
-| `locator.count()`, `locator.isVisible()` | anything needing layout geometry |
+| `page.evaluateHandle()`, and handles passed back as arguments | |
+| `locator.count()`, `locator.isVisible()` | |
+| `getBoundingClientRect()` — real measured geometry | |
 
 Playwright evaluates through two bundles it injects into the page. The
 **utility script** (~11KB) powers `evaluate`, `title` and `content`; it runs in
 QuickJS as-is. The **injected script** is much larger and powers selectors and
-actions; getting it to bootstrap took three globals it constructs on load —
-`MutationObserver`, `Element`, and the `Event`/`CustomEvent` constructors — plus
-`querySelectorAll`. Past that it needs a real DOM: node traversal, computed
-style, and box geometry for hit-testing. That is the frontier.
+actions. Getting it to bootstrap took globals it constructs on load —
+`MutationObserver`, `Element`, `NodeFilter`, the `Event`/`CustomEvent`
+constructors, `document.fonts` — plus `querySelectorAll` and element geometry.
+
+What remains is a long tail of DOM surface, not one missing piece. The actions
+fail somewhere inside the injected script with a bare `not a function`; QuickJS
+attributes the frame to a function whose body runs correctly in isolation, so
+the stack cannot be trusted to name it. `document.createTreeWalker` is the next
+known-missing thing. Computed style is the next structural one — nothing here
+runs the cascade, so a script cannot ask what a stylesheet decided.
 
 The prelude's stubs are honest about being stubs. `MutationObserver` observes
 nothing, because the DOM only changes while script is running and nobody is
 watching when it does. `ResizeObserver` and `IntersectionObserver` are the same
 class, for the same reason.
+
+## Running a real test suite
+
+`tests/playwright/specs/` runs under `@playwright/test` itself — the real
+runner, real config, real reporter. `pnpm test` starts the browser and runs it.
+
+The dividing line is sharp and worth stating precisely: **plain APIs work,
+web-first assertions do not.** `await page.title()` passes;
+`await expect(page).toHaveTitle(...)` fails. `await locator.count()` passes;
+`await expect(locator).toHaveCount(...)` fails. Every `expect()` matcher polls
+through the injected script, so they all fail together, for the one reason.
+
+Playwright's own `webServer` option cannot start this browser: it probes with an
+HTTP GET and the port only speaks WebSocket, so readiness never registers. A
+`globalSetup` that waits on a TCP connect is the working equivalent.
+
+## The GUI modes
+
+| Mode | Status |
+| --- | --- |
+| `--headed` | meaningless — `connectOverCDP` launches nothing, and this browser has no window |
+| Trace recording | works, partially: the action timeline is complete |
+| Trace viewer, UI Mode, Inspector | the shells open — they are separate browsers Playwright launches, nothing to do with this one |
+| Film strip, DOM snapshots, element highlighting | empty |
+
+Measured: with `trace: "on"`, every test writes a `trace.zip` containing
+`before`/`after`/`event`/`log` entries — the full action log — and **zero**
+`.jpeg` resources and zero DOM snapshots.
+
+The two missing halves have very different costs, and neither is the injected
+script.
+
+**Film-strip frames** come from `Page.startScreencast`, which we answer `{}` to
+and never follow with `Page.screencastFrame` events. We already render PNGs, so
+emitting frames is small and self-contained.
+
+**DOM snapshots** come from a separate bundle Playwright registers with
+`Page.addScriptToEvaluateOnNewDocument` — not from the injected script at all.
+Those init scripts now run (which also makes `page.addInitScript()` work), and
+the snapshot streamer gets part-way through defining itself before failing, so
+`window[streamer].captureSnapshot` is still undefined. It needs a fuller DOM to
+finish: `element.attributes` as an enumerable list, `childNodes` including text
+nodes with `nodeValue`, and `document.adoptedStyleSheets`. All reachable, and
+none of it needs layout or the injected script.
+
+Getting there is a loop, not a leap: the server logs every load-time script
+error and every failed evaluation with its stack, so each run names the next
+missing thing.
+
+## Where geometry comes from
+
+The renderer lays out its own tree and never says which DOM node produced each
+box. `src/measure.rs` closes that loop: it runs the same layout the renderer
+does, walks the resulting paint tree, and reads each box's owner back off the
+node.
+
+The join is a marker class. Only an element's tag, `id` and `class` survive into
+the renderer's node tree — attributes are not readable from outside the crate —
+so `src/serialize.rs` can emit a variant of the document where every element
+carries an extra `__tb-key-<node id>` class. An extra class token displaces
+nothing the page already uses, whereas an `id` would.
+
+Geometry is republished before every evaluation rather than cached, because any
+line of script can move the DOM. That is a layout pass per protocol call, which
+is the cost of never handing back a stale box.
+
+Inline elements are the known gap: a `<span>` inside a paragraph has no layout
+box of its own, so it measures as empty.
 
 ## Why the screenshot needs a viewport
 

@@ -23,6 +23,9 @@ const BLANK_HTML: &str =
 /// One navigable thing. Ids are handed to the client so it can tell this page,
 /// and each of its navigations, apart from the next.
 pub struct Page {
+    /// Scripts a client asked to run in every document this page loads, before
+    /// the page's own. Kept across navigations, as a browser keeps them.
+    pub init_scripts: Vec<String>,
     pub target_id: String,
     pub session_id: String,
     /// The main frame's id. Must equal `target_id`: clients key a page's
@@ -50,6 +53,7 @@ impl Page {
     pub fn new(index: u32) -> anyhow::Result<Self> {
         let target_id = format!("TARGET{index}");
         Ok(Self {
+            init_scripts: Vec::new(),
             frame_id: target_id.clone(),
             target_id,
             session_id: format!("SESSION{index}"),
@@ -59,7 +63,7 @@ impl Page {
             utility_world: None,
             main_context_id: 1,
             utility_context_id: 2,
-            document: blank_document().map_err(|error| anyhow::anyhow!(error))?,
+            document: blank_document(&[]).map_err(|error| anyhow::anyhow!(error))?,
             navigation_count: 0,
             context_count: 2,
         })
@@ -73,30 +77,40 @@ impl Page {
         self.context_count += 2;
     }
 
-    pub fn evaluate(&self, expression: &str, by_value: bool) -> Evaluated {
-        self.sync_environment();
+    pub fn evaluate(&self, fonts: &Fonts, expression: &str, by_value: bool) -> Evaluated {
+        self.sync_environment(fonts);
         self.document.engine().evaluate(expression, by_value)
     }
 
-    /// Publishes the page's viewport and URL into the page's own globals. Done
-    /// before evaluating rather than when the viewport changes, because a
-    /// navigation replaces the environment those globals live in.
-    fn sync_environment(&self) {
-        self.document.engine().set_viewport(
+    /// Publishes the viewport, URL and element geometry into the page's own
+    /// globals, so script can see where it is and where things are.
+    ///
+    /// Done before every evaluation rather than once: scripts move the DOM
+    /// around, and a navigation replaces the environment these globals live in.
+    /// That means a layout pass per call, which is the price of not caching
+    /// geometry that any line of script could invalidate.
+    fn sync_environment(&self, fonts: &Fonts) {
+        let engine = self.document.engine();
+        engine.set_viewport(
             self.viewport.width,
             self.viewport.height.unwrap_or(0),
             &self.url,
         );
+        match self.document.boxes(fonts, self.viewport) {
+            Ok(boxes) => engine.set_boxes(&boxes),
+            Err(error) => eprintln!("cdp: could not measure {}: {error}", self.url),
+        }
     }
 
     pub fn call(
         &self,
+        fonts: &Fonts,
         declaration: &str,
         receiver: Option<&str>,
         arguments: &[Argument],
         by_value: bool,
     ) -> Evaluated {
-        self.sync_environment();
+        self.sync_environment(fonts);
         self.document
             .engine()
             .call(declaration, receiver, arguments, by_value)
@@ -113,12 +127,19 @@ impl Page {
         self.loader_id = format!("LOADER{}-{}", self.target_id, self.navigation_count);
 
         let loaded = resolve(url).and_then(|source| match source {
-            Source::Blank => blank_document(),
-            Source::File(path) => load_file(&path, run_scripts),
+            Source::Blank => blank_document(&self.init_scripts),
+            Source::File(path) => load_file(&path, run_scripts, &self.init_scripts),
         });
 
         match loaded {
             Ok(document) => {
+                // Scripts that threw during the load are recorded rather than
+                // raised, so this is the only place they become visible.
+                if let Some(report) = document.js_report() {
+                    for error in &report.errors {
+                        eprintln!("cdp: {url}: {error}");
+                    }
+                }
                 self.document = document;
                 self.url = url.to_owned();
                 None
@@ -152,17 +173,21 @@ fn resolve(url: &str) -> Result<Source, String> {
     }
 }
 
-fn load_file(path: &Path, run_scripts: bool) -> Result<Document, String> {
+fn load_file(
+    path: &Path,
+    run_scripts: bool,
+    init_scripts: &[String],
+) -> Result<Document, String> {
     let source =
         std::fs::read_to_string(path).map_err(|_| format!("{FILE_NOT_FOUND} ({})", path.display()))?;
     let base_dir = path.parent().unwrap_or(Path::new("."));
 
-    pipeline::load(&source, base_dir, run_scripts)
+    pipeline::load(&source, base_dir, run_scripts, init_scripts)
         .map_err(|error| format!("net::ERR_FAILED ({error})"))
 }
 
 /// `about:blank`: a real, empty, scriptable document.
-fn blank_document() -> Result<Document, String> {
-    pipeline::load(BLANK_HTML, Path::new("."), true)
+fn blank_document(init_scripts: &[String]) -> Result<Document, String> {
+    pipeline::load(BLANK_HTML, Path::new("."), true, init_scripts)
         .map_err(|error| format!("net::ERR_FAILED ({error})"))
 }

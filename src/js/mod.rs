@@ -69,11 +69,14 @@ impl Engine {
     ///
     /// A script that throws is recorded and the load continues, which is what a
     /// browser does.
+    /// `init_scripts` run after the environment is built but before any of the
+    /// page's own, which is what makes them able to set the page up.
     pub fn start(
         doc: HtmlDocument,
         base_dir: &Path,
         survey: &ScriptSurvey,
         run_scripts: bool,
+        init_scripts: &[String],
     ) -> Result<Self> {
         let dom = Rc::new(Dom::new(doc, base_dir));
         let report = Rc::new(RefCell::new(JsReport::default()));
@@ -89,6 +92,9 @@ impl Engine {
         context.with(|ctx| {
             install_globals(&ctx, &dom, &report)?;
             evaluate(&ctx, &report, "<prelude>", PRELUDE);
+            for (index, script) in init_scripts.iter().enumerate() {
+                evaluate(&ctx, &report, &format!("<init-{index}>"), script);
+            }
             if run_scripts {
                 load_import_maps(&ctx, survey, &imports);
                 self::run_scripts(&ctx, &report, survey, base_dir);
@@ -111,6 +117,31 @@ impl Engine {
     pub fn document_html(&self) -> String {
         self.dom
             .with_document(|doc| crate::serialize::document_to_html(doc))
+    }
+
+    /// As [`Self::document_html`], but with each element's node id attached so
+    /// geometry measured from it can be attributed back.
+    pub fn keyed_html(&self) -> String {
+        self.dom
+            .with_document(|doc| crate::serialize::document_to_keyed_html(doc))
+    }
+
+    /// Publishes measured geometry into the page, which is the only way script
+    /// in it can learn where anything is.
+    pub fn set_boxes(&self, boxes: &crate::measure::Boxes) {
+        let entries: Vec<String> = boxes
+            .iter()
+            .map(|(id, rect)| {
+                format!(
+                    "{id}:[{},{},{},{}]",
+                    rect.x, rect.y, rect.width, rect.height
+                )
+            })
+            .collect();
+        let script = format!("globalThis.__boxes = {{{}}};", entries.join(","));
+        self.context.with(|ctx| {
+            let _ = ctx.eval::<Value, _>(script);
+        });
     }
 
     pub fn report(&self) -> std::cell::Ref<'_, JsReport> {
@@ -378,11 +409,18 @@ fn evaluate_module(ctx: &Ctx<'_>, report: &Rc<RefCell<JsReport>>, name: &str, so
 /// engine gave us one.
 fn exception_text(ctx: &Ctx<'_>, error: rquickjs::Error) -> String {
     let detail = match error {
-        rquickjs::Error::Exception => ctx
-            .catch()
-            .as_exception()
-            .map(|exception| exception.to_string())
-            .unwrap_or_else(|| "uncaught exception".to_owned()),
+        rquickjs::Error::Exception => match ctx.catch().as_exception() {
+            Some(exception) => {
+                let message = exception.message().unwrap_or_default();
+                // The message alone is often just "not a function"; the stack is
+                // what says which one.
+                match exception.stack() {
+                    Some(stack) => format!("{message}\n{stack}"),
+                    None => message,
+                }
+            }
+            None => "uncaught exception".to_owned(),
+        },
         other => other.to_string(),
     };
     detail.trim().to_owned()
