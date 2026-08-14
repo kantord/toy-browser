@@ -55,6 +55,19 @@ A render in which every pixel is the same colour. How a Document that needed
 JavaScript it did not get announces itself.
 _Avoid_: empty page, failed render
 
+### Fetching
+
+**Resource**:
+Bytes named by a URL. The same URL is the same Resource to every Session, which
+is what makes one cache worth having.
+_Avoid_: asset, file, subresource, response
+
+**Resources**:
+The one place bytes are fetched and remembered, shared by every Session in the
+process and safe to use from any thread. Everything that reads anything —
+documents, scripts, modules, images, fonts — goes through it.
+_Avoid_: cache, loader, fetcher, network
+
 ### The automation engine
 
 **Engine**:
@@ -96,19 +109,32 @@ run. Distinct from the microtask checkpoint, which is part of running any code
 to completion.
 _Avoid_: tick, frame, drain
 
+**Revision**:
+How many times a Session's DOM has changed. The only way anything outside can
+tell whether work done against an earlier state is still good.
+_Avoid_: version, generation, dirty flag
+
 ### Being a browser
 
 **Page**:
-One navigable thing: a current URL and the Document loaded from it. What
-`Target.createTarget` creates and what a screenshot is taken of.
+One navigable thing: a current URL, a Viewport, and the Session its document
+lives in. What a screenshot is taken of and what a Navigation replaces.
 _Avoid_: tab, window, view
 
-**Session**:
-A channel of protocol messages addressed to one Page, distinguished by a session
-id. The browser itself is reached over the session with no id.
-_Avoid_: connection, channel, client
-
 **Navigation**:
-Replacing a Page's Document by loading a new URL. Identified to the client by an
-opaque id so it can tell one navigation from the next.
+Replacing a Page's document by loading a URL. Fails as a reason, not a message —
+the words a client sees are its protocol's business, not the browser's.
 _Avoid_: goto, redirect, page change
+
+**Remote**:
+A reference handed out to a caller: a plain value, an element the DOM knows by
+id, or a JavaScript object the engine is holding. One type, because an element
+can be reached either way and callers should not have to care which.
+_Avoid_: object id, ref, node handle
+
+### Speaking a protocol
+
+**Front end**:
+A layer that translates one wire protocol into Page operations. There can be
+several, and none of them can reach past the browser to the engine.
+_Avoid_: adapter, server, driver

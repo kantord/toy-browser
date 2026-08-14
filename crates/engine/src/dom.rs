@@ -4,23 +4,21 @@
 //! side has to hold a Rust reference. The object model — `document`, elements,
 //! `classList`, `style`, events — is built on top of these in `prelude.js`.
 
-use std::{
-    cell::RefCell,
-    path::{Path, PathBuf},
-};
+use std::cell::{Cell, RefCell};
 
 use blitz_dom::{DocumentConfig, LocalName, NodeData, QualName, ns};
 use blitz_html::{HtmlDocument, HtmlProvider};
+use toy_browser_fetch::{Resources, Url};
 
 /// Parses `source` into a DOM whose relative references resolve against
-/// `base_dir`.
-pub fn parse(source: &str, base_dir: &Path) -> HtmlDocument {
+/// `base_url`.
+pub fn parse(source: &str, base_url: &Url) -> HtmlDocument {
     HtmlDocument::from_html(
         source,
         DocumentConfig {
             // blitz resolves every relative URL it sees against this, and panics
             // without it as soon as a document references one.
-            base_url: file_base_url(base_dir),
+            base_url: Some(base_url.to_string()),
             // Without this, `innerHTML` and `document.write()` silently do
             // nothing: the default provider is a no-op stub.
             html_parser_provider: Some(std::sync::Arc::new(HtmlProvider)),
@@ -29,24 +27,34 @@ pub fn parse(source: &str, base_dir: &Path) -> HtmlDocument {
     )
 }
 
-/// A `file://` URL for `dir`, with the trailing slash relative URLs need.
-fn file_base_url(dir: &Path) -> Option<String> {
-    let absolute = std::fs::canonicalize(dir).ok()?;
-    Some(format!("file://{}/", absolute.display()))
-}
 
 /// A parsed document plus the directory its relative URLs resolve against.
 pub struct Dom {
     doc: RefCell<HtmlDocument>,
-    base_dir: PathBuf,
+    base_url: Url,
+    resources: Resources,
+    /// Bumped by every mutation, so anything computed from an earlier state can
+    /// tell whether it is still good.
+    revision: Cell<u64>,
 }
 
 impl Dom {
-    pub fn new(doc: HtmlDocument, base_dir: &Path) -> Self {
+    pub fn new(doc: HtmlDocument, base_url: Url, resources: Resources) -> Self {
         Self {
             doc: RefCell::new(doc),
-            base_dir: base_dir.to_path_buf(),
+            base_url,
+            resources,
+            revision: Cell::new(1),
         }
+    }
+
+    /// How many times this DOM has changed.
+    pub fn revision(&self) -> u64 {
+        self.revision.get()
+    }
+
+    fn touched(&self) {
+        self.revision.set(self.revision.get() + 1);
     }
 
     /// Reads the live document. Held only for the duration of `visit`, so
@@ -67,6 +75,7 @@ impl Dom {
     }
 
     pub fn create_element(&self, tag: &str) -> usize {
+        self.touched();
         self.doc
             .borrow_mut()
             .mutate()
@@ -74,18 +83,22 @@ impl Dom {
     }
 
     pub fn create_text_node(&self, text: &str) -> usize {
+        self.touched();
         self.doc.borrow_mut().mutate().create_text_node(text)
     }
 
     pub fn append_child(&self, parent: usize, child: usize) {
+        self.touched();
         self.doc.borrow_mut().mutate().append_children(parent, &[child]);
     }
 
     pub fn remove_node(&self, id: usize) {
+        self.touched();
         self.doc.borrow_mut().mutate().remove_node(id);
     }
 
     pub fn set_attribute(&self, id: usize, name: &str, value: &str) {
+        self.touched();
         self.doc
             .borrow_mut()
             .mutate()
@@ -103,6 +116,7 @@ impl Dom {
 
     /// `textContent`: replaces all children with a single text node.
     pub fn set_text(&self, id: usize, text: &str) {
+        self.touched();
         let mut doc = self.doc.borrow_mut();
         let mut mutator = doc.mutate();
         mutator.remove_and_drop_all_children(id);
@@ -118,6 +132,7 @@ impl Dom {
     }
 
     pub fn set_inner_html(&self, id: usize, html: &str) {
+        self.touched();
         self.doc.borrow_mut().mutate().set_inner_html(id, html);
     }
 
@@ -143,6 +158,7 @@ impl Dom {
     /// Parses `html` and appends the result to `parent`, which is what
     /// `document.write()` amounts to once parsing has already finished.
     pub fn append_html(&self, parent: usize, html: &str) {
+        self.touched();
         let mut doc = self.doc.borrow_mut();
         let mut mutator = doc.mutate();
         let scratch = mutator.create_element(html_name("div"), Vec::new());
@@ -208,7 +224,10 @@ impl Dom {
         self.elements_by_tag("img")
             .into_iter()
             .filter(|&id| match self.attribute(id, "src") {
-                Some(src) => !self.base_dir.join(src.trim()).is_file(),
+                Some(src) => match self.base_url.join(src.trim()) {
+                    Ok(url) => !self.resources.exists(&url),
+                    Err(_) => true,
+                },
                 None => true,
             })
             .collect()

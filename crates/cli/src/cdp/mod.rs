@@ -12,13 +12,11 @@ use std::net::{TcpListener, TcpStream};
 use anyhow::{Context, Result};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use serde_json::{Value, json};
-use takumi_core::Fonts;
 use tungstenite::Message;
 
-use toy_browser_engine::{Argument, Engine, Evaluated, Handle, Mode};
+use toy_browser::{Browser, Remote, Viewport};
 
-use crate::pipeline::Viewport;
-use page::Page;
+use page::{Page, error_text};
 
 /// Playwright reads this out of `Browser.getVersion` and treats us as headful
 /// unless it contains "Headless" — at which point it starts asking about window
@@ -31,7 +29,7 @@ const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 \
 const BROWSER_CONTEXT_ID: &str = "DEFAULT-CONTEXT";
 
 /// Accepts CDP connections until the process is killed.
-pub fn serve(port: u16, fonts: Fonts) -> Result<()> {
+pub fn serve(port: u16, mut browser: Browser) -> Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", port))
         .with_context(|| format!("binding 127.0.0.1:{port}"))?;
 
@@ -41,7 +39,7 @@ pub fn serve(port: u16, fonts: Fonts) -> Result<()> {
         let stream = stream.context("accepting connection")?;
         // One connection at a time: the renderer and QuickJS are single-threaded
         // and Playwright only ever opens one socket.
-        if let Err(error) = serve_connection(stream, &fonts) {
+        if let Err(error) = serve_connection(stream, &mut browser) {
             eprintln!("cdp: connection ended: {error}");
         }
     }
@@ -49,13 +47,13 @@ pub fn serve(port: u16, fonts: Fonts) -> Result<()> {
     Ok(())
 }
 
-fn serve_connection(stream: TcpStream, fonts: &Fonts) -> Result<()> {
+fn serve_connection(stream: TcpStream, browser: &mut Browser) -> Result<()> {
     // A failed handshake is almost always something probing the port to see
     // whether the server is up yet, so it is not worth reporting.
     let Ok(mut socket) = tungstenite::accept(stream) else {
         return Ok(());
     };
-    let mut browser = Browser::new(fonts);
+    let mut session = Session::new(browser);
     println!("cdp: client connected");
 
     while let Ok(message) = socket.read() {
@@ -64,7 +62,7 @@ fn serve_connection(stream: TcpStream, fonts: &Fonts) -> Result<()> {
         };
         let request: Value = serde_json::from_str(&text).context("parsing CDP message")?;
 
-        for outgoing in browser.handle(&request)? {
+        for outgoing in session.handle(&request)? {
             socket
                 .send(Message::text(outgoing.to_string()))
                 .context("writing to websocket")?;
@@ -95,20 +93,17 @@ impl Outcome {
     }
 }
 
-/// The browser end of the connection: the set of open pages, and the engine
-/// their documents live in.
-struct Browser<'f> {
-    fonts: &'f Fonts,
-    engine: Engine,
+/// One client connection, and the targets it has open.
+struct Session<'b> {
+    browser: &'b mut Browser,
     pages: Vec<Page>,
     next_index: u32,
 }
 
-impl<'f> Browser<'f> {
-    fn new(fonts: &'f Fonts) -> Self {
+impl<'b> Session<'b> {
+    fn new(browser: &'b mut Browser) -> Self {
         Self {
-            fonts,
-            engine: Engine::new(),
+            browser,
             pages: Vec::new(),
             next_index: 1,
         }
@@ -155,7 +150,7 @@ impl<'f> Browser<'f> {
             })),
 
             "Target.createTarget" => {
-                let page = Page::new(&mut self.engine, self.next_index)?;
+                let page = Page::new(self.next_index, self.browser.new_page()?);
                 self.next_index += 1;
                 let result = json!({ "targetId": page.target_id });
                 // The attach event must arrive before this response: Playwright
@@ -189,7 +184,7 @@ impl<'f> Browser<'f> {
                     return Ok(Outcome::ok(json!({ "success": false })));
                 };
                 let page = self.pages.remove(index);
-                self.engine.erase_session(page.session());
+                self.browser.close_page(&page.page);
 
                 Outcome {
                     before: Vec::new(),
@@ -211,7 +206,6 @@ impl<'f> Browser<'f> {
 
     /// Commands addressed to one page, carrying its session id.
     fn page_command(&mut self, method: &str, params: &Value, session_id: &str) -> Result<Outcome> {
-        let fonts = self.fonts;
         let Some(index) = self
             .pages
             .iter()
@@ -219,49 +213,63 @@ impl<'f> Browser<'f> {
         else {
             return Ok(Outcome::ok(json!({})));
         };
-        // Two disjoint fields: the page's bookkeeping and the engine its
+        // Two disjoint fields: the protocol's bookkeeping and the browser its
         // document lives in.
         let page = &mut self.pages[index];
-        let engine = &mut self.engine;
+        let browser = &mut *self.browser;
 
         Ok(match method {
             "Page.getFrameTree" => {
-                Outcome::ok(json!({ "frameTree": { "frame": frame_of(page) } }))
+                let url = browser.url(&page.page).unwrap_or("about:blank").to_owned();
+                Outcome::ok(json!({ "frameTree": { "frame": frame_of(page, &url) } }))
             }
 
             "Page.navigate" => {
-                let url = params["url"].as_str().unwrap_or("about:blank");
-                let error = page.navigate(engine, url);
-                page.renew_contexts();
+                let target = params["url"].as_str().unwrap_or("about:blank");
+                page.begin_navigation();
 
                 let mut result = json!({
                     "frameId": page.frame_id,
                     "loaderId": page.loader_id,
                 });
-                if let Some(text) = &error {
-                    result["errorText"] = json!(text);
+                match browser.navigate(&page.page, target) {
+                    Ok(loaded) => {
+                        // Scripts that threw during the load are reported rather
+                        // than raised, so this is where they become visible.
+                        for error in &loaded.emitted.errors {
+                            eprintln!("cdp: {target}: {error}");
+                        }
+                    }
+                    Err(error) => result["errorText"] = json!(error_text(&error)),
                 }
+                page.renew_contexts();
+
+                let url = browser.url(&page.page).unwrap_or(target).to_owned();
 
                 // The load has already finished, so everything that describes it
                 // follows at once, in the order a browser would emit it.
                 Outcome {
                     before: Vec::new(),
                     result,
-                    after: navigation_events(page),
+                    after: navigation_events(page, &url),
                 }
             }
 
             "Emulation.setDeviceMetricsOverride" => {
-                page.viewport = Viewport {
-                    width: params["width"].as_u64().unwrap_or(0) as u32,
-                    height: Some(params["height"].as_u64().unwrap_or(0) as u32),
-                };
+                browser.set_viewport(
+                    &page.page,
+                    Viewport {
+                        width: params["width"].as_u64().unwrap_or(0) as u32,
+                        height: Some(params["height"].as_u64().unwrap_or(0) as u32),
+                    },
+                );
                 Outcome::ok(json!({}))
             }
 
             "Page.getLayoutMetrics" => {
-                let width = page.viewport.width;
-                let height = page.viewport.height.unwrap_or(0);
+                let viewport = browser.viewport(&page.page);
+                let width = viewport.width;
+                let height = viewport.height.unwrap_or(0);
                 Outcome::ok(json!({
                     "layoutViewport": {
                         "pageX": 0, "pageY": 0,
@@ -280,13 +288,14 @@ impl<'f> Browser<'f> {
                 // The clip Playwright computed is authoritative: rendering at
                 // exactly that size is what makes the PNG match the viewport the
                 // caller asked for.
-                if let Some(clip) = params.get("clip").filter(|clip| clip.is_object()) {
-                    page.viewport = Viewport {
+                let clip = params
+                    .get("clip")
+                    .filter(|clip| clip.is_object())
+                    .map(|clip| Viewport {
                         width: round(&clip["width"]),
                         height: Some(round(&clip["height"])),
-                    };
-                }
-                let png = page.render(engine, fonts)?;
+                    });
+                let png = browser.screenshot(&page.page, clip)?;
                 Outcome::ok(json!({ "data": BASE64.encode(png) }))
             }
 
@@ -294,6 +303,7 @@ impl<'f> Browser<'f> {
             // page's one JavaScript environment.
             "Page.createIsolatedWorld" => {
                 page.utility_world = params["worldName"].as_str().map(str::to_owned);
+                let url = browser.url(&page.page).unwrap_or("about:blank").to_owned();
                 Outcome {
                     before: Vec::new(),
                     result: json!({ "executionContextId": page.utility_context_id }),
@@ -301,7 +311,7 @@ impl<'f> Browser<'f> {
                     // client only asks for an isolated world once it has taken
                     // in the frame tree, and it discards contexts for frames it
                     // has not heard of yet.
-                    after: context_events(page),
+                    after: context_events(page, &url),
                 }
             }
 
@@ -310,55 +320,60 @@ impl<'f> Browser<'f> {
             // machinery that captures DOM snapshots.
             "Page.addScriptToEvaluateOnNewDocument" => {
                 let source = params["source"].as_str().unwrap_or_default().to_owned();
-                let index = engine.add_init_script(page.session(), source)?;
-                Outcome::ok(json!({ "identifier": format!("INIT{index}") }))
+                let index = browser.add_init_script(&page.page, source)?;
+                let identifier = format!("INIT{index}");
+                page.init_scripts.insert(identifier.clone(), index);
+                Outcome::ok(json!({ "identifier": identifier }))
             }
 
             "Page.removeScriptToEvaluateOnNewDocument" => {
                 if let Some(index) = params["identifier"]
                     .as_str()
-                    .and_then(|id| id.strip_prefix("INIT"))
-                    .and_then(|index| index.parse::<usize>().ok())
+                    .and_then(|id| page.init_scripts.remove(id))
                 {
-                    engine.remove_init_script(page.session(), index)?;
+                    browser.remove_init_script(&page.page, index)?;
                 }
                 Outcome::ok(json!({}))
             }
 
             "Runtime.evaluate" => {
                 let expression = params["expression"].as_str().unwrap_or_default();
-                let mode = mode_of(params);
-                Outcome::ok(remote_object(page.evaluate(engine, fonts, expression, mode)))
+                let by_value = by_value(params);
+                let remote = browser.evaluate(&page.page, expression, by_value)?;
+                Outcome::ok(remote_object(page, remote))
             }
 
             "Runtime.callFunctionOn" => {
                 let declaration = params["functionDeclaration"].as_str().unwrap_or_default();
-                let receiver = params["objectId"].as_str().map(|id| Handle::from(id.to_owned()));
-                let mode = mode_of(params);
-                let arguments: Vec<Argument> = params["arguments"]
+                let by_value = by_value(params);
+                let receiver = params["objectId"]
+                    .as_str()
+                    .and_then(|id| page.recall(id))
+                    .cloned();
+                let arguments: Vec<Remote> = params["arguments"]
                     .as_array()
                     .map(Vec::as_slice)
                     .unwrap_or_default()
                     .iter()
                     .map(|argument| match argument["objectId"].as_str() {
-                        Some(id) => Argument::Handle(Handle::from(id.to_owned())),
-                        None => Argument::Value(argument["value"].clone()),
+                        Some(id) => page.recall(id).cloned().unwrap_or(Remote::Value(Value::Null)),
+                        None => Remote::Value(argument["value"].clone()),
                     })
                     .collect();
 
-                Outcome::ok(remote_object(page.call(
-                    engine,
-                    fonts,
+                let remote = browser.call(
+                    &page.page,
                     declaration,
                     receiver.as_ref(),
                     &arguments,
-                    mode,
-                )))
+                    by_value,
+                )?;
+                Outcome::ok(remote_object(page, remote))
             }
 
             "Runtime.releaseObject" => {
-                if let Some(id) = params["objectId"].as_str() {
-                    let _ = engine.release(page.session(), &Handle::from(id.to_owned()));
+                if let Some(remote) = params["objectId"].as_str().and_then(|id| page.forget(id)) {
+                    let _ = browser.release(&page.page, &remote);
                 }
                 Outcome::ok(json!({}))
             }
@@ -376,11 +391,11 @@ impl<'f> Browser<'f> {
     }
 }
 
-fn navigation_events(page: &Page) -> Vec<Value> {
+fn navigation_events(page: &Page, url: &str) -> Vec<Value> {
     let mut events = vec![
         event(
             "Page.frameNavigated",
-            json!({ "frame": frame_of(page), "type": "Navigation" }),
+            json!({ "frame": frame_of(page, url), "type": "Navigation" }),
             Some(&page.cdp_session_id),
         ),
         lifecycle_event(page, "DOMContentLoaded"),
@@ -392,14 +407,15 @@ fn navigation_events(page: &Page) -> Vec<Value> {
             Some(&page.cdp_session_id),
         ),
     ];
-    events.extend(context_events(page));
+    events.extend(context_events(page, url));
     events
 }
 
 /// Announces the page's execution contexts, main world first.
-fn context_events(page: &Page) -> Vec<Value> {
+fn context_events(page: &Page, url: &str) -> Vec<Value> {
     let mut events = vec![execution_context(
         page,
+        url,
         page.main_context_id,
         "",
         json!({ "isDefault": true, "type": "default", "frameId": page.frame_id }),
@@ -410,6 +426,7 @@ fn context_events(page: &Page) -> Vec<Value> {
     if let Some(world) = page.utility_world.clone() {
         events.push(execution_context(
             page,
+            url,
             page.utility_context_id,
             &world,
             json!({ "isDefault": false, "type": "isolated", "frameId": page.frame_id }),
@@ -419,13 +436,13 @@ fn context_events(page: &Page) -> Vec<Value> {
     events
 }
 
-fn execution_context(page: &Page, id: u32, name: &str, aux_data: Value) -> Value {
+fn execution_context(page: &Page, url: &str, id: u32, name: &str, aux_data: Value) -> Value {
     event(
         "Runtime.executionContextCreated",
         json!({
             "context": {
                 "id": id,
-                "origin": page.url,
+                "origin": url,
                 "name": name,
                 "uniqueId": format!("{}.{id}", page.target_id),
                 "auxData": aux_data,
@@ -435,15 +452,16 @@ fn execution_context(page: &Page, id: u32, name: &str, aux_data: Value) -> Value
     )
 }
 
-/// Wraps an evaluation outcome the way the protocol describes results: a value,
-/// an object the engine is holding, or the details of what was thrown.
-fn remote_object(evaluated: Evaluated) -> Value {
-    match evaluated {
-        Evaluated::Value(value) => json!({ "result": describe_value(value) }),
-        Evaluated::Handle(handle) => json!({
-            "result": { "type": "object", "objectId": handle.as_str() },
-        }),
-        Evaluated::Threw(message) => {
+/// Wraps an evaluation result the way the protocol describes one: a value, an
+/// object the client can name again, or the details of what was thrown.
+fn remote_object(page: &mut Page, remote: Remote) -> Value {
+    match remote {
+        Remote::Value(value) => json!({ "result": describe_value(value) }),
+        Remote::Element(_) | Remote::Object(_) => {
+            let object_id = page.remember(remote);
+            json!({ "result": { "type": "object", "objectId": object_id } })
+        }
+        Remote::Threw(message) => {
             // Clients report these as bare protocol errors with no page context,
             // so the server is the only place the real message can be seen.
             eprintln!("cdp: evaluation threw: {message}");
@@ -489,11 +507,11 @@ fn lifecycle_event(page: &Page, name: &str) -> Value {
     )
 }
 
-fn frame_of(page: &Page) -> Value {
+fn frame_of(page: &Page, url: &str) -> Value {
     json!({
         "id": page.frame_id,
         "loaderId": page.loader_id,
-        "url": page.url,
+        "url": url,
         "domainAndRegistry": "",
         "securityOrigin": "://",
         "mimeType": "text/html",
@@ -512,7 +530,7 @@ fn attached_event(page: &Page) -> Value {
                 "targetId": page.target_id,
                 "type": "page",
                 "title": "",
-                "url": page.url,
+                "url": "about:blank",
                 "attached": true,
                 "canAccessOpener": false,
                 "browserContextId": BROWSER_CONTEXT_ID,
@@ -540,11 +558,8 @@ fn reply(id: u64, result: Value, session_id: Option<&str>) -> Value {
 }
 
 /// Whether a client asked for a copy or a reference.
-fn mode_of(params: &Value) -> Mode {
-    match params["returnByValue"].as_bool().unwrap_or(false) {
-        true => Mode::ByValue,
-        false => Mode::ByRef,
-    }
+fn by_value(params: &Value) -> bool {
+    params["returnByValue"].as_bool().unwrap_or(false)
 }
 
 fn round(value: &Value) -> u32 {

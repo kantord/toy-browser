@@ -1,22 +1,16 @@
 [package]
 name = "toy-browser"
-description = "A toy browser: HTML in, PNG out, and a CDP endpoint Playwright can drive."
+description = "Pages, elements, measuring and rendering, built on the engine."
 version.workspace = true
 edition.workspace = true
-
-[[bin]]
-name = "toy-browser"
-path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
 serde_json.workspace = true
-toy-browser-engine = { path = "../engine" }
-base64 = "0.23.1"
-clap = { version = "4.6.6", features = ["derive"] }
+toy-browser-engine.workspace = true
+toy-browser-fetch.workspace = true
 resvg = "0.48.1"
 takumi-core = "0.21.0"
 takumi-html = "0.2.1"
 takumi-svg = "0.3.17"
-tungstenite = "0.30.0"
 url = "2.5.8"

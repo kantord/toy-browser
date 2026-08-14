@@ -8,17 +8,20 @@
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
-    path::Path,
     rc::Rc,
 };
 
 use anyhow::{Context as _, Result};
-use rquickjs::{Context, Ctx, Function, Module, Object, Persistent, Runtime, Value};
+use rquickjs::{
+    Context, Ctx, Function, Module, Object, Persistent, Runtime, Value, function::Rest,
+};
+
+use toy_browser_fetch::{Resources, Url};
 
 use crate::{
-    Budget, Environment, Keyed, Mode, Outcome,
+    Budget, Environment, Keyed, Mode, NodeId, Outcome,
     dom::Dom,
-    loader::{DocumentResolver, FileLoader, ImportMap},
+    loader::{DocumentResolver, ImportMap, ResourceLoader},
     scripts::{EntryKind, Fetch, Payload, ScriptSurvey},
 };
 
@@ -71,21 +74,22 @@ impl Realm {
     /// page's own, which is what makes them able to set the page up.
     pub fn open(
         source: &str,
-        base_dir: &Path,
+        base_url: &Url,
         run_scripts: bool,
         init_scripts: &[String],
+        resources: Resources,
     ) -> Result<Self> {
-        let doc = crate::dom::parse(source, base_dir);
-        let survey = crate::scripts::survey(&doc, base_dir);
+        let doc = crate::dom::parse(source, base_url);
+        let survey = crate::scripts::survey(&doc, base_url, &resources);
 
-        let dom = Rc::new(Dom::new(doc, base_dir));
+        let dom = Rc::new(Dom::new(doc, base_url.clone(), resources.clone()));
         let report = Rc::new(RefCell::new(Diagnostics::default()));
         let imports: ImportMap = Rc::new(RefCell::new(HashMap::new()));
 
         let runtime = Runtime::new().context("creating QuickJS runtime")?;
         runtime.set_loader(
-            DocumentResolver::new(base_dir, Rc::clone(&imports)),
-            FileLoader,
+            DocumentResolver::new(base_url.clone(), Rc::clone(&imports)),
+            ResourceLoader::new(resources),
         );
         let context = Context::full(&runtime).context("creating QuickJS context")?;
 
@@ -97,7 +101,7 @@ impl Realm {
             }
             if run_scripts {
                 load_import_maps(&ctx, &survey, &imports);
-                self::run_scripts(&ctx, &report, &survey, base_dir);
+                self::run_scripts(&ctx, &report, &survey, base_url);
                 run_lifecycle(&ctx, &report);
             }
             anyhow::Ok(())
@@ -116,6 +120,32 @@ impl Realm {
 
     pub fn scripts(&self) -> &ScriptSurvey {
         &self.scripts
+    }
+
+    /// How many times this Realm's DOM has changed.
+    pub fn revision(&self) -> u64 {
+        self.dom.revision()
+    }
+
+    /// Every element matching `selector`, in document order. Runs no
+    /// JavaScript — this is the DOM's own selector engine.
+    pub fn query(&self, selector: &str) -> Vec<NodeId> {
+        self.dom.query_all(selector)
+    }
+
+    /// An element's text content, descendants included. Runs no JavaScript.
+    pub fn text(&self, node: NodeId) -> String {
+        self.dom.text(node)
+    }
+
+    /// An element's attribute. Runs no JavaScript.
+    pub fn attribute(&self, node: NodeId, name: &str) -> Option<String> {
+        self.dom.attribute(node, name)
+    }
+
+    /// An element's tag name, or `None` if it is not an element.
+    pub fn tag_name(&self, node: NodeId) -> Option<String> {
+        self.dom.tag_name(node)
     }
 
     pub fn executed(&self) -> usize {
@@ -307,12 +337,14 @@ impl From<String> for Handle {
 }
 
 /// An argument to a call: either a literal or something already retained.
+#[derive(Debug, Clone)]
 pub enum Argument {
     Value(serde_json::Value),
     Handle(Handle),
 }
 
 /// The result of running JavaScript.
+#[derive(Debug, Clone)]
 pub enum Evaluated {
     /// A JSON copy of the result.
     Value(serde_json::Value),
@@ -349,7 +381,7 @@ fn run_scripts(
     ctx: &Ctx<'_>,
     report: &Rc<RefCell<Diagnostics>>,
     survey: &ScriptSurvey,
-    base_dir: &Path,
+    base_url: &Url,
 ) {
     for (index, entry) in survey.entry_points.iter().enumerate() {
         let is_module = match entry.kind {
@@ -366,13 +398,16 @@ fn run_scripts(
             // imports inside an inline module resolve the way the spec says:
             // against the document, not the process's working directory.
             Payload::Inline { source } => (
-                base_dir.join(format!("inline-{index}.mjs")).display().to_string(),
+                base_url
+                    .join(&format!("inline-{index}.mjs"))
+                    .map(|url| url.to_string())
+                    .unwrap_or_else(|_| format!("inline-{index}.mjs")),
                 source.clone(),
             ),
             Payload::External {
-                fetch: Fetch::Loaded { path, source },
+                fetch: Fetch::Loaded { url, source },
                 ..
-            } => (path.display().to_string(), source.clone()),
+            } => (url.to_string(), source.clone()),
             // A script that could not be fetched simply never runs.
             Payload::External { .. } => {
                 report.borrow_mut().skipped += 1;
@@ -563,13 +598,29 @@ fn logger<'js>(
 ) -> Result<Function<'js>> {
     let report = Rc::clone(report);
     let level = level.to_owned();
-    let function = Function::new(ctx.clone(), move |parts: Vec<String>| {
+    // `Rest` and not `Vec`: console takes any number of arguments of any type,
+    // whereas a `Vec` parameter would read the first argument as an array and
+    // fail the whole call on `console.log("one")`.
+    let function = Function::new(ctx.clone(), move |ctx: Ctx<'js>, parts: Rest<Value<'js>>| {
+        let rendered: Vec<String> = parts.0.iter().map(|part| display(&ctx, part)).collect();
         report
             .borrow_mut()
             .console
-            .push(format!("[{level}] {}", parts.join(" ")));
+            .push(format!("[{level}] {}", rendered.join(" ")));
     })?;
     Ok(function)
+}
+
+/// How a value reads in a console line: strings bare, everything else as JSON.
+fn display<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> String {
+    if let Some(text) = value.as_string().and_then(|text| text.to_string().ok()) {
+        return text;
+    }
+    match js_to_json(ctx, value) {
+        Ok(serde_json::Value::String(text)) => text,
+        Ok(json) => json.to_string(),
+        Err(_) => "?".to_owned(),
+    }
 }
 
 /// A JavaScript string literal holding `text`.

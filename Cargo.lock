@@ -2825,16 +2825,27 @@ name = "toy-browser"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.23.1",
- "clap",
  "resvg",
  "serde_json",
  "takumi-core",
  "takumi-html",
  "takumi-svg",
  "toy-browser-engine",
- "tungstenite",
+ "toy-browser-fetch",
  "url",
+]
+
+[[package]]
+name = "toy-browser-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.23.1",
+ "clap",
+ "serde_json",
+ "toy-browser",
+ "toy-browser-fetch",
+ "tungstenite",
 ]
 
 [[package]]
@@ -2846,6 +2857,14 @@ dependencies = [
  "blitz-html",
  "rquickjs",
  "serde_json",
+ "toy-browser-fetch",
+]
+
+[[package]]
+name = "toy-browser-fetch"
+version = "0.1.0"
+dependencies = [
+ "url",
 ]
 
 [[package]]

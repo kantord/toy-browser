@@ -6,9 +6,8 @@
 //! See `docs/js-entry-points.md` for the full checklist, including the entry
 //! points that only become visible once an engine is actually running.
 
-use std::path::{Path, PathBuf};
-
 use blitz_dom::{BaseDocument, Node, node::NodeData};
+use toy_browser_fetch::{Resources, Url};
 
 /// MIME types that mark a classic script. An empty or absent `type` means the
 /// same thing.
@@ -111,12 +110,13 @@ pub enum Payload {
 /// The result of resolving and reading an external script.
 #[derive(Debug, Clone)]
 pub enum Fetch {
-    /// Read off disk. `source` is kept so an engine could be handed it later.
-    Loaded { path: PathBuf, source: String },
-    /// Resolved to a path that does not exist.
-    NotFound { path: PathBuf },
-    /// A URL this loader cannot resolve at all.
-    Unsupported { reason: &'static str },
+    /// Read through the shared cache. `source` is kept so it can be run later
+    /// without reading again.
+    Loaded { url: Url, source: String },
+    /// Resolved to a URL that names nothing.
+    NotFound { url: Url },
+    /// A URL nothing here knows how to read.
+    Unsupported { url: String, reason: String },
 }
 
 /// One place the page load would enter a JavaScript engine.
@@ -184,16 +184,15 @@ impl ScriptSurvey {
                 Payload::External { specifier, fetch } => {
                     out.push_str(&format!("- specifier: `{specifier}`\n"));
                     match fetch {
-                        Fetch::Loaded { path, source } => out.push_str(&format!(
-                            "- loaded `{}`, {} bytes\n\n",
-                            path.display(),
+                        Fetch::Loaded { url, source } => out.push_str(&format!(
+                            "- loaded `{url}`, {} bytes\n\n",
                             source.len()
                         )),
-                        Fetch::NotFound { path } => {
-                            out.push_str(&format!("- NOT FOUND at `{}`\n\n", path.display()));
+                        Fetch::NotFound { url } => {
+                            out.push_str(&format!("- NOT FOUND at `{url}`\n\n"));
                         }
-                        Fetch::Unsupported { reason } => {
-                            out.push_str(&format!("- not fetched: {reason}\n\n"));
+                        Fetch::Unsupported { url, reason } => {
+                            out.push_str(&format!("- not fetched: {url} ({reason})\n\n"));
                         }
                     }
                 }
@@ -206,18 +205,18 @@ impl ScriptSurvey {
 
 /// Walks the document and collects every entry point, loading external scripts
 /// relative to `base_dir`.
-pub fn survey(doc: &BaseDocument, base_dir: &Path) -> ScriptSurvey {
+pub fn survey(doc: &BaseDocument, base_url: &Url, resources: &Resources) -> ScriptSurvey {
     let mut survey = ScriptSurvey::default();
-    visit(doc, doc.root_element(), base_dir, &mut survey);
+    visit(doc, doc.root_element(), base_url, resources, &mut survey);
     survey
 }
 
-fn visit(doc: &BaseDocument, node: &Node, base_dir: &Path, survey: &mut ScriptSurvey) {
+fn visit(doc: &BaseDocument, node: &Node, base_url: &Url, resources: &Resources, survey: &mut ScriptSurvey) {
     if let NodeData::Element(element) = &node.data {
         let tag = element.name.local.as_ref();
         match tag {
-            "script" => collect_script(doc, node, base_dir, survey),
-            "link" => collect_preload_hint(node, base_dir, survey),
+            "script" => collect_script(doc, node, base_url, resources, survey),
+            "link" => collect_preload_hint(node, base_url, resources, survey),
             _ => {}
         }
         collect_attribute_entry_points(node, tag, survey);
@@ -225,12 +224,18 @@ fn visit(doc: &BaseDocument, node: &Node, base_dir: &Path, survey: &mut ScriptSu
 
     for &child_id in &node.children {
         if let Some(child) = doc.get_node(child_id) {
-            visit(doc, child, base_dir, survey);
+            visit(doc, child, base_url, resources, survey);
         }
     }
 }
 
-fn collect_script(doc: &BaseDocument, node: &Node, base_dir: &Path, survey: &mut ScriptSurvey) {
+fn collect_script(
+    doc: &BaseDocument,
+    node: &Node,
+    base_url: &Url,
+    resources: &Resources,
+    survey: &mut ScriptSurvey,
+) {
     let script_type = attr(node, "type").unwrap_or("").trim().to_ascii_lowercase();
     let has = |name: &str| attr(node, name).is_some();
 
@@ -248,7 +253,7 @@ fn collect_script(doc: &BaseDocument, node: &Node, base_dir: &Path, survey: &mut
 
     let payload = match specifier {
         Some(specifier) => Payload::External {
-            fetch: resolve(specifier, base_dir),
+            fetch: resolve(specifier, base_url, resources),
             specifier: specifier.to_owned(),
         },
         None => Payload::Inline {
@@ -286,7 +291,12 @@ fn script_timing(kind: EntryKind, external: bool, is_async: bool, defer: bool) -
     }
 }
 
-fn collect_preload_hint(node: &Node, base_dir: &Path, survey: &mut ScriptSurvey) {
+fn collect_preload_hint(
+    node: &Node,
+    base_url: &Url,
+    resources: &Resources,
+    survey: &mut ScriptSurvey,
+) {
     let rel = attr(node, "rel").unwrap_or("").to_ascii_lowercase();
     let is_module_preload = rel.split_whitespace().any(|token| token == "modulepreload");
     let is_script_preload = rel.split_whitespace().any(|token| token == "preload")
@@ -305,7 +315,7 @@ fn collect_preload_hint(node: &Node, base_dir: &Path, survey: &mut ScriptSurvey)
         timing: Timing::NotExecuted,
         origin: describe_element(node, "link"),
         payload: Payload::External {
-            fetch: resolve(href, base_dir),
+            fetch: resolve(href, base_url, resources),
             specifier: href.to_owned(),
         },
     });
@@ -356,42 +366,27 @@ fn is_javascript_url(value: &str) -> bool {
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case("javascript:"))
 }
 
-/// Resolves a specifier against the document's directory and reads it.
-fn resolve(specifier: &str, base_dir: &Path) -> Fetch {
+/// Resolves a specifier against the document's URL and reads it.
+fn resolve(specifier: &str, base_url: &Url, resources: &Resources) -> Fetch {
     let specifier = specifier.trim();
-    let lowered = specifier.to_ascii_lowercase();
 
-    if lowered.starts_with("//") {
+    let Ok(url) = base_url.join(specifier) else {
         return Fetch::Unsupported {
-            reason: "protocol-relative URL; no network stack",
+            url: specifier.to_owned(),
+            reason: "not a resolvable URL".to_owned(),
         };
-    }
-    for scheme in ["http://", "https://"] {
-        if lowered.starts_with(scheme) {
-            return Fetch::Unsupported {
-                reason: "remote URL; no network stack",
-            };
-        }
-    }
-    for scheme in ["data:", "blob:", "javascript:"] {
-        if lowered.starts_with(scheme) {
-            return Fetch::Unsupported {
-                reason: "inline URL scheme; needs an engine, not a loader",
-            };
-        }
-    }
+    };
 
-    // Strip the query and fragment: they are not part of the file path.
-    let relative = specifier
-        .split(['?', '#'])
-        .next()
-        .unwrap_or(specifier)
-        .trim_start_matches('/');
-    let path = base_dir.join(relative);
-
-    match std::fs::read_to_string(&path) {
-        Ok(source) => Fetch::Loaded { path, source },
-        Err(_) => Fetch::NotFound { path },
+    match resources.get(&url) {
+        Ok(resource) => Fetch::Loaded {
+            source: resource.text().into_owned(),
+            url,
+        },
+        Err(toy_browser_fetch::FetchError::NotFound(url)) => Fetch::NotFound { url },
+        Err(error) => Fetch::Unsupported {
+            url: url.to_string(),
+            reason: error.to_string(),
+        },
     }
 }
 

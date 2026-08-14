@@ -1,81 +1,108 @@
-# The two layers
+# The layers
 
 ```
-crates/browser   CLI, CDP endpoint, measuring, rendering
-      |
-      v
-crates/engine    sessions, DOM, JavaScript, HTML  ("the door")
+crates/cli       CLI, and the CDP front end      deps: browser
+crates/browser   pages, elements, measuring,     deps: engine, fetch
+                 rendering
+crates/engine    the door                        deps: fetch
+crates/fetch     shared cached bytes             deps: none
 ```
 
-The engine is the smallest set of operations a browser automation API can be
-built on. Everything a real protocol offers — clicking, selectors, waiting,
-screenshots — is those operations arranged by whoever is driving.
+Each crate can only name what its dependency list allows. `cli` cannot say
+`Engine`, `Realm` or `Resources`; `engine` cannot say `takumi`. That is what
+enforces the layering — not convention, and not module boundaries.
 
-## The door
+## fetch — one cache, every byte
+
+Everything read anywhere goes through `Resources`: documents, scripts, modules,
+images. It is keyed by URL, thread-safe, and cheap to clone — every clone is the
+same cache.
+
+This exists for one reason. A hundred parallel tests loading the same page pull
+the same scripts a hundred times, and scripts are most of a page's bytes. One
+shared cache turns that into one read.
+
+`Resources::get` blocks, because the engine asks for modules from inside QuickJS
+mid-evaluation, where it cannot yield.
+
+The one thing that does not go through it is fonts, which are read once when a
+`Browser` is built rather than per page.
+
+## engine — the door
+
+The smallest set of operations a browser automation API can be built on.
 
 ```rust
-create_session()                        -> SessionId
-erase_session(s)
-add_init_script(s, source)              -> usize
-remove_init_script(s, index)
-load_page(s, LoadPage { source, base, run_scripts }) -> Outcome<LoadReport>
-evaluate(s, code, Mode)                 -> Outcome<Evaluated>
-call(s, declaration, this, args, Mode)  -> Outcome<Evaluated>
+create_session() / erase_session(s)
+add_init_script(s, source) / remove_init_script(s, i)
+load_page(s, LoadPage { source, base_url, run_scripts }) -> Outcome<LoadReport>
+evaluate(s, code, Mode)                -> Outcome<Evaluated>
+call(s, declaration, this, args, Mode) -> Outcome<Evaluated>
 release(s, handle)
-run_tasks(s, Budget)                    -> Outcome<()>
+run_tasks(s, Budget)                   -> Outcome<()>
 set_environment(s, Environment)
-html(s, Keyed)                          -> String
-key_of(class)                           -> Option<NodeId>
+html(s, Keyed)                         -> String
+query(s, selector) -> Vec<NodeId>      text / attribute / tag_name
+revision(s)                            -> u64
+key_of(class)                          -> Option<NodeId>
 ```
 
-The engine crate depends on blitz, html5ever and QuickJS. It does not depend on
-takumi, resvg, tungstenite, clap or url, and it never will — that is the test of
-whether something belongs here.
+A **Session** is a place a page can be loaded; it holds settings and outlives
+every page loaded into it. Each `load_page` replaces its **Realm**: one DOM plus
+the JavaScript environment around it. Nothing a page defines survives a
+navigation.
 
-## What lives where, and why
+`query`, `text` and `attribute` run no JavaScript — they are blitz's own
+selector engine and tree. Test assertions are overwhelmingly reads, so this is
+the difference between a selector costing microseconds and costing a QuickJS
+round trip.
 
-**Loading is the door's; fetching is not.** `load_page` takes source text and a
-base directory. The caller decides what a URL means, which is why
-`net::ERR_UNKNOWN_URL_SCHEME` lives in the CDP layer. The door does read the
-page's own `<script src>`, because those are implied by the document it was
-handed.
+`revision` counts DOM mutations. It is how anything above can tell whether work
+done against an earlier state is still good.
 
-**Rendering is above.** Turning HTML into pixels needs fonts, layout and a
-viewport, none of which a DOM has an opinion about. `html(s, Keyed::No)` hands
-out the markup and the layer above does the rest.
+## browser — pages
 
-**Measuring is above too, and this is the surprising one.** Where an element
-sits depends on fonts and viewport, so it is a rendering question — but
-`getBoundingClientRect()` needs the answer *inside* the page. The door resolves
-this by not knowing: `html(s, Keyed::Yes)` emits markup where every element
-carries a `__tb-key-<id>` class, the caller measures it however it likes, and
-`set_environment` hands the boxes back. `key_of` reads a key out of a class, so
-the marker format stays the door's business.
+Pages, navigation, elements, measuring, rendering. Built entirely out of the
+door's operations plus the cache.
 
-The consequence is that geometry is a fact someone tells the page, exactly like
-its own URL. The CDP layer refreshes it before every evaluation, because any
-line of script can move the DOM.
+A `Remote` is one type covering the three things a caller can hold: a plain
+value, an element the DOM knows by id, or a JavaScript object the engine is
+holding. An element is reachable both ways, and callers should not have to care
+which they have.
 
-## Sessions
+**Measuring is here, not in the engine, which reads backwards.** Where an
+element sits needs fonts and a viewport, so it is a rendering question — but
+`getBoundingClientRect()` has to answer it from inside the page. The engine
+resolves this by not knowing: `html(s, Keyed::Yes)` emits markup where every
+element carries a `__tb-key-<id>` class, this layer measures it, and
+`set_environment` hands the boxes back.
 
-A **Session** is a place a page can be loaded. It holds settings — init scripts
-today — and outlives every page loaded into it. Each `load_page` replaces its
-**Realm**: one DOM plus the JavaScript environment around it. Nothing a page
-defines survives a navigation, which is what a browser does.
+Measuring is a full layout pass, so it is cached against `(revision, viewport)`.
+A test that evaluates twenty times against a static page lays out once.
 
-Sessions are cheap and isolated, so a caller can keep one per test. `render`
-reuses a single session across every file on the command line; the CDP layer
-gives each page its own and erases it when the target closes.
+**Navigation fails as a reason, not a message.** `NavigationError` says
+`UnsupportedScheme` or `NotFound`; the words a client sees are its protocol's
+business.
+
+## cli — front ends
+
+The command line, and the CDP front end. A front end translates one wire
+protocol into page operations; there can be several, and none of them can reach
+past the browser layer.
+
+`cdp::Page` is now only protocol identity: target, frame and loader ids,
+execution contexts, and the objectIds a client holds. Everything about the
+document lives below it.
 
 ## Concurrency
 
-One thread. A Realm cannot move between threads — QuickJS runtimes are `!Send`
-and the DOM is built on `Rc` — and only one piece of JavaScript runs at a time
-regardless. A caller wanting concurrency puts a queue in front.
+The engine is single-threaded: a Realm holds a `!Send` QuickJS runtime and an
+`Rc` DOM. A `Browser` is therefore single-threaded too.
 
-That costs less than it sounds, because the expensive work is above the door.
-Measuring and rasterizing are pure functions of HTML, so a caller can run them
-on as many threads as it likes while the engine serves the next request.
+The design that makes this survivable is that the expensive and shareable parts
+are outside it. `Resources` is thread-safe and shared, so many `Browser`s in
+many threads read through one cache. Measuring and rendering are pure functions
+of HTML, so they parallelize freely.
 
 ## The event loop
 
@@ -83,13 +110,8 @@ on as many threads as it likes while the engine serves the next request.
 completion means, so promises always resolve. Timers and animation frames are a
 task queue, and someone has to choose to turn it: `run_tasks(s, Budget)`.
 
-The split is the language's own, and it puts the decision where it belongs. A
-caller that wants a page to settle says so; a caller measuring something between
-two frames does not have to.
-
 ## Diagnostics
 
 Console lines and errors come back in the `Outcome` of the request that caused
-them. There is no event channel and no subscription, because JavaScript only
-ever runs when something asked it to — so everything a page emits is
-attributable to exactly one call.
+them. No event channel, no subscription: JavaScript only ever runs when
+something asked it to, so everything a page emits belongs to exactly one call.

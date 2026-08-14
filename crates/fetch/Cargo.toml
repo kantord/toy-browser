@@ -1,0 +1,8 @@
+[package]
+name = "toy-browser-fetch"
+description = "One shared, thread-safe, cached place every byte is read from."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+url = "2.5.8"

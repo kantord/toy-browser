@@ -6,6 +6,7 @@ edition.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+toy-browser-fetch.workspace = true
 serde_json.workspace = true
 blitz-dom = "0.2.4"
 blitz-html = "0.2.0"

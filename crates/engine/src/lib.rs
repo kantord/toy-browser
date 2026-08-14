@@ -18,6 +18,7 @@ mod serialize;
 use std::collections::HashMap;
 
 use anyhow::{Result, anyhow};
+use toy_browser_fetch::{Resources, Url};
 
 pub use realm::{Argument, Evaluated, Handle};
 pub use scripts::{EntryKind, EntryPoint, Fetch, Payload, ScriptSurvey, Timing};
@@ -49,8 +50,8 @@ impl std::fmt::Display for SessionId {
 pub struct LoadPage<'a> {
     /// The document's markup. Fetching it is the caller's business.
     pub source: &'a str,
-    /// The directory the page's own `<script src>` resolves against.
-    pub base: &'a std::path::Path,
+    /// What the page's own references resolve against.
+    pub base_url: &'a Url,
     /// Whether to run the page's scripts at all.
     pub run_scripts: bool,
 }
@@ -143,11 +144,21 @@ struct Session {
 pub struct Engine {
     sessions: HashMap<SessionId, Session>,
     next_id: u64,
+    resources: Resources,
 }
 
 impl Engine {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Builds an engine reading through `resources`. Sharing one across every
+    /// engine in the process is the point of it.
+    pub fn with_resources(resources: Resources) -> Self {
+        Self {
+            resources,
+            ..Default::default()
+        }
     }
 
     pub fn create_session(&mut self) -> SessionId {
@@ -196,7 +207,13 @@ impl Engine {
     /// place.
     pub fn load_page(&mut self, session: &SessionId, page: LoadPage<'_>) -> Result<Outcome<LoadReport>> {
         let init_scripts = self.session(session)?.init_scripts.clone();
-        let realm = Realm::open(page.source, page.base, page.run_scripts, &init_scripts)?;
+        let realm = Realm::open(
+            page.source,
+            page.base_url,
+            page.run_scripts,
+            &init_scripts,
+            self.resources.clone(),
+        )?;
 
         let report = LoadReport {
             scripts: realm.scripts().clone(),
@@ -267,6 +284,38 @@ impl Engine {
     /// The Session's current DOM, serialized to HTML. Costs no JavaScript.
     pub fn html(&mut self, session: &SessionId, keyed: Keyed) -> Result<String> {
         Ok(self.realm(session)?.html(keyed))
+    }
+
+    /// How many times the Session's DOM has changed. Anything computed from an
+    /// earlier revision describes a document that no longer exists.
+    pub fn revision(&mut self, session: &SessionId) -> Result<u64> {
+        Ok(self.realm(session)?.revision())
+    }
+
+    /// Every element matching `selector`, in document order. Runs no
+    /// JavaScript: this is the DOM's own selector engine.
+    pub fn query(&mut self, session: &SessionId, selector: &str) -> Result<Vec<NodeId>> {
+        Ok(self.realm(session)?.query(selector))
+    }
+
+    /// An element's text content, descendants included. Runs no JavaScript.
+    pub fn text(&mut self, session: &SessionId, node: NodeId) -> Result<String> {
+        Ok(self.realm(session)?.text(node))
+    }
+
+    /// An element's attribute. Runs no JavaScript.
+    pub fn attribute(
+        &mut self,
+        session: &SessionId,
+        node: NodeId,
+        name: &str,
+    ) -> Result<Option<String>> {
+        Ok(self.realm(session)?.attribute(node, name))
+    }
+
+    /// An element's tag name, or `None` if it is not an element.
+    pub fn tag_name(&mut self, session: &SessionId, node: NodeId) -> Result<Option<String>> {
+        Ok(self.realm(session)?.tag_name(node))
     }
 
     fn session(&self, id: &SessionId) -> Result<&Session> {

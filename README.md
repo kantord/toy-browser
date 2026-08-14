@@ -27,18 +27,22 @@ browser, split in two; the pnpm half is the Playwright acceptance suite that
 drives it.
 
 ```
+crates/fetch/      one shared, thread-safe, cached place bytes are read
 crates/engine/     the door — sessions, DOM, JavaScript, HTML
-crates/browser/    CLI, CDP endpoint, measuring, rendering
+crates/browser/    pages, elements, measuring, rendering
+crates/cli/        the command line, and the CDP front end
 tests/fixtures/    sample pages
 tests/playwright/  @toy-browser/playwright — the acceptance suite
 docs/              layers, protocol surface, JS entry points, ADRs
 CONTEXT.md         the vocabulary this project uses
 ```
 
-`crates/engine` is the smallest set of operations a browser automation API can
-be built on: open a session, load a page, evaluate JavaScript, read the HTML
-back. It knows nothing about fonts, pixels, URLs or any wire protocol —
-everything above is arranged out of those calls. See `docs/layers.md`.
+Each crate can only name what its dependency list allows: `cli` cannot say
+`Engine` or `Resources`, and `engine` cannot say `takumi`. `crates/engine` is
+the smallest set of operations a browser automation API can be built on — open
+a session, load a page, evaluate JavaScript, read HTML and elements back. It
+performs no I/O and knows nothing about fonts, pixels or any wire protocol.
+See `docs/layers.md`.
 
 ## Usage
 
@@ -85,15 +89,15 @@ against the blitz DOM. What works:
   `textContent`, `innerHTML`, `className`, `classList`, inline `style`,
   `addEventListener`, `document.write`, `console`.
 
-The engine boundary is deliberately thin. `src/js/dom.rs` exposes about fifteen
-primitives that speak only in node ids, and `src/js/prelude.js` builds `window`,
-`document` and the element object model on top of them — so no JavaScript value
-is ever held on the Rust side.
+The engine boundary is deliberately thin. `crates/engine/src/dom.rs` exposes
+about twenty primitives that speak only in node ids, and `prelude.js` builds
+`window`, `document` and the element object model on top of them — so no
+JavaScript value is ever held on the Rust side.
 
 Simplifications worth knowing: the whole document is parsed before anything
 runs, so `async` and `defer` do not reorder anything and `document.write()`
-appends to the body; nothing is fetched over the network; there are no
-selectors, no node traversal, and no computed style.
+appends to the body; nothing is fetched over the network; and there is no
+computed style, so a script cannot ask what a stylesheet decided.
 
 `docs/js-entry-points.md` is the full checklist of entry points with what runs,
 what is only discovered, and what is missing entirely.
@@ -158,8 +162,8 @@ works, and the non-obvious things it requires.
 - **blitz's `Node::outer_html` cannot round-trip.** It writes every childless
   element as `<div />`. HTML has no self-closing syntax for non-void elements,
   so re-parsing that output swallowed the following siblings — four colored
-  boxes collapsed into one nested stack. `src/serialize.rs` walks the DOM and
-  emits `<div></div>` instead.
+  boxes collapsed into one nested stack. `crates/engine/src/serialize.rs` walks
+  the DOM and emits `<div></div>` instead.
 - **takumi-html drops `<style>` elements**, so the CSS is extracted from the
   serialized HTML and handed to takumi separately as a stylesheet.
 - **List markers are missing.** `<ul>`/`<li>` lay out with the right

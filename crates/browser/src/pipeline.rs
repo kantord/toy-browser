@@ -3,17 +3,13 @@
 //! Everything here sits above the engine: it takes serialized HTML and knows
 //! about fonts, layout and rasterizing, none of which the engine does.
 
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use resvg::{tiny_skia, usvg};
 use takumi_core::{Fonts, style::StyleSheet, viewport::Viewport as TakumiViewport};
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_svg::SvgOptions;
-use toy_browser_engine::ScriptSurvey;
 
 /// The size a document is laid out and rendered at.
 #[derive(Clone, Copy)]
@@ -121,34 +117,4 @@ fn style_blocks(html: &str) -> Vec<&str> {
     }
 
     blocks
-}
-
-/// Writes every stage's output as `<stem>.dom.html`, `<stem>.scripts.md`,
-/// `<stem>.svg` and `<stem>.png`, returning the PNG path.
-pub fn write_artifacts(
-    html: &str,
-    scripts: &ScriptSurvey,
-    raster: &Raster,
-    out_dir: &Path,
-    stem: &str,
-) -> Result<PathBuf> {
-    std::fs::create_dir_all(out_dir).with_context(|| format!("creating {}", out_dir.display()))?;
-
-    let script_report = scripts.to_markdown(stem);
-    let png_path = out_dir.join(format!("{stem}.png"));
-    let files: [(PathBuf, &[u8]); 4] = [
-        (out_dir.join(format!("{stem}.dom.html")), html.as_bytes()),
-        (
-            out_dir.join(format!("{stem}.scripts.md")),
-            script_report.as_bytes(),
-        ),
-        (out_dir.join(format!("{stem}.svg")), raster.svg.as_bytes()),
-        (png_path.clone(), &raster.png),
-    ];
-
-    for (path, contents) in files {
-        std::fs::write(&path, contents).with_context(|| format!("writing {}", path.display()))?;
-    }
-
-    Ok(png_path)
 }
