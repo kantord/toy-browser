@@ -20,6 +20,19 @@ rendered more than once — see `CONTEXT.md` for the vocabulary.
 
 Each stage's output is written to disk so it can be inspected.
 
+## Layout
+
+A Cargo crate and a pnpm workspace in one repo. The Rust half is the browser;
+the pnpm half is the Playwright acceptance test that drives it.
+
+```
+src/            the browser
+tests/fixtures/ sample pages
+tests/playwright/  @toy-browser/playwright — the acceptance test
+docs/           protocol surface, JS entry points, ADRs
+CONTEXT.md      the vocabulary this project uses
+```
+
 ## Usage
 
 ```sh
@@ -99,19 +112,22 @@ await page.screenshot({ path: "out/pw-hello.png" });
 viewport, so without it Playwright tries to read `window.innerWidth` out of a
 page it cannot evaluate in, and waits forever.
 
-The acceptance test is `tests/playwright/smoke.mjs` — it starts the server,
-drives both a static and a JavaScript-built fixture, checks that an unsupported
-scheme is rejected, and shuts down:
+The acceptance test is `tests/playwright/smoke.mjs`. It starts the server,
+drives a static and a JavaScript-built fixture, evaluates in the page, checks
+that an unsupported scheme is rejected, and shuts down:
 
 ```sh
-cd tests/playwright && npm install && node smoke.mjs
+pnpm install && pnpm test
 ```
 
-Navigation handles `about:` and `file://`; anything else comes back as
-`net::ERR_UNKNOWN_URL_SCHEME`. There is no network, no `Runtime.evaluate`, and
-therefore no locators, clicking or `page.content()`.
-`docs/cdp-surface.md` records the whole protocol surface and the four
-non-obvious things Playwright requires.
+What works: `goto`, `screenshot`, `title()`, `content()`, `url()`, `evaluate()`
+with functions and arguments, and the read-only parts of locators
+(`count()`, `isVisible()`). What does not: clicking, typing, `textContent()` —
+anything needing box geometry. Navigation handles `about:` and `file://` only;
+anything else comes back as `net::ERR_UNKNOWN_URL_SCHEME`.
+
+`docs/cdp-surface.md` records the protocol surface, how much of Playwright
+works, and the non-obvious things it requires.
 
 ## Notes from the first run
 

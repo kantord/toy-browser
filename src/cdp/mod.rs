@@ -15,7 +15,10 @@ use serde_json::{Value, json};
 use takumi_core::Fonts;
 use tungstenite::Message;
 
-use crate::pipeline::Viewport;
+use crate::{
+    js::{Argument, Evaluated},
+    pipeline::Viewport,
+};
 use page::Page;
 
 /// Playwright reads this out of `Browser.getVersion` and treats us as headful
@@ -118,7 +121,7 @@ impl<'f> Browser<'f> {
 
         let outcome = match session_id {
             Some(session) => self.page_command(method, params, session)?,
-            None => self.browser_command(method, params),
+            None => self.browser_command(method, params)?,
         };
 
         let mut outgoing = outcome.before;
@@ -128,8 +131,8 @@ impl<'f> Browser<'f> {
     }
 
     /// Commands addressed to the browser itself, with no session id.
-    fn browser_command(&mut self, method: &str, params: &Value) -> Outcome {
-        match method {
+    fn browser_command(&mut self, method: &str, params: &Value) -> Result<Outcome> {
+        Ok(match method {
             "Browser.getVersion" => Outcome::ok(json!({
                 "protocolVersion": "1.3",
                 "product": "HeadlessChrome/126.0.0.0",
@@ -150,7 +153,7 @@ impl<'f> Browser<'f> {
             })),
 
             "Target.createTarget" => {
-                let page = Page::new(self.next_index);
+                let page = Page::new(self.next_index)?;
                 self.next_index += 1;
                 let result = json!({ "targetId": page.target_id });
                 // The attach event must arrive before this response: Playwright
@@ -181,7 +184,7 @@ impl<'f> Browser<'f> {
                     .iter()
                     .position(|page| page.target_id == target_id)
                 else {
-                    return Outcome::ok(json!({ "success": false }));
+                    return Ok(Outcome::ok(json!({ "success": false })));
                 };
                 let page = self.pages.remove(index);
 
@@ -200,7 +203,7 @@ impl<'f> Browser<'f> {
             }
 
             other => Outcome::ok(unhandled(other)),
-        }
+        })
     }
 
     /// Commands addressed to one page, carrying its session id.
@@ -222,6 +225,7 @@ impl<'f> Browser<'f> {
             "Page.navigate" => {
                 let url = params["url"].as_str().unwrap_or("about:blank");
                 let error = page.navigate(url, true);
+                page.renew_contexts();
 
                 let mut result = json!({
                     "frameId": page.frame_id,
@@ -279,6 +283,58 @@ impl<'f> Browser<'f> {
                 Outcome::ok(json!({ "data": BASE64.encode(png) }))
             }
 
+            // An isolated world we cannot actually isolate: both ids address the
+            // page's one JavaScript environment.
+            "Page.createIsolatedWorld" => {
+                page.utility_world = params["worldName"].as_str().map(str::to_owned);
+                Outcome {
+                    before: Vec::new(),
+                    result: json!({ "executionContextId": page.utility_context_id }),
+                    // Announced here rather than on `Runtime.enable` because a
+                    // client only asks for an isolated world once it has taken
+                    // in the frame tree, and it discards contexts for frames it
+                    // has not heard of yet.
+                    after: context_events(page),
+                }
+            }
+
+            "Runtime.evaluate" => {
+                let expression = params["expression"].as_str().unwrap_or_default();
+                let by_value = params["returnByValue"].as_bool().unwrap_or(false);
+                Outcome::ok(remote_object(page.evaluate(expression, by_value)))
+            }
+
+            "Runtime.callFunctionOn" => {
+                let declaration = params["functionDeclaration"].as_str().unwrap_or_default();
+                let receiver = params["objectId"].as_str();
+                let by_value = params["returnByValue"].as_bool().unwrap_or(false);
+                let arguments: Vec<Argument> = params["arguments"]
+                    .as_array()
+                    .map(Vec::as_slice)
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|argument| match argument["objectId"].as_str() {
+                        Some(id) => Argument::Handle(id.to_owned()),
+                        None => Argument::Value(argument["value"].clone()),
+                    })
+                    .collect();
+
+                Outcome::ok(remote_object(
+                    page.call(declaration, receiver, &arguments, by_value),
+                ))
+            }
+
+            "Runtime.releaseObject" => {
+                if let Some(id) = params["objectId"].as_str() {
+                    page.release(id);
+                }
+                Outcome::ok(json!({}))
+            }
+
+            // Handles are opaque here, so a client inspecting one finds nothing
+            // rather than an error it would have to handle.
+            "Runtime.getProperties" => Outcome::ok(json!({ "result": [] })),
+
             other => Outcome::ok(unhandled(other)),
         })
     }
@@ -289,7 +345,7 @@ impl<'f> Browser<'f> {
 }
 
 fn navigation_events(page: &Page) -> Vec<Value> {
-    vec![
+    let mut events = vec![
         event(
             "Page.frameNavigated",
             json!({ "frame": frame_of(page), "type": "Navigation" }),
@@ -297,7 +353,90 @@ fn navigation_events(page: &Page) -> Vec<Value> {
         ),
         lifecycle_event(page, "DOMContentLoaded"),
         lifecycle_event(page, "load"),
-    ]
+        // The old document's environment is gone, so its contexts must be too.
+        event(
+            "Runtime.executionContextsCleared",
+            json!({}),
+            Some(&page.session_id),
+        ),
+    ];
+    events.extend(context_events(page));
+    events
+}
+
+/// Announces the page's execution contexts, main world first.
+fn context_events(page: &Page) -> Vec<Value> {
+    let mut events = vec![execution_context(
+        page,
+        page.main_context_id,
+        "",
+        json!({ "isDefault": true, "type": "default", "frameId": page.frame_id }),
+    )];
+
+    // The utility world is only announced once a client has named it; its name
+    // is how the client recognises the context as its own.
+    if let Some(world) = page.utility_world.clone() {
+        events.push(execution_context(
+            page,
+            page.utility_context_id,
+            &world,
+            json!({ "isDefault": false, "type": "isolated", "frameId": page.frame_id }),
+        ));
+    }
+
+    events
+}
+
+fn execution_context(page: &Page, id: u32, name: &str, aux_data: Value) -> Value {
+    event(
+        "Runtime.executionContextCreated",
+        json!({
+            "context": {
+                "id": id,
+                "origin": page.url,
+                "name": name,
+                "uniqueId": format!("{}.{id}", page.target_id),
+                "auxData": aux_data,
+            },
+        }),
+        Some(&page.session_id),
+    )
+}
+
+/// Wraps an evaluation outcome the way the protocol describes results: a value,
+/// an object the engine is holding, or the details of what was thrown.
+fn remote_object(evaluated: Evaluated) -> Value {
+    match evaluated {
+        Evaluated::Value(value) => json!({ "result": describe_value(value) }),
+        Evaluated::Handle(id) => json!({
+            "result": { "type": "object", "objectId": id },
+        }),
+        Evaluated::Threw(message) => json!({
+            "result": { "type": "undefined" },
+            "exceptionDetails": {
+                "exceptionId": 1,
+                "text": "Uncaught",
+                "lineNumber": 0,
+                "columnNumber": 0,
+                "exception": { "type": "object", "subtype": "error", "description": message },
+            },
+        }),
+    }
+}
+
+fn describe_value(value: Value) -> Value {
+    let type_name = match &value {
+        Value::Null => "undefined",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) | Value::Object(_) => "object",
+    };
+
+    match value {
+        Value::Null => json!({ "type": type_name }),
+        other => json!({ "type": type_name, "value": other }),
+    }
 }
 
 fn lifecycle_event(page: &Page, name: &str) -> Value {

@@ -117,7 +117,7 @@ fn report(document: &Document, raster: &Raster) {
         scripts.unresolved_count(),
     );
 
-    if let Some(js) = &document.js {
+    if let Some(js) = document.js_report() {
         println!("  js: {} script(s) run, {} skipped", js.executed, js.skipped);
         for line in &js.console {
             println!("    {line}");

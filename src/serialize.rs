@@ -18,8 +18,13 @@ const RAW_TEXT_ELEMENTS: &[&str] = &["script", "style"];
 
 /// Serializes the document's root element and its subtree to HTML.
 pub fn document_to_html(doc: &BaseDocument) -> String {
+    node_to_html(doc, doc.root_element())
+}
+
+/// Serializes one node and its subtree to HTML.
+pub fn node_to_html(doc: &BaseDocument, node: &Node) -> String {
     let mut out = String::new();
-    write_node(doc, doc.root_element(), false, &mut out);
+    write_node(doc, node, false, &mut out);
     out
 }
 

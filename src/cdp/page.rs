@@ -5,12 +5,20 @@ use std::path::{Path, PathBuf};
 use takumi_core::Fonts;
 use url::Url;
 
-use crate::pipeline::{self, Document, Viewport};
+use crate::{
+    js::{Argument, Evaluated},
+    pipeline::{self, Document, Viewport},
+};
 
 /// Chrome's error text for a scheme no loader handles. Playwright surfaces it
 /// verbatim as `page.goto: net::ERR_UNKNOWN_URL_SCHEME`.
 const UNKNOWN_SCHEME: &str = "net::ERR_UNKNOWN_URL_SCHEME";
 const FILE_NOT_FOUND: &str = "net::ERR_FILE_NOT_FOUND";
+
+/// What every `about:` URL loads. The doctype matters: without one blitz parses
+/// in quirks mode, and its quirks stylesheet fails to parse noisily.
+const BLANK_HTML: &str =
+    "<!DOCTYPE html><html><head><title></title></head><body></body></html>";
 
 /// One navigable thing. Ids are handed to the client so it can tell this page,
 /// and each of its navigations, apart from the next.
@@ -24,23 +32,78 @@ pub struct Page {
     pub loader_id: String,
     pub url: String,
     pub viewport: Viewport,
+    /// The isolated world a client asked us to make, echoed back when its
+    /// execution context is announced.
+    pub utility_world: Option<String>,
+    /// Ids for the page's two execution contexts. Both address the same
+    /// JavaScript environment: this browser has no isolated worlds, so the
+    /// "utility" world can see, and be seen by, the page's own scripts.
+    pub main_context_id: u32,
+    pub utility_context_id: u32,
     document: Document,
     navigation_count: u32,
+    context_count: u32,
 }
 
 impl Page {
-    pub fn new(index: u32) -> Self {
+    /// A new page showing `about:blank`, as a freshly opened tab does.
+    pub fn new(index: u32) -> anyhow::Result<Self> {
         let target_id = format!("TARGET{index}");
-        Self {
+        Ok(Self {
             frame_id: target_id.clone(),
             target_id,
             session_id: format!("SESSION{index}"),
             loader_id: format!("LOADER{index}-0"),
             url: "about:blank".to_owned(),
             viewport: Viewport::default(),
-            document: blank_document(),
+            utility_world: None,
+            main_context_id: 1,
+            utility_context_id: 2,
+            document: blank_document().map_err(|error| anyhow::anyhow!(error))?,
             navigation_count: 0,
-        }
+            context_count: 2,
+        })
+    }
+
+    /// Retires this page's execution contexts and issues fresh ids, as a
+    /// browser does when a new document commits.
+    pub fn renew_contexts(&mut self) {
+        self.main_context_id = self.context_count + 1;
+        self.utility_context_id = self.context_count + 2;
+        self.context_count += 2;
+    }
+
+    pub fn evaluate(&self, expression: &str, by_value: bool) -> Evaluated {
+        self.sync_environment();
+        self.document.engine().evaluate(expression, by_value)
+    }
+
+    /// Publishes the page's viewport and URL into the page's own globals. Done
+    /// before evaluating rather than when the viewport changes, because a
+    /// navigation replaces the environment those globals live in.
+    fn sync_environment(&self) {
+        self.document.engine().set_viewport(
+            self.viewport.width,
+            self.viewport.height.unwrap_or(0),
+            &self.url,
+        );
+    }
+
+    pub fn call(
+        &self,
+        declaration: &str,
+        receiver: Option<&str>,
+        arguments: &[Argument],
+        by_value: bool,
+    ) -> Evaluated {
+        self.sync_environment();
+        self.document
+            .engine()
+            .call(declaration, receiver, arguments, by_value)
+    }
+
+    pub fn release(&self, handle_id: &str) {
+        self.document.engine().release(handle_id);
     }
 
     /// Loads `url`, replacing this page's document. Returns the error text a
@@ -49,11 +112,10 @@ impl Page {
         self.navigation_count += 1;
         self.loader_id = format!("LOADER{}-{}", self.target_id, self.navigation_count);
 
-        let loaded = match resolve(url) {
-            Ok(Source::Blank) => Ok(blank_document()),
-            Ok(Source::File(path)) => load_file(&path, run_scripts),
-            Err(error) => Err(error),
-        };
+        let loaded = resolve(url).and_then(|source| match source {
+            Source::Blank => blank_document(),
+            Source::File(path) => load_file(&path, run_scripts),
+        });
 
         match loaded {
             Ok(document) => {
@@ -99,10 +161,8 @@ fn load_file(path: &Path, run_scripts: bool) -> Result<Document, String> {
         .map_err(|error| format!("net::ERR_FAILED ({error})"))
 }
 
-fn blank_document() -> Document {
-    Document {
-        html: "<html><head></head><body></body></html>".to_owned(),
-        scripts: Default::default(),
-        js: None,
-    }
+/// `about:blank`: a real, empty, scriptable document.
+fn blank_document() -> Result<Document, String> {
+    pipeline::load(BLANK_HTML, Path::new("."), true)
+        .map_err(|error| format!("net::ERR_FAILED ({error})"))
 }

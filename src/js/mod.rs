@@ -8,11 +8,16 @@
 mod dom;
 mod loader;
 
-use std::{cell::RefCell, collections::HashMap, path::Path, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    path::Path,
+    rc::Rc,
+};
 
 use anyhow::{Context as _, Result};
 use blitz_html::HtmlDocument;
-use rquickjs::{Context, Ctx, Function, Module, Object, Runtime, Value};
+use rquickjs::{Context, Ctx, Function, Module, Object, Persistent, Runtime, Value};
 
 use crate::scripts::{EntryKind, Fetch, Payload, ScriptSurvey};
 use dom::Dom;
@@ -38,44 +43,239 @@ pub struct JsReport {
     pub errors: Vec<String>,
 }
 
-/// Runs every script in `survey` against `doc`, returning the mutated document.
+/// A page's JavaScript environment: the DOM, the engine that mutates it, and
+/// the globals bridging the two.
 ///
-/// A script that throws is recorded and the load continues, which is what a
-/// browser does.
-pub fn run(
-    doc: HtmlDocument,
-    base_dir: &Path,
-    survey: &ScriptSurvey,
-) -> Result<(HtmlDocument, JsReport)> {
-    let dom = Rc::new(Dom::new(doc, base_dir));
-    let report = Rc::new(RefCell::new(JsReport::default()));
-    let imports: ImportMap = Rc::new(RefCell::new(HashMap::new()));
+/// It outlives the load so that a client can go on evaluating against the same
+/// globals the page's own scripts left behind. Dropping it destroys the DOM.
+pub struct Engine {
+    dom: Rc<Dom>,
+    report: Rc<RefCell<JsReport>>,
+    /// Values held on behalf of a client, keyed by the id it was given.
+    ///
+    /// Field order below is load-bearing: Rust drops fields in declaration
+    /// order, and QuickJS asserts that every value is freed before its context
+    /// and every context before its runtime. Retained handles must therefore be
+    /// declared first, or dropping the engine aborts the process.
+    handles: RefCell<HashMap<String, Persistent<Value<'static>>>>,
+    next_handle: Cell<u64>,
+    context: Context,
+    _runtime: Runtime,
+}
 
-    let runtime = Runtime::new().context("creating QuickJS runtime")?;
-    runtime.set_loader(
-        DocumentResolver::new(base_dir, Rc::clone(&imports)),
-        FileLoader,
-    );
-    let context = Context::full(&runtime).context("creating QuickJS context")?;
+impl Engine {
+    /// Builds the environment for `doc` and, unless `run_scripts` is false,
+    /// runs its scripts and drives the load lifecycle to a standstill.
+    ///
+    /// A script that throws is recorded and the load continues, which is what a
+    /// browser does.
+    pub fn start(
+        doc: HtmlDocument,
+        base_dir: &Path,
+        survey: &ScriptSurvey,
+        run_scripts: bool,
+    ) -> Result<Self> {
+        let dom = Rc::new(Dom::new(doc, base_dir));
+        let report = Rc::new(RefCell::new(JsReport::default()));
+        let imports: ImportMap = Rc::new(RefCell::new(HashMap::new()));
 
-    context.with(|ctx| {
-        install_globals(&ctx, &dom, &report)?;
-        evaluate(&ctx, &report, "<prelude>", PRELUDE);
-        load_import_maps(&ctx, survey, &imports);
-        run_scripts(&ctx, &report, survey, base_dir);
-        run_lifecycle(&ctx, &report);
-        anyhow::Ok(())
-    })?;
+        let runtime = Runtime::new().context("creating QuickJS runtime")?;
+        runtime.set_loader(
+            DocumentResolver::new(base_dir, Rc::clone(&imports)),
+            FileLoader,
+        );
+        let context = Context::full(&runtime).context("creating QuickJS context")?;
 
-    drop(context);
-    drop(runtime);
+        context.with(|ctx| {
+            install_globals(&ctx, &dom, &report)?;
+            evaluate(&ctx, &report, "<prelude>", PRELUDE);
+            if run_scripts {
+                load_import_maps(&ctx, survey, &imports);
+                self::run_scripts(&ctx, &report, survey, base_dir);
+                run_lifecycle(&ctx, &report);
+            }
+            anyhow::Ok(())
+        })?;
 
-    let report = Rc::try_unwrap(report)
-        .map_err(|_| anyhow::anyhow!("report outlived the JS runtime"))?
-        .into_inner();
-    let dom = Rc::try_unwrap(dom).map_err(|_| anyhow::anyhow!("DOM outlived the JS runtime"))?;
+        Ok(Self {
+            dom,
+            report,
+            handles: RefCell::new(HashMap::new()),
+            next_handle: Cell::new(1),
+            context,
+            _runtime: runtime,
+        })
+    }
 
-    Ok((dom.into_document(), report))
+    /// The current DOM, serialized to HTML.
+    pub fn document_html(&self) -> String {
+        self.dom
+            .with_document(|doc| crate::serialize::document_to_html(doc))
+    }
+
+    pub fn report(&self) -> std::cell::Ref<'_, JsReport> {
+        self.report.borrow()
+    }
+
+    /// Evaluates `expression` and describes the result.
+    pub fn evaluate(&self, expression: &str, by_value: bool) -> Evaluated {
+        self.context.with(|ctx| {
+            match ctx.eval::<Value, _>(expression) {
+                Ok(value) => {
+                    // Promises are settled before describing the result, so a
+                    // caller that asked for a value never receives a pending one.
+                    let value = self.settle(value);
+                    self.describe(&ctx, value, by_value)
+                }
+                Err(error) => Evaluated::Threw(exception_text(&ctx, error)),
+            }
+        })
+    }
+
+    /// Calls `declaration` — the source of a function expression — with `this`
+    /// bound to `receiver` and the given arguments.
+    pub fn call(
+        &self,
+        declaration: &str,
+        receiver: Option<&str>,
+        arguments: &[Argument],
+        by_value: bool,
+    ) -> Evaluated {
+        self.context.with(|ctx| {
+            let function = match ctx.eval::<Function, _>(format!("({declaration})")) {
+                Ok(function) => function,
+                Err(error) => return Evaluated::Threw(exception_text(&ctx, error)),
+            };
+
+            let mut call_args = rquickjs::function::Args::new(ctx.clone(), arguments.len());
+            let this = receiver.and_then(|id| self.handle(&ctx, id));
+            let this = this.unwrap_or_else(|| Value::new_undefined(ctx.clone()));
+            if call_args.this(this).is_err() {
+                return Evaluated::Threw("could not bind `this`".to_owned());
+            }
+
+            for argument in arguments {
+                let value = match argument {
+                    Argument::Value(json) => match json_to_js(&ctx, json) {
+                        Ok(value) => value,
+                        Err(error) => return Evaluated::Threw(exception_text(&ctx, error)),
+                    },
+                    Argument::Handle(id) => self
+                        .handle(&ctx, id)
+                        .unwrap_or_else(|| Value::new_undefined(ctx.clone())),
+                };
+                if call_args.push_arg(value).is_err() {
+                    return Evaluated::Threw("could not pass argument".to_owned());
+                }
+            }
+
+            match function.call_arg::<Value>(call_args) {
+                Ok(value) => {
+                    let value = self.settle(value);
+                    self.describe(&ctx, value, by_value)
+                }
+                Err(error) => Evaluated::Threw(exception_text(&ctx, error)),
+            }
+        })
+    }
+
+    /// Forgets a handle the client is done with.
+    pub fn release(&self, handle_id: &str) {
+        self.handles.borrow_mut().remove(handle_id);
+    }
+
+    /// Tells the page how big it is being rendered, which is the only way
+    /// anything in it can learn its own viewport.
+    pub fn set_viewport(&self, width: u32, height: u32, url: &str) {
+        let script = format!(
+            "globalThis.innerWidth = {width}; globalThis.innerHeight = {height}; \
+             globalThis.location.href = {};",
+            quote(url)
+        );
+        self.context.with(|ctx| {
+            let _ = ctx.eval::<Value, _>(script);
+        });
+    }
+
+    /// Runs the job queue until a promise resolves, leaving other values alone.
+    fn settle<'js>(&self, value: Value<'js>) -> Value<'js> {
+        let Some(promise) = value.clone().into_promise() else {
+            return value;
+        };
+        promise.finish::<Value>().unwrap_or(value)
+    }
+
+    /// Turns a JavaScript value into either a JSON copy or a retained handle.
+    fn describe<'js>(&self, ctx: &Ctx<'js>, value: Value<'js>, by_value: bool) -> Evaluated {
+        if by_value {
+            return match js_to_json(ctx, &value) {
+                Ok(json) => Evaluated::Value(json),
+                Err(error) => Evaluated::Threw(exception_text(ctx, error)),
+            };
+        }
+
+        // Primitives need no identity, so they are still copied.
+        if !value.is_object() && !value.is_function() {
+            return match js_to_json(ctx, &value) {
+                Ok(json) => Evaluated::Value(json),
+                Err(error) => Evaluated::Threw(exception_text(ctx, error)),
+            };
+        }
+
+        let id = format!("HANDLE{}", self.next_handle.replace(self.next_handle.get() + 1));
+        self.handles
+            .borrow_mut()
+            .insert(id.clone(), Persistent::save(ctx, value));
+        Evaluated::Handle(id)
+    }
+
+    fn handle<'js>(&self, ctx: &Ctx<'js>, id: &str) -> Option<Value<'js>> {
+        self.handles
+            .borrow()
+            .get(id)
+            .map(|saved| saved.clone().restore(ctx))
+            .transpose()
+            .ok()
+            .flatten()
+    }
+}
+
+/// An argument to [`Engine::call`]: either a literal or something the engine is
+/// already holding on the client's behalf.
+pub enum Argument {
+    Value(serde_json::Value),
+    Handle(String),
+}
+
+/// The outcome of running JavaScript.
+pub enum Evaluated {
+    /// A JSON copy of the result.
+    Value(serde_json::Value),
+    /// An id for a result the engine retained, because it has identity.
+    Handle(String),
+    /// The message of whatever was thrown.
+    Threw(String),
+}
+
+/// Converts a JavaScript value to JSON the way `JSON.stringify` would, so the
+/// engine's own serializer decides what "by value" means.
+fn js_to_json<'js>(ctx: &Ctx<'js>, value: &Value<'js>) -> rquickjs::Result<serde_json::Value> {
+    if value.is_undefined() {
+        return Ok(serde_json::Value::Null);
+    }
+
+    let stringify: Function = ctx.globals().get::<_, Object>("JSON")?.get("stringify")?;
+    let text: Option<String> = stringify.call((value.clone(),))?;
+
+    // `JSON.stringify` yields nothing for functions and undefined.
+    Ok(text
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or(serde_json::Value::Null))
+}
+
+fn json_to_js<'js>(ctx: &Ctx<'js>, json: &serde_json::Value) -> rquickjs::Result<Value<'js>> {
+    let parse: Function = ctx.globals().get::<_, Object>("JSON")?.get("parse")?;
+    parse.call((json.to_string(),))
 }
 
 /// Runs the scripts in document order, skipping the ones a module-capable
@@ -176,7 +376,7 @@ fn evaluate_module(ctx: &Ctx<'_>, report: &Rc<RefCell<JsReport>>, name: &str, so
 
 /// Turns a thrown value into a readable line, including the JS stack when the
 /// engine gave us one.
-fn record_error(ctx: &Ctx<'_>, report: &Rc<RefCell<JsReport>>, name: &str, error: rquickjs::Error) {
+fn exception_text(ctx: &Ctx<'_>, error: rquickjs::Error) -> String {
     let detail = match error {
         rquickjs::Error::Exception => ctx
             .catch()
@@ -185,10 +385,12 @@ fn record_error(ctx: &Ctx<'_>, report: &Rc<RefCell<JsReport>>, name: &str, error
             .unwrap_or_else(|| "uncaught exception".to_owned()),
         other => other.to_string(),
     };
-    report
-        .borrow_mut()
-        .errors
-        .push(format!("{name}: {}", detail.trim()));
+    detail.trim().to_owned()
+}
+
+fn record_error(ctx: &Ctx<'_>, report: &Rc<RefCell<JsReport>>, name: &str, error: rquickjs::Error) {
+    let detail = exception_text(ctx, error);
+    report.borrow_mut().errors.push(format!("{name}: {detail}"));
 }
 
 /// Reads every import map in the document into the shared resolution table.
@@ -256,6 +458,13 @@ fn install_globals(ctx: &Ctx<'_>, dom: &Rc<Dom>, report: &Rc<RefCell<JsReport>>)
         .set_text(id, &text));
     dom_method!(api, ctx, dom, "setInnerHtml", |d, id: usize, html: String| d
         .set_inner_html(id, &html));
+    dom_method!(api, ctx, dom, "innerHtml", |d, id: usize| d.inner_html(id));
+    dom_method!(api, ctx, dom, "outerHtml", |d, id: usize| d.outer_html(id));
+    dom_method!(api, ctx, dom, "queryAll", |d, selector: String| d
+        .query_all(&selector));
+    dom_method!(api, ctx, dom, "parent", |d, id: usize| d.parent(id));
+    dom_method!(api, ctx, dom, "elementChildren", |d, id: usize| d
+        .element_children(id));
     dom_method!(api, ctx, dom, "appendHtml", |d, id: usize, html: String| d
         .append_html(id, &html));
 

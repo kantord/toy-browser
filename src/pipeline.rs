@@ -13,7 +13,10 @@ use takumi_core::{Fonts, style::StyleSheet, viewport::Viewport as TakumiViewport
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_svg::SvgOptions;
 
-use crate::{js::JsReport, scripts::ScriptSurvey};
+use crate::{
+    js::{Engine, JsReport},
+    scripts::ScriptSurvey,
+};
 
 /// The size a document is laid out and rendered at.
 #[derive(Clone, Copy)]
@@ -36,15 +39,34 @@ impl Default for Viewport {
     }
 }
 
-/// A page's HTML after parsing and after its scripts have run, plus what
-/// happened on the way. The handoff between [`load`] and [`render`].
+/// A page after parsing and after its scripts have run. The handoff between
+/// [`load`] and [`render`].
+///
+/// It owns the live DOM and the JavaScript environment around it, so a client
+/// can keep evaluating against the page after the load is over.
 pub struct Document {
-    /// HTML as blitz-dom serialized it back out.
-    pub html: String,
     /// JavaScript entry points found in the document, and the scripts loaded.
     pub scripts: ScriptSurvey,
-    /// What the engine did, when scripts were run.
-    pub js: Option<JsReport>,
+    engine: Engine,
+    ran_scripts: bool,
+}
+
+impl Document {
+    /// The current DOM, serialized to HTML. Recomputed on each call, because
+    /// evaluating in the page can change it.
+    pub fn html(&self) -> String {
+        self.engine.document_html()
+    }
+
+    /// The page's JavaScript environment, for evaluating in it after the load.
+    pub fn engine(&self) -> &Engine {
+        &self.engine
+    }
+
+    /// What the engine did during the load, or `None` if scripts were skipped.
+    pub fn js_report(&self) -> Option<std::cell::Ref<'_, JsReport>> {
+        self.ran_scripts.then(|| self.engine.report())
+    }
 }
 
 /// A rendered document.
@@ -76,26 +98,22 @@ pub fn load(source: &str, base_dir: &Path, run_scripts: bool) -> Result<Document
     );
 
     let scripts = crate::scripts::survey(&doc, base_dir);
-    let (doc, js) = if run_scripts {
-        let (doc, report) = crate::js::run(doc, base_dir, &scripts)?;
-        (doc, Some(report))
-    } else {
-        (doc, None)
-    };
+    let engine = Engine::start(doc, base_dir, &scripts, run_scripts)?;
 
     Ok(Document {
-        // Deliberately redundant: serializing the DOM back out puts a real tree
-        // in the middle of the pipeline, so later stages see a normalized
-        // document rather than the author's markup.
-        html: crate::serialize::document_to_html(&doc),
         scripts,
-        js,
+        engine,
+        ran_scripts: run_scripts,
     })
 }
 
 /// Lays out a document at `viewport` and rasterizes it.
+///
+/// The DOM is serialized back to HTML on the way in — deliberately redundant,
+/// but it means the renderer sees a normalized document rather than the
+/// author's markup, and that whatever scripts did is already in it.
 pub fn render(document: &Document, fonts: &Fonts, viewport: Viewport) -> Result<Raster> {
-    let svg = to_svg(&document.html, fonts, viewport)?;
+    let svg = to_svg(&document.html(), fonts, viewport)?;
     to_png(svg)
 }
 
@@ -183,12 +201,10 @@ pub fn write_artifacts(
     std::fs::create_dir_all(out_dir).with_context(|| format!("creating {}", out_dir.display()))?;
 
     let script_report = document.scripts.to_markdown(stem);
+    let html = document.html();
     let png_path = out_dir.join(format!("{stem}.png"));
     let files: [(PathBuf, &[u8]); 4] = [
-        (
-            out_dir.join(format!("{stem}.dom.html")),
-            document.html.as_bytes(),
-        ),
+        (out_dir.join(format!("{stem}.dom.html")), html.as_bytes()),
         (
             out_dir.join(format!("{stem}.scripts.md")),
             script_report.as_bytes(),

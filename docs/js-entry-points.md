@@ -154,10 +154,16 @@ What the object model covers: `getElementById`, `getElementsByTagName`,
 inline `style`, `addEventListener`/`removeEventListener`/`dispatchEvent`,
 `document.write`, `document.readyState`, `console`.
 
-What it does not: querySelector, node traversal (`parentNode`, `children`,
-`nextSibling`), `insertBefore`, cloning, computed style, layout geometry, and
-reading `innerHTML` back out. Style is inline-only — nothing here runs the
-cascade, so a script cannot observe what a stylesheet decided.
+Since then, driving it from a real client forced more: `querySelector`,
+`querySelectorAll`, `matches`, `contains`, `parentNode`, `children`, `nodeType`,
+`isConnected`, `outerHTML`, `innerHTML` reads, `document.title`,
+`window.innerWidth`/`innerHeight`, `location.href`, constructible `Event` and
+`CustomEvent`, and do-nothing `MutationObserver`, `ResizeObserver` and
+`IntersectionObserver`.
+
+What it still does not: `insertBefore`, cloning, sibling traversal, computed
+style, and layout geometry — no element knows where it is or how big it is.
+Style is inline-only, so a script cannot observe what a stylesheet decided.
 
 ## What this means for the next step
 

@@ -1,5 +1,5 @@
 {
-  "name": "toy-browser-playwright-smoke",
+  "name": "@toy-browser/playwright",
   "private": true,
   "type": "module",
   "description": "Drives toy-browser's CDP endpoint with Playwright.",

@@ -68,7 +68,31 @@ try {
     await page.goto(`file://${resolve(REPO, fixture)}`);
     await page.screenshot({ path });
 
-    console.log(`${fixture} -> ${output} (${statSync(path).size} bytes)`);
+    const title = await page.title();
+    const html = await page.content();
+    console.log(
+      `${fixture} -> ${output} (${statSync(path).size} bytes)` +
+        ` title=${JSON.stringify(title)} html=${html.length}b`,
+    );
+  }
+
+  // Back to a known page for the evaluation checks.
+  await page.goto(`file://${resolve(REPO, PAGES[0].fixture)}`);
+
+  const checks = [
+    ["evaluate expression", () => page.evaluate("1 + 1"), 2],
+    ["evaluate function", () => page.evaluate(() => document.title), "Hello"],
+    ["evaluate with argument", () => page.evaluate((n) => n * 3, 7), 21],
+    ["locator count", () => page.locator("p").count(), 2],
+    ["locator visibility", () => page.locator("h1").isVisible(), true],
+  ];
+
+  for (const [name, run, expected] of checks) {
+    const actual = await run();
+    if (actual !== expected) {
+      throw new Error(`${name}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+    }
+    console.log(`${name} -> ${JSON.stringify(actual)}`);
   }
 
   // A scheme we do not implement must fail loudly rather than hang.

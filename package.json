@@ -1,0 +1,13 @@
+{
+  "name": "toy-browser",
+  "private": true,
+  "type": "module",
+  "description": "A toy browser: HTML in, PNG out. Rust crate plus its Playwright acceptance tests.",
+  "packageManager": "pnpm@11.3.0",
+  "scripts": {
+    "build": "cargo build",
+    "render": "cargo run -- render tests/fixtures/*.html tests/fixtures/js/*.html",
+    "serve": "cargo run -- serve",
+    "test": "pnpm --filter @toy-browser/playwright test"
+  }
+}

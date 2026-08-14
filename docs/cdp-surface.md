@@ -37,6 +37,10 @@ level of the envelope; the browser itself is addressed by omitting it.
 | page | `Emulation.setDeviceMetricsOverride` | sets the Page's Viewport |
 | page | `Page.getLayoutMetrics` | reports that Viewport back |
 | page | `Page.captureScreenshot` | performs the Render, returns base64 PNG |
+| page | `Page.createIsolatedWorld` | names a world and announces its context |
+| page | `Runtime.evaluate` | runs an expression in the page |
+| page | `Runtime.callFunctionOn` | calls a function with `this` and arguments |
+| page | `Runtime.releaseObject` | forgets a retained value |
 
 ## Events
 
@@ -46,6 +50,8 @@ level of the envelope; the browser itself is addressed by omitting it.
 | `Target.detachedFromTarget` | a Page was closed |
 | `Page.frameNavigated` | after a Load, carrying the new loader id |
 | `Page.lifecycleEvent` | `DOMContentLoaded` then `load`, after `frameNavigated` |
+| `Runtime.executionContextsCleared` | the old document's environment is gone |
+| `Runtime.executionContextCreated` | main world, then the named isolated world |
 
 ## Everything else
 
@@ -84,6 +90,30 @@ it knows. Any string works; absence throws.
 **The user agent must contain `Headless`.** Playwright derives `headful` from
 it, and a headful browser is asked for window bounds we have no answer for.
 
+## How much of Playwright works
+
+Everything below was measured, not guessed.
+
+| Works | Does not |
+| --- | --- |
+| `page.goto`, `page.screenshot` | `locator.click` and every other action |
+| `page.title()`, `page.content()`, `page.url()` | `locator.textContent()`, `innerText()` |
+| `page.evaluate()` — expressions, functions, arguments | `page.$()` |
+| `locator.count()`, `locator.isVisible()` | anything needing layout geometry |
+
+Playwright evaluates through two bundles it injects into the page. The
+**utility script** (~11KB) powers `evaluate`, `title` and `content`; it runs in
+QuickJS as-is. The **injected script** is much larger and powers selectors and
+actions; getting it to bootstrap took three globals it constructs on load —
+`MutationObserver`, `Element`, and the `Event`/`CustomEvent` constructors — plus
+`querySelectorAll`. Past that it needs a real DOM: node traversal, computed
+style, and box geometry for hit-testing. That is the frontier.
+
+The prelude's stubs are honest about being stubs. `MutationObserver` observes
+nothing, because the DOM only changes while script is running and nobody is
+watching when it does. `ResizeObserver` and `IntersectionObserver` are the same
+class, for the same reason.
+
 ## Why the screenshot needs a viewport
 
 `page.screenshot()` asks the page for its size. With `connectOverCDP` the
@@ -98,14 +128,13 @@ does in the page — its `inPagePrepareForScreenshots` injection and
 `document.fonts.ready` — already swallow the missing-context error, so they cost
 nothing.
 
-The alternative is implementing `Runtime.evaluate` with real execution contexts
-and `RemoteObject` serialization. That is also what `page.title()`,
-`page.content()` and every locator need, so it is the obvious next step — but
-see `adr/0001-page-holds-serialized-html.md` for what it would cost.
+`Runtime.evaluate` now exists, so this could be lifted by reporting
+`window.innerWidth` honestly — but nothing knows the viewport until something
+sets it, so the explicit call is still the only way to say what it should be.
 
 ## Not implemented at all
 
 No network domain: `page.goto()` returns `null` rather than a `Response`,
-because Playwright only builds one when it saw request events. No `Runtime`, so
-nothing can evaluate in the page. No `DOM`, so no locators, clicking or typing.
-No iframes, workers, dialogs, downloads or tracing.
+because Playwright only builds one when it saw request events. No `DOM` domain,
+so no box geometry and therefore no clicking or typing. No iframes, workers,
+dialogs, downloads or tracing.

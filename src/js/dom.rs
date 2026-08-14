@@ -26,9 +26,10 @@ impl Dom {
         }
     }
 
-    /// Takes the document back once scripts have finished mutating it.
-    pub fn into_document(self) -> HtmlDocument {
-        self.doc.into_inner()
+    /// Reads the live document. Held only for the duration of `visit`, so
+    /// JavaScript can go on mutating it afterwards.
+    pub fn with_document<R>(&self, visit: impl FnOnce(&HtmlDocument) -> R) -> R {
+        visit(&self.doc.borrow())
     }
 
     pub fn get_element_by_id(&self, id: &str) -> Option<usize> {
@@ -97,6 +98,25 @@ impl Dom {
         self.doc.borrow_mut().mutate().set_inner_html(id, html);
     }
 
+    pub fn outer_html(&self, id: usize) -> String {
+        let doc = self.doc.borrow();
+        doc.get_node(id)
+            .map(|node| crate::serialize::node_to_html(&doc, node))
+            .unwrap_or_default()
+    }
+
+    pub fn inner_html(&self, id: usize) -> String {
+        let doc = self.doc.borrow();
+        let Some(node) = doc.get_node(id) else {
+            return String::new();
+        };
+        node.children
+            .iter()
+            .filter_map(|&child_id| doc.get_node(child_id))
+            .map(|child| crate::serialize::node_to_html(&doc, child))
+            .collect()
+    }
+
     /// Parses `html` and appends the result to `parent`, which is what
     /// `document.write()` amounts to once parsing has already finished.
     pub fn append_html(&self, parent: usize, html: &str) {
@@ -106,6 +126,36 @@ impl Dom {
         mutator.set_inner_html(scratch, html);
         mutator.reparent_children(scratch, parent);
         mutator.remove_and_drop_node(scratch);
+    }
+
+    /// Every element matching `selector`, in document order. An unparsable
+    /// selector matches nothing rather than failing.
+    pub fn query_all(&self, selector: &str) -> Vec<usize> {
+        self.doc
+            .borrow()
+            .query_selector_all(selector)
+            .map(|found| found.to_vec())
+            .unwrap_or_default()
+    }
+
+    pub fn parent(&self, id: usize) -> Option<usize> {
+        self.doc.borrow().get_node(id).and_then(|node| node.parent)
+    }
+
+    /// An element's element children, skipping text and comments.
+    pub fn element_children(&self, id: usize) -> Vec<usize> {
+        let doc = self.doc.borrow();
+        let Some(node) = doc.get_node(id) else {
+            return Vec::new();
+        };
+        node.children
+            .iter()
+            .copied()
+            .filter(|&child_id| {
+                doc.get_node(child_id)
+                    .is_some_and(|child| matches!(child.data, NodeData::Element(_)))
+            })
+            .collect()
     }
 
     pub fn root(&self) -> usize {

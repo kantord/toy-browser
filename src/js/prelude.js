@@ -45,6 +45,59 @@
       __dom.setAttribute(this.__id, name, String(value));
     }
 
+    // Selectors are matched against the whole document, then narrowed to this
+    // element's descendants, because the DOM only offers a document-wide query.
+    querySelectorAll(selector) {
+      return __dom
+        .queryAll(String(selector))
+        .filter((id) => isDescendant(id, this.__id))
+        .map(wrap);
+    }
+
+    querySelector(selector) {
+      return this.querySelectorAll(selector)[0] ?? null;
+    }
+
+    matches(selector) {
+      return __dom.queryAll(String(selector)).includes(this.__id);
+    }
+
+    contains(other) {
+      return other != null && (other.__id === this.__id || isDescendant(other.__id, this.__id));
+    }
+
+    get nodeType() {
+      return 1;
+    }
+
+    get nodeName() {
+      return this.tagName;
+    }
+
+    get isConnected() {
+      return isDescendant(this.__id, __dom.root()) || this.__id === __dom.root();
+    }
+
+    get ownerDocument() {
+      return document;
+    }
+
+    get parentNode() {
+      return wrap(__dom.parent(this.__id));
+    }
+
+    get parentElement() {
+      return this.parentNode;
+    }
+
+    get children() {
+      return __dom.elementChildren(this.__id).map(wrap);
+    }
+
+    get firstElementChild() {
+      return this.children[0] ?? null;
+    }
+
     getAttribute(name) {
       return __dom.getAttribute(this.__id, name);
     }
@@ -62,8 +115,16 @@
       __dom.setText(this.__id, String(value));
     }
 
+    get innerHTML() {
+      return __dom.innerHtml(this.__id);
+    }
+
     set innerHTML(value) {
       __dom.setInnerHtml(this.__id, String(value));
+    }
+
+    get outerHTML() {
+      return __dom.outerHtml(this.__id);
     }
 
     get className() {
@@ -135,6 +196,29 @@
   class HTMLElement extends Node {}
   globals.Node = Node;
   globals.HTMLElement = HTMLElement;
+  globals.Element = HTMLElement;
+
+  // Nothing observes anything here: the DOM only changes while script is
+  // running, and no client is watching when it does. These exist because
+  // tooling constructs them on load and fails outright if the name is missing.
+  class MutationObserver {
+    observe() {}
+    disconnect() {}
+    takeRecords() {
+      return [];
+    }
+  }
+  globals.MutationObserver = MutationObserver;
+  globals.ResizeObserver = MutationObserver;
+  globals.IntersectionObserver = MutationObserver;
+
+  /// Whether `id` sits anywhere under `ancestorId`.
+  const isDescendant = (id, ancestorId) => {
+    for (let at = __dom.parent(id); at !== null; at = __dom.parent(at)) {
+      if (at === ancestorId) return true;
+    }
+    return false;
+  };
 
   const wrap = (id) => {
     if (id === null || id === undefined) return null;
@@ -177,6 +261,39 @@
       }
     }
   };
+
+  // Constructible events. Only the fields anything here reads are real.
+  class Event {
+    constructor(type, init = {}) {
+      this.type = String(type);
+      this.bubbles = !!init.bubbles;
+      this.cancelable = !!init.cancelable;
+      this.defaultPrevented = false;
+      this.target = null;
+      this.currentTarget = null;
+    }
+    preventDefault() {
+      this.defaultPrevented = true;
+    }
+    stopPropagation() {}
+    stopImmediatePropagation() {}
+  }
+
+  class CustomEvent extends Event {
+    constructor(type, init = {}) {
+      super(type, init);
+      this.detail = init.detail ?? null;
+    }
+  }
+
+  globals.Event = Event;
+  globals.CustomEvent = CustomEvent;
+  globals.UIEvent = Event;
+  globals.MouseEvent = Event;
+  globals.KeyboardEvent = Event;
+  globals.FocusEvent = Event;
+  globals.InputEvent = Event;
+  globals.PointerEvent = Event;
 
   const makeEvent = (type, target) => ({
     type,
@@ -265,8 +382,13 @@
     __id: __dom.root(),
     readyState: "loading",
 
+    nodeType: 9,
+
     getElementById: (id) => wrap(__dom.getElementById(id)),
     getElementsByTagName: (tag) => __dom.elementsByTag(tag).map(wrap),
+    querySelectorAll: (selector) => __dom.queryAll(String(selector)).map(wrap),
+    querySelector: (selector) => wrap(__dom.queryAll(String(selector))[0] ?? null),
+    contains: (node) => node != null,
     createElement: (tag) => wrap(__dom.createElement(String(tag))),
     createTextNode: (text) => wrap(__dom.createTextNode(String(text))),
 
@@ -277,6 +399,25 @@
     // only go at the end of the body.
     write: (html) => __dom.appendHtml(__dom.body() ?? __dom.root(), String(html)),
     writeln: (html) => document.write(`${html}\n`),
+
+    // The document's title element, which is also where `document.title` reads
+    // and writes. Absent by default, so setting it has to create one.
+    get title() {
+      const [titleId] = __dom.elementsByTag("title");
+      return titleId === undefined ? "" : __dom.text(titleId);
+    },
+    set title(value) {
+      const [titleId] = __dom.elementsByTag("title");
+      if (titleId !== undefined) {
+        __dom.setText(titleId, String(value));
+        return;
+      }
+      const head = __dom.head();
+      if (head === null) return;
+      const created = __dom.createElement("title");
+      __dom.setText(created, String(value));
+      __dom.appendChild(head, created);
+    },
 
     get documentElement() {
       return wrap(__dom.root());
@@ -293,6 +434,13 @@
   globals.window = globals;
   globals.self = globals;
   globals.console = __console;
+
+  // Set from the outside whenever the viewport changes, because nothing here
+  // knows how big the page is until it is rendered.
+  globals.innerWidth = 0;
+  globals.innerHeight = 0;
+  globals.devicePixelRatio = 1;
+  globals.location = { href: "about:blank", protocol: "about:", toString: () => globals.location.href };
 
   globals.addEventListener = (type, listener) => addListener(WINDOW, type, listener);
   globals.removeEventListener = (type, listener) => removeListener(WINDOW, type, listener);
