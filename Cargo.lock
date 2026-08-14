@@ -2826,17 +2826,26 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
- "blitz-dom",
- "blitz-html",
  "clap",
  "resvg",
- "rquickjs",
  "serde_json",
  "takumi-core",
  "takumi-html",
  "takumi-svg",
+ "toy-browser-engine",
  "tungstenite",
  "url",
+]
+
+[[package]]
+name = "toy-browser-engine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "blitz-dom",
+ "blitz-html",
+ "rquickjs",
+ "serde_json",
 ]
 
 [[package]]

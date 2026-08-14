@@ -9,8 +9,31 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use blitz_dom::{LocalName, NodeData, QualName, ns};
-use blitz_html::HtmlDocument;
+use blitz_dom::{DocumentConfig, LocalName, NodeData, QualName, ns};
+use blitz_html::{HtmlDocument, HtmlProvider};
+
+/// Parses `source` into a DOM whose relative references resolve against
+/// `base_dir`.
+pub fn parse(source: &str, base_dir: &Path) -> HtmlDocument {
+    HtmlDocument::from_html(
+        source,
+        DocumentConfig {
+            // blitz resolves every relative URL it sees against this, and panics
+            // without it as soon as a document references one.
+            base_url: file_base_url(base_dir),
+            // Without this, `innerHTML` and `document.write()` silently do
+            // nothing: the default provider is a no-op stub.
+            html_parser_provider: Some(std::sync::Arc::new(HtmlProvider)),
+            ..Default::default()
+        },
+    )
+}
+
+/// A `file://` URL for `dir`, with the trailing slash relative URLs need.
+fn file_base_url(dir: &Path) -> Option<String> {
+    let absolute = std::fs::canonicalize(dir).ok()?;
+    Some(format!("file://{}/", absolute.display()))
+}
 
 /// A parsed document plus the directory its relative URLs resolve against.
 pub struct Dom {

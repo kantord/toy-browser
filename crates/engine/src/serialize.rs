@@ -40,7 +40,7 @@ pub fn document_to_keyed_html(doc: &BaseDocument) -> String {
 
 /// Reads the node id out of a `class` attribute written by
 /// [`document_to_keyed_html`].
-pub fn key_from_class(class: &str) -> Option<usize> {
+pub fn key_of(class: &str) -> Option<usize> {
     class
         .split_whitespace()
         .find_map(|token| token.strip_prefix(KEY_CLASS_PREFIX))

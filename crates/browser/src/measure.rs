@@ -22,24 +22,17 @@ use takumi_core::{
 };
 use takumi_html::{FromHtmlOptions, from_html};
 
-use crate::{pipeline::Viewport, serialize::key_from_class};
+use toy_browser_engine::{ElementBox, key_of};
 
-/// A border box in CSS pixels, relative to the top-left of the document.
-#[derive(Clone, Copy, Debug)]
-pub struct Rect {
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-}
+use crate::pipeline::Viewport;
 
 /// Every element's border box, keyed by DOM node id.
-pub type Boxes = HashMap<usize, Rect>;
+pub type Boxes = HashMap<toy_browser_engine::NodeId, ElementBox>;
 
 /// Lays out `keyed_html` and reports where each keyed element ended up.
 ///
-/// `keyed_html` must come from [`crate::serialize::document_to_keyed_html`];
-/// elements without a marker class simply do not appear in the result.
+/// `keyed_html` must come from the engine with keys attached; elements without
+/// a marker class simply do not appear in the result.
 pub fn boxes(
     keyed_html: &str,
     stylesheet: StyleSheet,
@@ -114,7 +107,7 @@ fn record(root: &RenderNode, results: &LayoutResults, paint: &NodePaint, boxes: 
         .node
         .as_ref()
         .and_then(|source| source.class_name())
-        .and_then(key_from_class)
+        .and_then(key_of)
     else {
         return;
     };
@@ -125,7 +118,7 @@ fn record(root: &RenderNode, results: &LayoutResults, paint: &NodePaint, boxes: 
     let transform = paint.transform;
     boxes.insert(
         key,
-        Rect {
+        ElementBox {
             x: transform.x,
             y: transform.y,
             // `a` and `d` are the axis scales; anything rotated or skewed is

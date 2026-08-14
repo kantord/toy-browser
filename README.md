@@ -22,16 +22,23 @@ Each stage's output is written to disk so it can be inspected.
 
 ## Layout
 
-A Cargo crate and a pnpm workspace in one repo. The Rust half is the browser;
-the pnpm half is the Playwright acceptance test that drives it.
+A Cargo workspace and a pnpm workspace in one repo. The Rust half is the
+browser, split in two; the pnpm half is the Playwright acceptance suite that
+drives it.
 
 ```
-src/            the browser
-tests/fixtures/ sample pages
-tests/playwright/  @toy-browser/playwright — the acceptance test
-docs/           protocol surface, JS entry points, ADRs
-CONTEXT.md      the vocabulary this project uses
+crates/engine/     the door — sessions, DOM, JavaScript, HTML
+crates/browser/    CLI, CDP endpoint, measuring, rendering
+tests/fixtures/    sample pages
+tests/playwright/  @toy-browser/playwright — the acceptance suite
+docs/              layers, protocol surface, JS entry points, ADRs
+CONTEXT.md         the vocabulary this project uses
 ```
+
+`crates/engine` is the smallest set of operations a browser automation API can
+be built on: open a session, load a page, evaluate JavaScript, read the HTML
+back. It knows nothing about fonts, pixels, URLs or any wire protocol —
+everything above is arranged out of those calls. See `docs/layers.md`.
 
 ## Usage
 

@@ -15,10 +15,9 @@ use serde_json::{Value, json};
 use takumi_core::Fonts;
 use tungstenite::Message;
 
-use crate::{
-    js::{Argument, Evaluated},
-    pipeline::Viewport,
-};
+use toy_browser_engine::{Argument, Engine, Evaluated, Handle, Mode};
+
+use crate::pipeline::Viewport;
 use page::Page;
 
 /// Playwright reads this out of `Browser.getVersion` and treats us as headful
@@ -96,9 +95,11 @@ impl Outcome {
     }
 }
 
-/// The browser end of the connection: the set of open pages.
+/// The browser end of the connection: the set of open pages, and the engine
+/// their documents live in.
 struct Browser<'f> {
     fonts: &'f Fonts,
+    engine: Engine,
     pages: Vec<Page>,
     next_index: u32,
 }
@@ -107,6 +108,7 @@ impl<'f> Browser<'f> {
     fn new(fonts: &'f Fonts) -> Self {
         Self {
             fonts,
+            engine: Engine::new(),
             pages: Vec::new(),
             next_index: 1,
         }
@@ -153,7 +155,7 @@ impl<'f> Browser<'f> {
             })),
 
             "Target.createTarget" => {
-                let page = Page::new(self.next_index)?;
+                let page = Page::new(&mut self.engine, self.next_index)?;
                 self.next_index += 1;
                 let result = json!({ "targetId": page.target_id });
                 // The attach event must arrive before this response: Playwright
@@ -172,7 +174,7 @@ impl<'f> Browser<'f> {
             "Target.attachToTarget" => {
                 let target_id = params["targetId"].as_str().unwrap_or_default();
                 Outcome::ok(match self.page_by_target(target_id) {
-                    Some(page) => json!({ "sessionId": page.session_id }),
+                    Some(page) => json!({ "sessionId": page.cdp_session_id }),
                     None => json!({}),
                 })
             }
@@ -187,6 +189,7 @@ impl<'f> Browser<'f> {
                     return Ok(Outcome::ok(json!({ "success": false })));
                 };
                 let page = self.pages.remove(index);
+                self.engine.erase_session(page.session());
 
                 Outcome {
                     before: Vec::new(),
@@ -194,7 +197,7 @@ impl<'f> Browser<'f> {
                     after: vec![event(
                         "Target.detachedFromTarget",
                         json!({
-                            "sessionId": page.session_id,
+                            "sessionId": page.cdp_session_id,
                             "targetId": page.target_id,
                         }),
                         None,
@@ -209,13 +212,17 @@ impl<'f> Browser<'f> {
     /// Commands addressed to one page, carrying its session id.
     fn page_command(&mut self, method: &str, params: &Value, session_id: &str) -> Result<Outcome> {
         let fonts = self.fonts;
-        let Some(page) = self
+        let Some(index) = self
             .pages
-            .iter_mut()
-            .find(|page| page.session_id == session_id)
+            .iter()
+            .position(|page| page.cdp_session_id == session_id)
         else {
             return Ok(Outcome::ok(json!({})));
         };
+        // Two disjoint fields: the page's bookkeeping and the engine its
+        // document lives in.
+        let page = &mut self.pages[index];
+        let engine = &mut self.engine;
 
         Ok(match method {
             "Page.getFrameTree" => {
@@ -224,7 +231,7 @@ impl<'f> Browser<'f> {
 
             "Page.navigate" => {
                 let url = params["url"].as_str().unwrap_or("about:blank");
-                let error = page.navigate(url, true);
+                let error = page.navigate(engine, url);
                 page.renew_contexts();
 
                 let mut result = json!({
@@ -279,7 +286,7 @@ impl<'f> Browser<'f> {
                         height: Some(round(&clip["height"])),
                     };
                 }
-                let png = page.render(fonts)?;
+                let png = page.render(engine, fonts)?;
                 Outcome::ok(json!({ "data": BASE64.encode(png) }))
             }
 
@@ -302,11 +309,9 @@ impl<'f> Browser<'f> {
             // register page setup this way, and trace recorders register the
             // machinery that captures DOM snapshots.
             "Page.addScriptToEvaluateOnNewDocument" => {
-                let source = params["source"].as_str().unwrap_or_default();
-                page.init_scripts.push(source.to_owned());
-                Outcome::ok(json!({
-                    "identifier": format!("INIT{}", page.init_scripts.len()),
-                }))
+                let source = params["source"].as_str().unwrap_or_default().to_owned();
+                let index = engine.add_init_script(page.session(), source)?;
+                Outcome::ok(json!({ "identifier": format!("INIT{index}") }))
             }
 
             "Page.removeScriptToEvaluateOnNewDocument" => {
@@ -314,42 +319,46 @@ impl<'f> Browser<'f> {
                     .as_str()
                     .and_then(|id| id.strip_prefix("INIT"))
                     .and_then(|index| index.parse::<usize>().ok())
-                    .filter(|index| (1..=page.init_scripts.len()).contains(index))
                 {
-                    page.init_scripts.remove(index - 1);
+                    engine.remove_init_script(page.session(), index)?;
                 }
                 Outcome::ok(json!({}))
             }
 
             "Runtime.evaluate" => {
                 let expression = params["expression"].as_str().unwrap_or_default();
-                let by_value = params["returnByValue"].as_bool().unwrap_or(false);
-                Outcome::ok(remote_object(page.evaluate(fonts, expression, by_value)))
+                let mode = mode_of(params);
+                Outcome::ok(remote_object(page.evaluate(engine, fonts, expression, mode)))
             }
 
             "Runtime.callFunctionOn" => {
                 let declaration = params["functionDeclaration"].as_str().unwrap_or_default();
-                let receiver = params["objectId"].as_str();
-                let by_value = params["returnByValue"].as_bool().unwrap_or(false);
+                let receiver = params["objectId"].as_str().map(|id| Handle::from(id.to_owned()));
+                let mode = mode_of(params);
                 let arguments: Vec<Argument> = params["arguments"]
                     .as_array()
                     .map(Vec::as_slice)
                     .unwrap_or_default()
                     .iter()
                     .map(|argument| match argument["objectId"].as_str() {
-                        Some(id) => Argument::Handle(id.to_owned()),
+                        Some(id) => Argument::Handle(Handle::from(id.to_owned())),
                         None => Argument::Value(argument["value"].clone()),
                     })
                     .collect();
 
-                Outcome::ok(remote_object(
-                    page.call(fonts, declaration, receiver, &arguments, by_value),
-                ))
+                Outcome::ok(remote_object(page.call(
+                    engine,
+                    fonts,
+                    declaration,
+                    receiver.as_ref(),
+                    &arguments,
+                    mode,
+                )))
             }
 
             "Runtime.releaseObject" => {
                 if let Some(id) = params["objectId"].as_str() {
-                    page.release(id);
+                    let _ = engine.release(page.session(), &Handle::from(id.to_owned()));
                 }
                 Outcome::ok(json!({}))
             }
@@ -372,7 +381,7 @@ fn navigation_events(page: &Page) -> Vec<Value> {
         event(
             "Page.frameNavigated",
             json!({ "frame": frame_of(page), "type": "Navigation" }),
-            Some(&page.session_id),
+            Some(&page.cdp_session_id),
         ),
         lifecycle_event(page, "DOMContentLoaded"),
         lifecycle_event(page, "load"),
@@ -380,7 +389,7 @@ fn navigation_events(page: &Page) -> Vec<Value> {
         event(
             "Runtime.executionContextsCleared",
             json!({}),
-            Some(&page.session_id),
+            Some(&page.cdp_session_id),
         ),
     ];
     events.extend(context_events(page));
@@ -422,7 +431,7 @@ fn execution_context(page: &Page, id: u32, name: &str, aux_data: Value) -> Value
                 "auxData": aux_data,
             },
         }),
-        Some(&page.session_id),
+        Some(&page.cdp_session_id),
     )
 }
 
@@ -431,8 +440,8 @@ fn execution_context(page: &Page, id: u32, name: &str, aux_data: Value) -> Value
 fn remote_object(evaluated: Evaluated) -> Value {
     match evaluated {
         Evaluated::Value(value) => json!({ "result": describe_value(value) }),
-        Evaluated::Handle(id) => json!({
-            "result": { "type": "object", "objectId": id },
+        Evaluated::Handle(handle) => json!({
+            "result": { "type": "object", "objectId": handle.as_str() },
         }),
         Evaluated::Threw(message) => {
             // Clients report these as bare protocol errors with no page context,
@@ -476,7 +485,7 @@ fn lifecycle_event(page: &Page, name: &str) -> Value {
             "name": name,
             "timestamp": 0,
         }),
-        Some(&page.session_id),
+        Some(&page.cdp_session_id),
     )
 }
 
@@ -498,7 +507,7 @@ fn attached_event(page: &Page) -> Value {
     event(
         "Target.attachedToTarget",
         json!({
-            "sessionId": page.session_id,
+            "sessionId": page.cdp_session_id,
             "targetInfo": {
                 "targetId": page.target_id,
                 "type": "page",
@@ -528,6 +537,14 @@ fn reply(id: u64, result: Value, session_id: Option<&str>) -> Value {
         message["sessionId"] = json!(session);
     }
     message
+}
+
+/// Whether a client asked for a copy or a reference.
+fn mode_of(params: &Value) -> Mode {
+    match params["returnByValue"].as_bool().unwrap_or(false) {
+        true => Mode::ByValue,
+        false => Mode::ByRef,
+    }
 }
 
 fn round(value: &Value) -> u32 {

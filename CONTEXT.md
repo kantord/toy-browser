@@ -55,6 +55,47 @@ A render in which every pixel is the same colour. How a Document that needed
 JavaScript it did not get announces itself.
 _Avoid_: empty page, failed render
 
+### The automation engine
+
+**Engine**:
+The smallest set of operations any browser automation API could be built on:
+open and erase Sessions, load a page, evaluate JavaScript, hand out HTML. Knows
+nothing about fonts, layout, pixels, or any wire protocol.
+_Avoid_: core, backend, driver, runtime
+
+**Session**:
+A named place a page can be loaded, and the unit of isolation between callers.
+Outlives the pages loaded into it, carrying its settings across each one.
+_Avoid_: tab, context, instance
+
+**Realm**:
+One DOM plus the JavaScript environment around it. A Session holds at most one,
+and each load replaces it — so nothing a page defines survives a navigation.
+_Avoid_: document, world, global
+
+**Environment fact**:
+Something a Realm cannot discover about itself and must be told: the viewport
+size, the current URL, where each element sits. Supplied by whoever is driving.
+_Avoid_: metadata, config, state
+
+**Handle**:
+A retained reference to a JavaScript value, given to a caller that needs to name
+the same object again later. Freed only when the caller releases it or its Realm
+is replaced.
+_Avoid_: reference, pointer, object id
+
+**Outcome**:
+Everything one request produced: what it returned, plus every console line and
+error the page emitted while it ran. Attributable to one request because
+JavaScript only ever runs when something asked for it.
+_Avoid_: result, response, report
+
+**Task round**:
+One turn of the page's task queue — the timers and animation frames waiting to
+run. Distinct from the microtask checkpoint, which is part of running any code
+to completion.
+_Avoid_: tick, frame, drain
+
 ### Being a browser
 
 **Page**:

@@ -2,18 +2,17 @@
 
 mod cdp;
 mod fonts;
-mod js;
 mod measure;
 mod pipeline;
-mod scripts;
-mod serialize;
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
-use pipeline::{Document, Raster, Viewport};
+use toy_browser_engine::{Engine, Keyed, LoadPage, Outcome, ScriptSurvey};
+
+use pipeline::{Raster, Viewport};
 
 #[derive(Parser)]
 #[command(about = "Render HTML to PNG via blitz-dom -> takumi -> SVG -> resvg", version)]
@@ -82,6 +81,9 @@ fn render(args: RenderArgs) -> Result<()> {
         height: args.height,
     };
 
+    let mut engine = Engine::new();
+    let session = engine.create_session();
+
     for input in &args.inputs {
         let source = std::fs::read_to_string(input)
             .with_context(|| format!("reading {}", input.display()))?;
@@ -91,22 +93,33 @@ fn render(args: RenderArgs) -> Result<()> {
             .and_then(|stem| stem.to_str())
             .unwrap_or("page");
 
-        let document = pipeline::load(&source, base_dir, !args.no_scripts, &[])
+        let loaded = engine
+            .load_page(
+                &session,
+                LoadPage {
+                    source: &source,
+                    base: base_dir,
+                    run_scripts: !args.no_scripts,
+                },
+            )
             .with_context(|| format!("loading {}", input.display()))?;
-        let raster = pipeline::render(&document, &fonts, viewport)
+
+        let html = engine.html(&session, Keyed::No)?;
+        let raster = pipeline::render(&html, &fonts, viewport)
             .with_context(|| format!("rendering {}", input.display()))?;
-        let png_path = pipeline::write_artifacts(&document, &raster, &args.out_dir, stem)?;
+        let png_path =
+            pipeline::write_artifacts(&html, &loaded.value.scripts, &raster, &args.out_dir, stem)?;
 
         println!("{} -> {}", input.display(), png_path.display());
-        report(&document, &raster);
+        report(&loaded, &raster, !args.no_scripts);
     }
 
     Ok(())
 }
 
 /// One indented line per thing worth knowing about the render.
-fn report(document: &Document, raster: &Raster) {
-    let scripts = &document.scripts;
+fn report(loaded: &Outcome<toy_browser_engine::LoadReport>, raster: &Raster, ran_scripts: bool) {
+    let scripts: &ScriptSurvey = &loaded.value.scripts;
     if scripts.entry_points.is_empty() {
         return;
     }
@@ -118,12 +131,15 @@ fn report(document: &Document, raster: &Raster) {
         scripts.unresolved_count(),
     );
 
-    if let Some(js) = document.js_report() {
-        println!("  js: {} script(s) run, {} skipped", js.executed, js.skipped);
-        for line in &js.console {
+    if ran_scripts {
+        println!(
+            "  js: {} script(s) run, {} skipped",
+            loaded.value.executed, loaded.value.skipped
+        );
+        for line in &loaded.console {
             println!("    {line}");
         }
-        for error in &js.errors {
+        for error in &loaded.errors {
             println!("    error: {error}");
         }
     }

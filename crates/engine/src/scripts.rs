@@ -100,7 +100,7 @@ impl Timing {
 }
 
 /// Where the code for an entry point lives.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Payload {
     /// Code written directly into the document.
     Inline { source: String },
@@ -109,7 +109,7 @@ pub enum Payload {
 }
 
 /// The result of resolving and reading an external script.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Fetch {
     /// Read off disk. `source` is kept so an engine could be handed it later.
     Loaded { path: PathBuf, source: String },
@@ -120,7 +120,7 @@ pub enum Fetch {
 }
 
 /// One place the page load would enter a JavaScript engine.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EntryPoint {
     pub kind: EntryKind,
     pub timing: Timing,
@@ -130,7 +130,7 @@ pub struct EntryPoint {
 }
 
 /// Every entry point found in one document, in document order.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ScriptSurvey {
     pub entry_points: Vec<EntryPoint>,
 }
