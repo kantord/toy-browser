@@ -97,7 +97,9 @@ JavaScript value is ever held on the Rust side.
 Simplifications worth knowing: the whole document is parsed before anything
 runs, so `async` and `defer` do not reorder anything and `document.write()`
 appends to the body; nothing is fetched over the network; and there is no
-computed style, so a script cannot ask what a stylesheet decided.
+computed style, scrolling, `innerText` or `Intl`. `docs/js-entry-points.md` has
+the full list of what is missing and why each one is left out rather than
+approximated.
 
 `docs/js-entry-points.md` is the full checklist of entry points with what runs,
 what is only discovered, and what is missing entirely.
@@ -147,6 +149,10 @@ browser cannot yet host. Working: `goto`, `screenshot`, `title()`, `content()`,
 `url()`, `evaluate()` with functions and arguments, `evaluateHandle()`,
 `locator.count()`, `locator.isVisible()`, and `getBoundingClientRect()` backed
 by a real layout pass. Not working: clicking, typing, `textContent()`.
+
+That is the honest usability limit: you cannot yet write a normal Playwright
+test, because a normal Playwright test is made of `expect()`.
+`docs/cdp-surface.md` records what is missing and what is known about why.
 
 Navigation handles `about:` and `file://` only; anything else comes back as
 `net::ERR_UNKNOWN_URL_SCHEME`.

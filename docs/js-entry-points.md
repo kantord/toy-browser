@@ -154,20 +154,38 @@ What the object model covers: `getElementById`, `getElementsByTagName`,
 inline `style`, `addEventListener`/`removeEventListener`/`dispatchEvent`,
 `document.write`, `document.readyState`, `console`.
 
-Since then, driving it from a real client forced more: `querySelector`,
-`querySelectorAll`, `matches`, `contains`, `parentNode`, `children`, `nodeType`,
-`isConnected`, `outerHTML`, `innerHTML` reads, `document.title`,
-`window.innerWidth`/`innerHeight`, `location.href`, constructible `Event` and
-`CustomEvent`, and do-nothing `MutationObserver`, `ResizeObserver` and
-`IntersectionObserver`.
+Since then, driving it from a real client forced more: selectors
+(`querySelector`, `querySelectorAll`, `matches`, `closest`, `contains`), the
+tree (`parentNode`, `children`, `childNodes`, siblings, `nodeType`,
+`nodeValue`, `isConnected`), attributes (`attributes`, `dataset`,
+`getAttributeNames`, a real `removeAttribute`), mutation (`insertBefore`,
+`cloneNode`), form state read off attributes (`value`, `checked`, `disabled`,
+`type`), `outerHTML`/`innerHTML`, `document.title`, `window.innerWidth`,
+`location.href`, constructible `Event` and `CustomEvent`, and do-nothing
+`MutationObserver`, `ResizeObserver` and `IntersectionObserver`.
 
-Geometry is real: `getBoundingClientRect`, `getClientRects`, `offsetWidth` and
-`offsetHeight` come from an actual layout pass (see `docs/cdp-surface.md`).
+Geometry is real: `getBoundingClientRect`, `getClientRects`, `offsetWidth`,
+`offsetHeight`, `clientWidth` and `clientHeight` all come from an actual layout
+pass (see `docs/cdp-surface.md`).
 
-What it still does not: `insertBefore`, cloning, `createTreeWalker`, and
-computed style — nothing runs the cascade, so a script cannot observe what a
-stylesheet decided. Inline elements have no box of their own and measure as
-empty.
+What it still does not do, and why:
+
+- **`innerText`** needs layout-aware text — which lines wrapped, what is
+  hidden — and nothing here can compute it. `textContent` is not the same
+  thing, so it is left undefined rather than approximated.
+- **Scrolling** is not modelled at all, so `scrollWidth`, `scrollHeight`,
+  `scrollTop` and `scrollLeft` are absent rather than zero.
+- **Computed style** would need the cascade. Nothing runs it, so a script
+  cannot ask what a stylesheet decided.
+- **Ranges, tree walkers and selections** have no implementation.
+- **Element constructors** (`HTMLInputElement`, `Text`, `SVGElement`, …) do not
+  exist, so `instanceof` against them throws rather than answering false.
+- **`Intl`** is absent: QuickJS is built without it.
+- **Inline elements** have no layout box of their own and measure as empty.
+
+The rule for all of these: answer what the DOM or a measurement can actually
+support, and leave the rest undefined. A missing member usually makes a caller
+fail open; a confidently wrong one sends it down the wrong branch.
 
 ## What this means for the next step
 

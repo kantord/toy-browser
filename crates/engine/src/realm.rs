@@ -575,6 +575,21 @@ fn install_globals(ctx: &Ctx<'_>, dom: &Rc<Dom>, report: &Rc<RefCell<Diagnostics
     dom_method!(api, ctx, dom, "queryAll", |d, selector: String| d
         .query_all(&selector));
     dom_method!(api, ctx, dom, "parent", |d, id: usize| d.parent(id));
+    // Pairs, not tuples: a tuple has no JavaScript shape, a two-element array
+    // does.
+    dom_method!(api, ctx, dom, "attributes", |d, id: usize| d
+        .attributes(id)
+        .into_iter()
+        .map(|(name, value)| vec![name, value])
+        .collect::<Vec<_>>());
+    dom_method!(api, ctx, dom, "removeAttribute", |d, id: usize, name: String| d
+        .remove_attribute(id, &name));
+    dom_method!(api, ctx, dom, "childNodes", |d, id: usize| d.child_nodes(id));
+    dom_method!(api, ctx, dom, "nodeType", |d, id: usize| d.node_type(id));
+    dom_method!(api, ctx, dom, "nodeValue", |d, id: usize| d.node_value(id));
+    dom_method!(api, ctx, dom, "insertBefore", |d, node: usize, anchor: usize| d
+        .insert_before(node, anchor));
+    dom_method!(api, ctx, dom, "cloneNode", |d, id: usize| d.clone_node(id));
     dom_method!(api, ctx, dom, "elementChildren", |d, id: usize| d
         .element_children(id));
     dom_method!(api, ctx, dom, "appendHtml", |d, id: usize, html: String| d

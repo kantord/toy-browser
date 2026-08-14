@@ -67,7 +67,7 @@
     }
 
     get nodeType() {
-      return 1;
+      return __dom.nodeType(this.__id);
     }
 
     get nodeName() {
@@ -133,16 +133,45 @@
       return this.getBoundingClientRect().height;
     }
 
+    // `null`, not `undefined`, when the attribute is absent — callers compare
+    // against null and Rust's `None` arrives as undefined.
     getAttribute(name) {
-      return __dom.getAttribute(this.__id, name);
+      return __dom.getAttribute(this.__id, name) ?? null;
     }
 
     hasAttribute(name) {
-      return __dom.getAttribute(this.__id, name) !== null;
+      return this.getAttribute(name) !== null;
     }
 
     removeAttribute(name) {
-      __dom.setAttribute(this.__id, name, "");
+      __dom.removeAttribute(this.__id, name);
+    }
+
+    getAttributeNames() {
+      return __dom.attributes(this.__id).map(([name]) => name);
+    }
+
+    hasAttributes() {
+      return __dom.attributes(this.__id).length > 0;
+    }
+
+    // A live-ish NamedNodeMap: an array of {name, value} that also answers
+    // getNamedItem, which is the part anything actually calls.
+    get attributes() {
+      const pairs = __dom.attributes(this.__id).map(([name, value]) => ({ name, value }));
+      pairs.getNamedItem = (name) => pairs.find((pair) => pair.name === name) ?? null;
+      return pairs;
+    }
+
+    // `data-foo-bar` reads as `fooBar`, as the DOM says.
+    get dataset() {
+      const data = {};
+      for (const [name, value] of __dom.attributes(this.__id)) {
+        if (!name.startsWith("data-")) continue;
+        const key = name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+        data[key] = value;
+      }
+      return data;
     }
 
     closest(selector) {
@@ -154,6 +183,15 @@
 
     getRootNode() {
       return document;
+    }
+
+    // Nothing here has a shadow tree, and saying so is better than pretending.
+    get shadowRoot() {
+      return null;
+    }
+
+    get assignedSlot() {
+      return null;
     }
 
     get localName() {
@@ -172,16 +210,91 @@
       return sibling(this, -1);
     }
 
+    // Every child, text nodes included — unlike `children`, which is elements.
     get childNodes() {
-      return this.children;
+      return __dom.childNodes(this.__id).map(wrap);
     }
 
     get firstChild() {
-      return this.children[0] ?? null;
+      return this.childNodes[0] ?? null;
+    }
+
+    get lastChild() {
+      const children = this.childNodes;
+      return children[children.length - 1] ?? null;
+    }
+
+    get nextSibling() {
+      return nodeSibling(this, 1);
+    }
+
+    get previousSibling() {
+      return nodeSibling(this, -1);
+    }
+
+    get lastElementChild() {
+      const children = this.children;
+      return children[children.length - 1] ?? null;
     }
 
     get nodeValue() {
-      return null;
+      return __dom.nodeValue(this.__id) ?? null;
+    }
+
+    insertBefore(node, anchor) {
+      if (anchor == null) return this.appendChild(node);
+      __dom.insertBefore(node.__id, anchor.__id);
+      return node;
+    }
+
+    // Always deep: the DOM underneath clones subtrees, and a shallow copy
+    // would quietly drop children rather than refuse.
+    cloneNode() {
+      return wrap(__dom.cloneNode(this.__id));
+    }
+
+    // Form state, read off the attributes that carry it. Nothing here has a
+    // value the user typed, because nothing here has a user.
+    get value() {
+      return __dom.getAttribute(this.__id, "value") ?? "";
+    }
+
+    set value(next) {
+      __dom.setAttribute(this.__id, "value", String(next));
+    }
+
+    get checked() {
+      return this.hasAttribute("checked");
+    }
+
+    get disabled() {
+      return this.hasAttribute("disabled");
+    }
+
+    get type() {
+      return __dom.getAttribute(this.__id, "type") ?? "";
+    }
+
+    get hidden() {
+      return this.hasAttribute("hidden");
+    }
+
+    get title() {
+      return __dom.getAttribute(this.__id, "title") ?? "";
+    }
+
+    get role() {
+      return __dom.getAttribute(this.__id, "role") ?? null;
+    }
+
+    // The border box, which is all we measure. Padding and border are not
+    // subtracted because nothing here knows them.
+    get clientWidth() {
+      return this.getBoundingClientRect().width;
+    }
+
+    get clientHeight() {
+      return this.getBoundingClientRect().height;
     }
 
     // No element is ever focused: there is no input to give focus to.
@@ -334,6 +447,16 @@
       if (at === ancestorId) return true;
     }
     return false;
+  };
+
+  /// The node `offset` places after `node` among its parent's child nodes,
+  /// text included.
+  const nodeSibling = (node, offset) => {
+    const parent = node.parentNode;
+    if (!parent) return null;
+    const siblings = __dom.childNodes(parent.__id);
+    const index = siblings.indexOf(node.__id);
+    return index < 0 ? null : wrap(siblings[index + offset] ?? null);
   };
 
   /// The element `offset` places after `node` among its parent's elements.

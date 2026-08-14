@@ -112,12 +112,8 @@ actions. Getting it to bootstrap took globals it constructs on load —
 `MutationObserver`, `Element`, `NodeFilter`, the `Event`/`CustomEvent`
 constructors, `document.fonts` — plus `querySelectorAll` and element geometry.
 
-What remains is a long tail of DOM surface, not one missing piece. The actions
-fail somewhere inside the injected script with a bare `not a function`; QuickJS
-attributes the frame to a function whose body runs correctly in isolation, so
-the stack cannot be trusted to name it. `document.createTreeWalker` is the next
-known-missing thing. Computed style is the next structural one — nothing here
-runs the cascade, so a script cannot ask what a stylesheet decided.
+What remains is a long tail of DOM surface, not one missing piece — see
+"What is still missing" below for the measured list.
 
 The prelude's stubs are honest about being stubs. `MutationObserver` observes
 nothing, because the DOM only changes while script is running and nobody is
@@ -171,6 +167,59 @@ none of it needs layout or the injected script.
 Getting there is a loop, not a leap: the server logs every load-time script
 error and every failed evaluation with its stack, so each run names the next
 missing thing.
+
+## What is still missing
+
+Measured, not guessed: a probe reads every name off a real element, document and
+window in a loaded page and reports what is undefined.
+
+| Missing | What it blocks |
+| --- | --- |
+| `getComputedStyle`, `checkVisibility` | correct visibility; see below |
+| `innerText` | `toHaveText`, `getByText`, `locator.innerText()` |
+| `click`, `elementFromPoint`, `elementsFromPoint` | clicking anything |
+| `scrollWidth`/`scrollHeight`, `scrollTop`/`scrollLeft`, `scrollingElement` | scrolling, and scroll-into-view before an action |
+| `createTreeWalker`, `createRange`, `getSelection` | text-range work, and the trace snapshotter |
+| `activeElement`, `hasFocus`, `labels` | focus tracking, `getByLabel` |
+| `Intl`, `structuredClone`, `AbortController`, `TextEncoder` | whatever reaches for them; QuickJS ships without `Intl` |
+| `HTMLInputElement`, `HTMLSelectElement`, `HTMLFormElement`, `SVGElement`, `Text`, `DocumentFragment` | any `instanceof` check against them |
+
+The ones deliberately left out are the ones we would have to invent. Where an
+element sits we measure; how far it scrolls we do not model, and `innerText`
+needs layout-aware text this browser has no way to compute. A missing member
+usually makes a caller fail open, whereas a confidently wrong one sends it down
+the wrong branch.
+
+**`getComputedStyle` is a correctness gap, not a blocker.** Playwright's
+`computeBox` returns `{ visible: true }` when `getElementComputedStyle` gives it
+nothing, so `locator.isVisible()` passes today by failing open. Adding it
+carelessly would make things worse: it reads only `display`, `visibility` and
+`cursor`, and it calls `element.checkVisibility()` *only if that exists*, so
+defining either badly turns a passing check into a failing one.
+
+There is a path when it is wanted. takumi computes a `ComputedStyle` per node
+and `measure.rs` already walks those nodes, so style could ride the same
+marker-class join the boxes do — `Environment` gaining a `styles` map beside
+`boxes`.
+
+## Why web-first assertions still fail
+
+`expect(page).toHaveTitle(…)` and `expect(locator).toHaveCount(…)` fail with a
+bare `not a function` thrown inside Playwright's injected script, while the
+plain forms — `page.title()`, `locator.count()` — both pass.
+
+What is known:
+
+- It is not the availability of any name we have probed for.
+- QuickJS's stack names a function whose body runs correctly in isolation, and
+  its line numbers do not land on the code that runs, so the stack cannot be
+  trusted to locate it.
+- Playwright 1.62 bundles its injected script; the readable copy in
+  `lib/generated/` is a 1.58-era layout. Any analysis of that source is against
+  a different build than the one under test.
+
+Pinning it needs the injected script for the version actually running,
+constructed inside the page and stepped through one call at a time.
 
 ## Where geometry comes from
 

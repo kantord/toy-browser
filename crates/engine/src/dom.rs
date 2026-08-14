@@ -177,6 +177,79 @@ impl Dom {
             .unwrap_or_default()
     }
 
+    /// Every attribute, in document order.
+    pub fn attributes(&self, id: usize) -> Vec<(String, String)> {
+        let doc = self.doc.borrow();
+        doc.get_node(id)
+            .and_then(|node| node.attrs())
+            .map(|attrs| {
+                attrs
+                    .iter()
+                    .map(|attribute| {
+                        (
+                            attribute.name.local.to_string(),
+                            attribute.value.clone(),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn remove_attribute(&self, id: usize, name: &str) {
+        self.touched();
+        self.doc
+            .borrow_mut()
+            .mutate()
+            .clear_attribute(id, html_name(name));
+    }
+
+    /// Every child, text and comments included.
+    pub fn child_nodes(&self, id: usize) -> Vec<usize> {
+        let doc = self.doc.borrow();
+        doc.get_node(id)
+            .map(|node| node.children.clone())
+            .unwrap_or_default()
+    }
+
+    /// The DOM's own numbering: 1 element, 3 text, 8 comment, 9 document.
+    pub fn node_type(&self, id: usize) -> u8 {
+        let doc = self.doc.borrow();
+        match doc.get_node(id).map(|node| &node.data) {
+            Some(NodeData::Element(_)) | Some(NodeData::AnonymousBlock(_)) => 1,
+            Some(NodeData::Text(_)) => 3,
+            Some(NodeData::Comment) => 8,
+            Some(NodeData::Document) => 9,
+            None => 0,
+        }
+    }
+
+    /// A text node's data. Elements have none, as in the DOM.
+    pub fn node_value(&self, id: usize) -> Option<String> {
+        let doc = self.doc.borrow();
+        match &doc.get_node(id)?.data {
+            NodeData::Text(text) => Some(text.content.clone()),
+            _ => None,
+        }
+    }
+
+    /// Inserts `node` before `anchor`, which must have a parent.
+    pub fn insert_before(&self, node: usize, anchor: usize) {
+        self.touched();
+        let mut doc = self.doc.borrow_mut();
+        let mut mutator = doc.mutate();
+        if mutator.parent_id(anchor).is_some() {
+            mutator.insert_nodes_before(anchor, &[node]);
+        }
+    }
+
+    /// A deep copy, unparented. Shallow copies are not offered: blitz clones
+    /// subtrees, and pretending otherwise would quietly lose children.
+    pub fn clone_node(&self, id: usize) -> usize {
+        self.touched();
+        self.doc.borrow_mut().mutate().deep_clone_node(id)
+    }
+
     pub fn parent(&self, id: usize) -> Option<usize> {
         self.doc.borrow().get_node(id).and_then(|node| node.parent)
     }
