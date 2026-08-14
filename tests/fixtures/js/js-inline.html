@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Inline scripts</title>
+    <style>
+      body { margin: 0; background: #050505; }
+      .stage { height: 360px; padding: 32px; }
+      .card { background: #fef3c7; border-radius: 12px; padding: 20px; }
+      .title { font-size: 26px; font-weight: 700; color: #111827; }
+      .note { font-size: 16px; color: #374151; }
+    </style>
+  </head>
+  <body>
+    <div class="stage" id="stage"></div>
+
+    <!-- Parser-blocking inline classic script: runs the moment the parser reaches it. -->
+    <script>
+      const stage = document.getElementById("stage");
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML =
+        '<div class="title">Rendered by an inline script</div>' +
+        '<div class="note">If you can read this, parser-blocking inline scripts ran.</div>';
+      stage.appendChild(card);
+    </script>
+
+    <!-- document.write re-enters the parser at the insertion point. -->
+    <script>
+      document.write('<div class="note" style="color:#fbbf24;padding:0 32px">written by document.write()</div>');
+    </script>
+  </body>
+</html>

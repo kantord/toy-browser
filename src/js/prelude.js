@@ -1,0 +1,349 @@
+// The browser-shaped half of the runtime.
+//
+// Rust exposes `__dom` (node-id primitives) and `__console`. Everything a page
+// script expects to find — window, document, elements, events, timers — is
+// built here, so the Rust side never has to hold a JS value.
+
+(() => {
+  const globals = globalThis;
+
+  // ---------------------------------------------------------------- elements
+
+  // One wrapper per node id, so `a === b` holds for the same element.
+  const wrappers = new Map();
+
+  const kebab = (name) => name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+
+  class Node {
+    constructor(id) {
+      this.__id = id;
+    }
+
+    appendChild(child) {
+      __dom.appendChild(this.__id, child.__id);
+      return child;
+    }
+
+    remove() {
+      __dom.removeNode(this.__id);
+    }
+
+    addEventListener(type, listener) {
+      addListener(this.__id, type, listener);
+    }
+
+    removeEventListener(type, listener) {
+      removeListener(this.__id, type, listener);
+    }
+
+    dispatchEvent(event) {
+      dispatch(this.__id, event);
+      return true;
+    }
+
+    setAttribute(name, value) {
+      __dom.setAttribute(this.__id, name, String(value));
+    }
+
+    getAttribute(name) {
+      return __dom.getAttribute(this.__id, name);
+    }
+
+    get tagName() {
+      const tag = __dom.tagName(this.__id);
+      return tag === null ? null : tag.toUpperCase();
+    }
+
+    get textContent() {
+      return __dom.text(this.__id);
+    }
+
+    set textContent(value) {
+      __dom.setText(this.__id, String(value));
+    }
+
+    set innerHTML(value) {
+      __dom.setInnerHtml(this.__id, String(value));
+    }
+
+    get className() {
+      return __dom.getAttribute(this.__id, "class") ?? "";
+    }
+
+    set className(value) {
+      __dom.setAttribute(this.__id, "class", String(value));
+    }
+
+    get id() {
+      return __dom.getAttribute(this.__id, "id") ?? "";
+    }
+
+    set id(value) {
+      __dom.setAttribute(this.__id, "id", String(value));
+    }
+
+    get classList() {
+      const node = this;
+      const tokens = () => node.className.split(/\s+/).filter(Boolean);
+      return {
+        contains: (token) => tokens().includes(token),
+        add(...added) {
+          node.className = [...new Set([...tokens(), ...added])].join(" ");
+        },
+        remove(...removed) {
+          node.className = tokens()
+            .filter((token) => !removed.includes(token))
+            .join(" ");
+        },
+      };
+    }
+
+    // Reads and writes the `style` attribute itself, because that attribute is
+    // what survives serialization into the renderer. Only inline style is
+    // visible here; nothing computes cascaded style.
+    get style() {
+      const node = this;
+      const declarations = () => {
+        const map = new Map();
+        for (const declaration of (node.getAttribute("style") ?? "").split(";")) {
+          const colon = declaration.indexOf(":");
+          if (colon > 0) {
+            map.set(declaration.slice(0, colon).trim(), declaration.slice(colon + 1).trim());
+          }
+        }
+        return map;
+      };
+      return new Proxy(
+        {},
+        {
+          get: (_target, property) => declarations().get(kebab(String(property))) ?? "",
+          set(_target, property, value) {
+            const map = declarations();
+            map.set(kebab(String(property)), String(value));
+            node.setAttribute(
+              "style",
+              [...map].map(([name, declared]) => `${name}: ${declared}`).join("; "),
+            );
+            return true;
+          },
+        },
+      );
+    }
+  }
+
+  // `class extends HTMLElement` has to resolve to something.
+  class HTMLElement extends Node {}
+  globals.Node = Node;
+  globals.HTMLElement = HTMLElement;
+
+  const wrap = (id) => {
+    if (id === null || id === undefined) return null;
+    let wrapper = wrappers.get(id);
+    if (!wrapper) {
+      wrapper = new HTMLElement(id);
+      wrappers.set(id, wrapper);
+    }
+    return wrapper;
+  };
+
+  // ------------------------------------------------------------------ events
+
+  // Keyed by node id; `window` gets its own key since it is not a node.
+  const WINDOW = "window";
+  const listeners = new Map();
+
+  const addListener = (target, type, listener) => {
+    const key = `${target}:${type}`;
+    const existing = listeners.get(key);
+    if (existing) existing.push(listener);
+    else listeners.set(key, [listener]);
+  };
+
+  const removeListener = (target, type, listener) => {
+    const key = `${target}:${type}`;
+    const existing = listeners.get(key) ?? [];
+    listeners.set(
+      key,
+      existing.filter((candidate) => candidate !== listener),
+    );
+  };
+
+  const dispatch = (target, event) => {
+    for (const listener of listeners.get(`${target}:${event.type}`) ?? []) {
+      try {
+        listener.call(event.currentTarget ?? null, event);
+      } catch (error) {
+        __console.error(`listener for "${event.type}" threw: ${error}`);
+      }
+    }
+  };
+
+  const makeEvent = (type, target) => ({
+    type,
+    target,
+    currentTarget: target,
+    defaultPrevented: false,
+    preventDefault() {
+      this.defaultPrevented = true;
+    },
+    stopPropagation() {},
+  });
+
+  // An `on*` attribute is a function body, compiled on first use.
+  const runInlineHandler = (id, attribute, event) => {
+    const source = __dom.getAttribute(id, attribute);
+    if (!source) return;
+    try {
+      new Function("event", source).call(wrap(id), event);
+    } catch (error) {
+      __console.error(`${attribute} handler threw: ${error}`);
+    }
+  };
+
+  // ------------------------------------------------------------------- tasks
+
+  const timers = [];
+  const frames = [];
+  let nextTimerId = 1;
+
+  globals.setTimeout = (callback, delay = 0, ...args) => {
+    const handle = nextTimerId++;
+    timers.push({ handle, callback, delay: Number(delay) || 0, args });
+    return handle;
+  };
+  globals.clearTimeout = (handle) => {
+    const index = timers.findIndex((timer) => timer.handle === handle);
+    if (index >= 0) timers.splice(index, 1);
+  };
+  // A single load produces one frame, so an interval is a timeout.
+  globals.setInterval = globals.setTimeout;
+  globals.clearInterval = globals.clearTimeout;
+
+  globals.requestAnimationFrame = (callback) => {
+    const handle = nextTimerId++;
+    frames.push({ handle, callback });
+    return handle;
+  };
+  globals.cancelAnimationFrame = globals.clearTimeout;
+  globals.requestIdleCallback = globals.setTimeout;
+
+  globals.queueMicrotask = (callback) => {
+    Promise.resolve().then(callback);
+  };
+
+  const runTask = (callback, args = []) => {
+    try {
+      callback(...args);
+    } catch (error) {
+      __console.error(`task threw: ${error}`);
+    }
+  };
+
+  // ----------------------------------------------------------- custom elements
+
+  globals.customElements = {
+    __definitions: new Map(),
+    define(name, constructor) {
+      this.__definitions.set(name, constructor);
+      // Upgrade what is already in the tree. The element keeps its own
+      // wrapper rather than becoming an instance of `constructor`, so the
+      // constructor never runs — only the lifecycle callbacks do.
+      for (const id of __dom.elementsByTag(name)) {
+        const element = wrap(id);
+        Object.setPrototypeOf(element, constructor.prototype);
+        runTask(() => element.connectedCallback?.());
+      }
+    },
+    get(name) {
+      return this.__definitions.get(name);
+    },
+  };
+
+  // -------------------------------------------------------------- document
+
+  const document = {
+    __id: __dom.root(),
+    readyState: "loading",
+
+    getElementById: (id) => wrap(__dom.getElementById(id)),
+    getElementsByTagName: (tag) => __dom.elementsByTag(tag).map(wrap),
+    createElement: (tag) => wrap(__dom.createElement(String(tag))),
+    createTextNode: (text) => wrap(__dom.createTextNode(String(text))),
+
+    addEventListener: (type, listener) => addListener(document.__id, type, listener),
+    removeEventListener: (type, listener) => removeListener(document.__id, type, listener),
+
+    // Parsing is already over by the time anything runs, so written markup can
+    // only go at the end of the body.
+    write: (html) => __dom.appendHtml(__dom.body() ?? __dom.root(), String(html)),
+    writeln: (html) => document.write(`${html}\n`),
+
+    get documentElement() {
+      return wrap(__dom.root());
+    },
+    get body() {
+      return wrap(__dom.body());
+    },
+    get head() {
+      return wrap(__dom.head());
+    },
+  };
+
+  globals.document = document;
+  globals.window = globals;
+  globals.self = globals;
+  globals.console = __console;
+
+  globals.addEventListener = (type, listener) => addListener(WINDOW, type, listener);
+  globals.removeEventListener = (type, listener) => removeListener(WINDOW, type, listener);
+
+  // ------------------------------------------------------------- lifecycle
+
+  const setReadyState = (state) => {
+    document.readyState = state;
+    dispatch(document.__id, makeEvent("readystatechange", document));
+  };
+
+  // Driven from Rust, one step at a time, so failures can be attributed.
+  globals.__lifecycle = {
+    // Every script has run; the parser would now be done.
+    domContentLoaded() {
+      setReadyState("interactive");
+      dispatch(document.__id, makeEvent("DOMContentLoaded", document));
+    },
+
+    // Subresources have settled. Failures are reported as error events, which
+    // is the only subresource loading this browser does.
+    subresourceErrors() {
+      for (const id of __dom.brokenImages()) {
+        const element = wrap(id);
+        const event = makeEvent("error", element);
+        runInlineHandler(id, "onerror", event);
+        dispatch(id, event);
+        dispatch(WINDOW, event);
+      }
+    },
+
+    load() {
+      const body = __dom.body();
+      const event = makeEvent("load", globals);
+      if (body !== null) runInlineHandler(body, "onload", event);
+      dispatch(WINDOW, event);
+      setReadyState("complete");
+    },
+
+    // Drains one round of queued work. Returns true while there is more.
+    drainTasks() {
+      if (timers.length === 0 && frames.length === 0) return false;
+
+      // Timers fire by delay, then by the order they were scheduled.
+      const dueTimers = timers.splice(0).sort((a, b) => a.delay - b.delay || a.handle - b.handle);
+      for (const timer of dueTimers) runTask(timer.callback, timer.args);
+
+      const dueFrames = frames.splice(0);
+      for (const frame of dueFrames) runTask(frame.callback, [0]);
+
+      return true;
+    },
+  };
+})();

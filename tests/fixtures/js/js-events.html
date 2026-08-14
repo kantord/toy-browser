@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Event-driven rendering</title>
+    <style>
+      body { margin: 0; background: #050505; }
+      .stage { height: 360px; padding: 32px; display: flex; flex-direction: column; gap: 12px; }
+      .line { background: #134e4a; border-radius: 10px; padding: 14px 18px; color: #ccfbf1; font-size: 18px; }
+      /* Present in the DOM as entry points, but never painted, so a JS-less
+         render stays a detectably flat page. */
+      a, img { display: none; }
+    </style>
+    <script src="scripts/events.js" defer></script>
+  </head>
+
+  <!-- Inline event handler attribute: compiled as a function body, not a script. -->
+  <body onload="document.getElementById('stage').appendChild(Object.assign(document.createElement('div'), { className: 'line', textContent: 'body onload attribute ran' }))">
+    <div class="stage" id="stage"></div>
+
+    <!-- Resource load failure: fires an error event that script can observe. -->
+    <img src="missing-image.png" onerror="this.remove()" alt="" />
+
+    <!-- javascript: URL: an execution entry point hiding in an attribute. -->
+    <a href="javascript:void document.body.classList.add('clicked')">activate</a>
+  </body>
+</html>

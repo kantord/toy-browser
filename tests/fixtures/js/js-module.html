@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Module scripts</title>
+    <style>
+      body { margin: 0; background: #050505; }
+      .stage { height: 360px; padding: 32px; display: flex; flex-direction: column; gap: 12px; }
+      .swatch { border-radius: 10px; padding: 14px 18px; font-size: 18px; color: #0b1020; }
+    </style>
+
+    <!-- Not executed. Configures how bare specifiers resolve. -->
+    <script type="importmap">
+      { "imports": { "palette": "./scripts/palette.mjs" } }
+    </script>
+
+    <!-- Deferred by default. Pulls in a whole module graph before running. -->
+    <script type="module" src="scripts/main.mjs"></script>
+
+    <!-- Inline module: also deferred, also has its own import graph. -->
+    <script type="module">
+      import { badge } from "./scripts/badge.mjs";
+      document.addEventListener("DOMContentLoaded", () => badge(document.getElementById("stage")));
+    </script>
+
+    <!-- Skipped entirely by a module-supporting engine. -->
+    <script nomodule src="scripts/legacy.js"></script>
+
+    <!-- Fetch-only hints: no execution, but they are load-time work. -->
+    <link rel="modulepreload" href="scripts/palette.mjs" />
+    <link rel="preload" href="scripts/deferred.js" as="script" />
+  </head>
+  <body>
+    <div class="stage" id="stage"></div>
+  </body>
+</html>

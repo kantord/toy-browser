@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>External scripts</title>
+    <style>
+      body { margin: 0; background: #050505; }
+      .stage { height: 360px; padding: 32px; display: flex; flex-direction: column; gap: 12px; }
+      .row { background: #1f2937; border-radius: 10px; padding: 14px 18px; color: #e5e7eb; font-size: 18px; }
+    </style>
+
+    <!-- Fetched during head parsing, blocks the parser until it runs. -->
+    <script src="scripts/blocking.js"></script>
+
+    <!-- Fetched in parallel, runs after parsing, in document order. -->
+    <script src="scripts/deferred.js" defer></script>
+
+    <!-- Fetched in parallel, runs whenever it arrives. Order is not guaranteed. -->
+    <script src="scripts/async.js" async></script>
+
+    <!-- Never fetched: no such file. Fires an error event on the element. -->
+    <script src="scripts/missing.js" defer></script>
+
+    <!-- Cross-origin: needs a real network stack. -->
+    <script src="https://example.invalid/analytics.js" async></script>
+  </head>
+  <body>
+    <div class="stage" id="stage"></div>
+  </body>
+</html>

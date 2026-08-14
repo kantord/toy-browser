@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Deferred work</title>
+    <style>
+      body { margin: 0; background: #050505; }
+      .stage { height: 360px; padding: 32px; display: flex; flex-direction: column; gap: 12px; }
+      .line { background: #312e81; border-radius: 10px; padding: 14px 18px; color: #e0e7ff; font-size: 18px; }
+    </style>
+  </head>
+  <body>
+    <div class="stage" id="stage"></div>
+
+    <!-- A custom element upgrades when its definition lands, running constructor
+         and connectedCallback outside the parser's control flow. -->
+    <late-banner></late-banner>
+
+    <script>
+      const stage = document.getElementById("stage");
+      const add = (text) => {
+        const line = document.createElement("div");
+        line.className = "line";
+        line.textContent = text;
+        stage.appendChild(line);
+      };
+
+      queueMicrotask(() => add("microtask ran"));
+      Promise.resolve().then(() => add("promise continuation ran"));
+      setTimeout(() => add("setTimeout(0) ran"), 0);
+      requestAnimationFrame(() => add("animation frame ran"));
+
+      customElements.define(
+        "late-banner",
+        class extends HTMLElement {
+          connectedCallback() {
+            add("custom element connected");
+          }
+        },
+      );
+
+      // A script inserted by script: fetched and run out of band.
+      const injected = document.createElement("script");
+      injected.src = "scripts/injected.js";
+      document.head.appendChild(injected);
+    </script>
+  </body>
+</html>
