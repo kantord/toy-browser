@@ -28,19 +28,80 @@ fi
 limit=$(grep -oE '^max_file_lines[[:space:]]*=[[:space:]]*[0-9]+' .claude/checks/limits.toml 2>/dev/null | grep -oE '[0-9]+')
 : "${limit:=400}"
 
+# Everything the repo owns and a person wrote: code, prose, scripts. Lessons and
+# docs are held to the same budget as the code they describe, which is what
+# stops a lesson growing into a wall nobody reads.
+readonly OWNED=('*.rs' '*.md' '*.js' '*.mjs' '*.sh')
+
 # Files this session touched: anything not yet committed. Renames report as
 # "old -> new", so the last field is the path that exists now.
-mapfile -t touched < <(git status --porcelain -- '*.rs' 2>/dev/null | awk '{print $NF}' | sort -u)
+mapfile -t touched < <(git status --porcelain -- "${OWNED[@]}" 2>/dev/null | awk '{print $NF}' | sort -u)
 [ "${#touched[@]}" -eq 0 ] && exit 0
 
 # finding lines are "kind<TAB>path<TAB>detail"
 findings=""
 
+# Inline tests are measured apart from everything else. A file that inlines its
+# tests is not simpler than one that does not, so moving `#[cfg(test)]` out to
+# tests/ must not read as a split. Body and tests each get the full budget,
+# which caps the whole file at twice it without needing a third rule.
+inline_test_lines() {
+  awk '
+    /^[[:space:]]*#\[cfg\(test\)\]/ && !intest { intest = 1; depth = 0; opened = 0 }
+    intest {
+      count++
+      opens = gsub(/\{/, "{"); closes = gsub(/\}/, "}")
+      depth += opens - closes
+      if (opens > 0) opened = 1
+      if (opened && depth <= 0) intest = 0
+    }
+    END { print count + 0 }
+  ' "$1"
+}
+
 for file in "${touched[@]}"; do
   [ -f "$file" ] || continue
   lines=$(wc -l < "$file" | tr -d ' ')
-  if [ "$lines" -gt "$limit" ]; then
-    findings+="file-too-long	$file	$lines lines, budget is $limit"$'\n'
+
+  case "$file" in
+    *.rs) tests=$(inline_test_lines "$file") ;;
+    *) tests=0 ;;
+  esac
+  : "${tests:=0}"
+  body=$((lines - tests))
+
+  # Was it already over before this session? Debt you inherited is reported
+  # differently from debt you just created — see the lesson.
+  before=$(git show "HEAD:$file" 2>/dev/null | wc -l | tr -d ' ')
+  if [ -z "$before" ] || [ "$before" = "0" ]; then
+    origin="new file"
+  elif [ "$before" -gt "$limit" ]; then
+    origin="inherited, already $before at HEAD"
+  else
+    origin="caused, was $before at HEAD"
+  fi
+
+  if [ "$body" -gt "$limit" ]; then
+    findings+="file-too-long	$file	$body lines excluding inline tests, budget is $limit ($origin)"$'\n'
+  fi
+  if [ "$tests" -gt "$limit" ]; then
+    findings+="file-too-long	$file	$tests lines of inline tests, budget is $limit ($origin)"$'\n'
+  fi
+done
+
+# Lessons are an Open Knowledge Format bundle, and the only thing that makes a
+# document conformant is YAML frontmatter carrying a `type`. Checking it here is
+# what keeps "valid OKF" automatic rather than remembered.
+for file in "${touched[@]}"; do
+  case "$file" in
+    .claude/skills/*.md) ;;
+    *) continue ;;
+  esac
+  [ -f "$file" ] || continue
+  if [ "$(head -n 1 "$file")" != "---" ]; then
+    findings+="okf-invalid	$file	no YAML frontmatter; OKF needs at least a type"$'\n'
+  elif ! awk 'NR>1 && /^---$/ {exit} NR>1' "$file" | grep -qE '^type:[[:space:]]*\S'; then
+    findings+="okf-invalid	$file	frontmatter has no type; OKF requires it"$'\n'
   fi
 done
 

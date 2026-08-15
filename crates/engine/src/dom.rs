@@ -2,7 +2,7 @@
 //!
 //! Everything here speaks in node ids rather than objects, so nothing on the JS
 //! side has to hold a Rust reference. The object model — `document`, elements,
-//! `classList`, `style`, events — is built on top of these in `prelude.js`.
+//! `classList`, `style`, events — is built on top of these in `prelude/`.
 
 use std::cell::{Cell, RefCell};
 

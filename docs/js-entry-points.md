@@ -144,7 +144,7 @@ changes what scripts observe.
 ## The DOM the engine sees
 
 `src/js/dom.rs` exposes about fifteen primitives that speak only in node ids;
-`src/js/prelude.js` builds `window`, `document`, elements, `classList`, `style`,
+`src/js/prelude/` builds `window`, `document`, elements, `classList`, `style`,
 events, timers and `customElements` on top of them. That keeps every JavaScript
 value on the JS side of the boundary, so Rust never holds one.
 

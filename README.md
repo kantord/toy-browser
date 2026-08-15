@@ -62,10 +62,18 @@ settle the case — the agent stops and asks for a grilling session**, and write
 the outcome back as the lesson. The rules accumulate from decisions actually
 made rather than being guessed up front.
 
-Checks live in `.claude/checks/`; clippy supplies most kinds, and a line-count
-check supplies `file-too-long`, which clippy has no lint for. The budget in
-`limits.toml` comes down by deliberate commits, never to make a finding go away.
+Checks live in `.claude/checks/`; clippy supplies most kinds, a line-count check
+supplies `file-too-long` (clippy has no lint for it), and an `okf-invalid` check
+keeps the lessons conformant. The budget in `limits.toml` comes down by
+deliberate commits, never to make a finding go away.
 `.claude/skills/code-style/SKILL.md` is the protocol.
+
+**The budget applies to prose too** — `.rs`, `.md`, `.js` and `.sh` alike, the
+skill and its lessons included. That is what forces knowledge into small linked
+files rather than one wall of prose: the lessons are an
+[Open Knowledge Format](https://okf.md/) v0.2 bundle, cross-linked into a graph,
+so a lesson can be as specific as it likes provided the specificity lives in its
+own node.
 
 ## Usage
 
@@ -113,7 +121,7 @@ against the blitz DOM. What works:
   `addEventListener`, `document.write`, `console`.
 
 The engine boundary is deliberately thin. `crates/engine/src/dom.rs` exposes
-about twenty primitives that speak only in node ids, and `prelude.js` builds
+about twenty primitives that speak only in node ids, and `prelude/` builds
 `window`, `document` and the element object model on top of them — so no
 JavaScript value is ever held on the Rust side.
 

@@ -1,6 +1,9 @@
 ---
+type: Playbook
 name: code-style
+title: Reacting to a code-style finding
 description: How to react when the code-style checks report a finding. Invoked by the Stop hook's message, not proactively — read it when a finding names it.
+tags: [code-style, hooks, lessons]
 ---
 
 # Reacting to a code-style finding
@@ -15,14 +18,18 @@ file-too-long  crates/engine/src/realm.rs
   lesson: .claude/skills/code-style/lints/file-too-long.md
 ```
 
+The lessons are an [Open Knowledge Format](/.claude/skills/code-style/lints/README.md)
+bundle: plain markdown that cross-links into a graph. Start at the index there.
+
 ## What to do
 
 1. **Read the lesson.** If the file is missing, skip to *Escalate*.
-2. **Find the example that matches your situation.** Lessons are worked cases,
-   each naming the situation it applied to. Some cases carry a note saying they
-   also fit other situations, or that a combination does.
-3. **If one matches, follow it** and fix the finding.
-4. **If none matches — or the lesson is too thin, too vague, or does not
+2. **Follow its links.** A lesson is a small node, not a manual. It will point
+   at more specific ones; the prose around a link says what it is for.
+3. **Find the case that matches your situation.** Some cases carry a note saying
+   they also fit other situations, or that a combination does.
+4. **If one matches, follow it** and fix the finding.
+5. **If none matches — or what you found is too thin, too vague, or does not
    actually tell you what to do here — escalate.** Do not improvise.
 
 ## Escalate
@@ -30,33 +37,62 @@ file-too-long  crates/engine/src/realm.rs
 Escalating is the normal outcome for anything new. It is not a failure, and it
 is not something to avoid by picking the nearest example and hoping.
 
-Say what fired, why the existing lesson does not settle it, and ask for a
-grilling session:
+**Escalate by asking a real question — call `AskUserQuestion`.** Writing a
+paragraph and continuing is not escalation. Most sessions run in auto mode,
+where prose reads as narration and flows straight past; a question is the only
+thing that actually stops and reaches a person. Permission prompts will not do
+it either, and neither will this hook — a blocking hook talks to the agent, not
+to the human.
 
-> `file-too-long` fired on `crates/engine/src/realm.rs` (654 lines, budget 400).
->
-> There is no lesson for this yet. How a file should be split is a structural
-> decision with several defensible answers, and I would rather not set the
-> precedent by guessing.
->
-> Run `/grill-with-docs how should we split over-long files in this repo` and I
-> will write the lesson from what we settle on.
+Offer the real alternatives, with what each costs. "How should I fix this?" is
+not a question; "split by responsibility, or by kind of item, or leave it and
+record the exemption?" is.
+
+**A subagent cannot ask.** It has no channel to the user. It reports the
+escalation — what fired, and why the lessons do not settle it — and returns.
+The agent that spawned it turns that into a question.
 
 Then stop. Do not fix the finding, and do not finish the work as if it were not
 there.
 
-## After a grilling session
+## Writing what was settled
 
-Write what was settled into the lesson file for that kind, creating it if it
-does not exist. Keep it short.
+Write the outcome into the lessons bundle. Three rules, in order of preference:
 
-- A new case gets a **brief** worked example: the situation, what was done, why.
-- If the decision is that an existing example — or a combination of them —
-  already covers this situation, do not write a new example. Add a line to the
-  existing one saying it also applies here.
+1. **Nothing new.** If an existing case already covers the situation, add one
+   line to it saying so. Prefer this.
+2. **A line, not a section.** If a combination of existing cases covers it, say
+   which, in one sentence, where they are.
+3. **A new node.** Only when the situation is genuinely new. Make it a *small
+   file of its own* and link it from the parent lesson — do not grow the parent.
 
-A lesson that grows a new section every time it is consulted is a lesson nobody
-will read.
+Lessons are held to the same length budget as the code. That is deliberate: it
+is what forces specific knowledge into linked nodes instead of one wall of
+prose. Being as specific as you like is exactly what the graph is for.
+
+## The file format
+
+Every lesson is a valid OKF v0.2 document: YAML frontmatter with at least
+`type`, then markdown.
+
+```markdown
+---
+type: Playbook
+title: Splitting a module that grew several jobs
+description: What to do when one file accumulated unrelated responsibilities.
+tags: [file-too-long, structure]
+---
+
+realm.rs held the engine, its diagnostics and the JS bindings…
+```
+
+- `type` is the only required key. Use `Playbook` for "how to handle X",
+  `Reference` for a note others link to.
+- Link with plain markdown, bundle-relative:
+  `[the split we did for realm.rs](/.claude/skills/code-style/lints/file-too-long/by-responsibility.md)`.
+  The link is untyped; the sentence around it carries the relationship.
+- Unknown keys are preserved by any conformant consumer, so this file's `name`
+  and `description` — which the harness needs — cost nothing.
 
 ## Suppressing a finding
 
@@ -77,8 +113,9 @@ file-length check is another. Adding a check means adding a finding kind.
 **Finding** — one named complaint about one place in the code. The name is the
 key to its lesson.
 
-**Lesson** — `lints/<kind>.md`. Short worked examples of how this repo handles
-that kind. Missing, thin or unhelpful all mean the same thing: escalate.
+**Lesson** — a node in the bundle under `lints/`. Missing, thin or unhelpful all
+mean the same thing: escalate.
 
 **Budget** — a number in `.claude/checks/limits.toml` that a check compares
-against. Lowered deliberately, never to make a finding go away.
+against. Applies to prose and scripts as well as code. Lowered deliberately,
+never to make a finding go away.
