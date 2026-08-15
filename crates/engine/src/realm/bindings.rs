@@ -119,6 +119,7 @@ pub(super) fn install_globals(
     let globals = ctx.globals();
     globals.set("__dom", api)?;
     globals.set("__console", console)?;
+    super::node::install(ctx, dom)?;
     Ok(())
 }
 

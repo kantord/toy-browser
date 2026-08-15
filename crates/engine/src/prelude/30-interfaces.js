@@ -14,7 +14,7 @@
     const interface_ = class extends globalThis.HTMLElement {};
     Object.defineProperty(interface_, "name", { value: name });
     globalThis[name] = interface_;
-    for (const tag of tags) tb.interfaces[tag] = interface_;
+    for (const tag of tags) __dom.registerInterface(tag, interface_.prototype);
   };
 
   defineInterface("HTMLInputElement", ["input"]);
@@ -31,8 +31,8 @@
   defineInterface("HTMLBodyElement", ["body"]);
   defineInterface("HTMLHtmlElement", ["html"]);
   defineInterface("SVGElement", ["svg"]);
-  defineInterface("Text");
-  defineInterface("Comment");
+  defineInterface("Text", ["#text"]);
+  defineInterface("Comment", ["#comment"]);
   defineInterface("DocumentFragment");
   defineInterface("ShadowRoot");
 

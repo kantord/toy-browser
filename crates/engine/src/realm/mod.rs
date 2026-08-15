@@ -6,6 +6,7 @@
 //! the network. See `docs/js-entry-points.md` for what that leaves out.
 
 mod bindings;
+mod node;
 mod convert;
 mod eval;
 mod load;
@@ -79,6 +80,19 @@ pub struct Realm {
     next_handle: Cell<u64>,
     context: Context,
     _runtime: Runtime,
+}
+
+impl Drop for Realm {
+    /// Frees every wrapper the Realm retained, while its context is still
+    /// alive. QuickJS aborts the process if a value outlives its context, and
+    /// the wrapper cache holds one per node a page ever touched.
+    fn drop(&mut self) {
+        self.context.with(|ctx| {
+            if let Some(shared) = ctx.userdata::<node::Sharing>() {
+                shared.release();
+            }
+        });
+    }
 }
 
 impl Realm {

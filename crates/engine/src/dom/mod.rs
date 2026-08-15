@@ -91,7 +91,7 @@ impl Dom {
         self.doc
             .borrow_mut()
             .mutate()
-            .set_attribute(id, html_name(name), value);
+            .set_attribute(id, attribute_name(name), value);
     }
 
     pub fn attribute(&self, id: usize, name: &str) -> Option<String> {
@@ -149,7 +149,7 @@ impl Dom {
         self.doc
             .borrow_mut()
             .mutate()
-            .clear_attribute(id, html_name(name));
+            .clear_attribute(id, attribute_name(name));
     }
 
     /// Every child, text and comments included.
@@ -279,7 +279,18 @@ fn collect_by_tag(doc: &HtmlDocument, id: usize, tag: &str, found: &mut Vec<usiz
     }
 }
 
-/// An unprefixed name in the HTML namespace, which is all this toy needs.
+/// An unprefixed element name in the HTML namespace, which is all this toy
+/// needs.
 fn html_name(name: &str) -> QualName {
     QualName::new(None, ns!(html), LocalName::from(name))
+}
+
+/// An attribute name, which carries no namespace.
+///
+/// Only element names live in the HTML namespace; attributes parsed out of
+/// markup have an empty one. Naming them otherwise makes a write miss the
+/// attribute already there, so the document ends up with the name twice and
+/// every read keeps answering with the old value.
+fn attribute_name(name: &str) -> QualName {
+    QualName::new(None, ns!(), LocalName::from(name))
 }

@@ -86,6 +86,24 @@ One DOM plus the JavaScript environment around it. A Session holds at most one,
 and each load replaces it — so nothing a page defines survives a navigation.
 _Avoid_: document, world, global
 
+**Prelude**:
+The environment a page finds already in place when its own scripts run: `window`,
+`document`, the element object model, events and timers. Neither the page's code
+nor the engine's primitives, but the layer between them.
+_Avoid_: shim, polyfill, runtime, standard library
+
+**Binding**:
+An operation the Prelude offers that is not implemented in JavaScript. A page
+calls it the same way it calls anything else; where it runs is not the page's
+concern.
+_Avoid_: native function, FFI, host call, glue
+
+**Wrapper**:
+The object a page holds for one node in the document. A node always presents the
+same wrapper, so comparing two references answers the question the DOM promises
+it answers.
+_Avoid_: handle — that is a retained value a *caller* names; proxy; view
+
 **Environment fact**:
 Something a Realm cannot discover about itself and must be told: the viewport
 size, the current URL, where each element sits. Supplied by whoever is driving.

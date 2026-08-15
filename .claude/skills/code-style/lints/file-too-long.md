@@ -34,6 +34,8 @@ the siblings share. Each sibling takes one job. That is what `cdp/` and
   — the ordinary Rust case, and the one to reach for first.
 - [Parts that share private state](/.claude/skills/code-style/lints/file-too-long/shared-closure.md)
   — when the pieces cannot simply become separate files.
+- [One class's binding surface](/.claude/skills/code-style/lints/file-too-long/binding-surface.md)
+  — when a tool requires every member in one block, so there is nothing to cut.
 
 ## Not a split
 
