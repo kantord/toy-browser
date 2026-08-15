@@ -105,6 +105,12 @@ splitting a file into meaningless pieces to get under a number. The budget comes
 down over time by deliberate commits; it does not move to accommodate one
 session.
 
+Suppression is settled the same way as anything else, and almost never comes
+back "yes". If you believe a check is measuring nothing here, look for the
+better pattern first and bring *that* back — an exemption is what is left when
+the search failed, argued for in the open, never something a session decides on
+its own to get unblocked.
+
 ## The vocabulary
 
 **Check** — a program that reads the code and emits findings. Clippy is one; the

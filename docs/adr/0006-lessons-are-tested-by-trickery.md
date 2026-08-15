@@ -4,6 +4,11 @@ status: accepted
 
 # A lesson is tested by tricking an agent into needing it
 
+> Amended by [ADR-0008](/docs/adr/0008-a-budget-set-below-the-code.md): this
+> works only for a check that fires on code already in the tree. A budget
+> nothing is over cannot be tricked, because the agent would have to write the
+> problem first, and three that were asked to did not.
+
 A lesson is only trusted once an agent that was never told it existed found it
 and followed it. To test one: give a subagent a **minimal, unrelated, reversible**
 task on a file that is over budget, let the hook fire, and watch what it does.

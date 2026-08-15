@@ -4,3 +4,6 @@
 # with the current number. Findings quote it back, so the ratchet is visible in
 # the message an agent receives.
 max_file_lines = 320
+
+# `cognitive-complexity` has a budget too, in `clippy.toml` at the root, because
+# clippy measures and compares it itself and only reads that file.

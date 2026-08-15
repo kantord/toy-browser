@@ -123,7 +123,10 @@ pub(in crate::realm) fn wrap<'js>(ctx: &Ctx<'js>, id: usize) -> rquickjs::Result
 }
 
 /// The same, for somewhere a node may legitimately be absent.
-pub(in crate::realm) fn wrap_maybe<'js>(ctx: &Ctx<'js>, id: Option<usize>) -> rquickjs::Result<Value<'js>> {
+pub(in crate::realm) fn wrap_maybe<'js>(
+    ctx: &Ctx<'js>,
+    id: Option<usize>,
+) -> rquickjs::Result<Value<'js>> {
     match id {
         Some(id) => wrap(ctx, id),
         None => Ok(Value::new_null(ctx.clone())),
@@ -131,7 +134,10 @@ pub(in crate::realm) fn wrap_maybe<'js>(ctx: &Ctx<'js>, id: Option<usize>) -> rq
 }
 
 /// Every wrapper for `ids`, in order.
-pub(in crate::realm) fn wrap_all<'js>(ctx: &Ctx<'js>, ids: Vec<usize>) -> rquickjs::Result<Vec<Value<'js>>> {
+pub(in crate::realm) fn wrap_all<'js>(
+    ctx: &Ctx<'js>,
+    ids: Vec<usize>,
+) -> rquickjs::Result<Vec<Value<'js>>> {
     ids.into_iter().map(|id| wrap(ctx, id)).collect()
 }
 
@@ -253,7 +259,11 @@ pub(in crate::realm) fn remove_listener<'js>(
 /// There is no capture, no bubbling and no propagation path: a dispatch reaches
 /// exactly one target, because the only events this browser raises are ones it
 /// raises itself. A listener that throws does not stop the ones after it.
-pub(in crate::realm) fn dispatch<'js>(ctx: &Ctx<'js>, target: String, event: Value<'js>) -> rquickjs::Result<()> {
+pub(in crate::realm) fn dispatch<'js>(
+    ctx: &Ctx<'js>,
+    target: String,
+    event: Value<'js>,
+) -> rquickjs::Result<()> {
     let kind: String = match event.as_object().and_then(|event| event.get("type").ok()) {
         Some(kind) => kind,
         None => return Ok(()),
@@ -264,7 +274,10 @@ pub(in crate::realm) fn dispatch<'js>(ctx: &Ctx<'js>, target: String, event: Val
             .userdata::<Sharing>()
             .ok_or_else(|| rquickjs::Error::new_from_js("Realm", "a document to belong to"))?;
         let listeners = shared.listeners.borrow();
-        listeners.get(&slot(&target, &kind)).cloned().unwrap_or_default()
+        listeners
+            .get(&slot(&target, &kind))
+            .cloned()
+            .unwrap_or_default()
     };
 
     let current = event

@@ -6,6 +6,14 @@ resolver = "3"
 version = "0.1.0"
 edition = "2024"
 
+# `cognitive_complexity` is a nursery lint, so nothing turns it on by default.
+# Asking for it here rather than in the hook means a plain `cargo clippy` sees
+# it too — the check reports what the compiler already says, and adds nothing
+# of its own. The threshold lives in `clippy.toml`, which is the only file
+# clippy reads it from; a finding quotes it back as "(9/7)".
+[workspace.lints.clippy]
+cognitive_complexity = "warn"
+
 [workspace.dependencies]
 anyhow = "1.0.104"
 serde_json = "1.0.151"

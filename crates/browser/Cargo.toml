@@ -14,3 +14,6 @@ takumi-core = "0.21.0"
 takumi-html = "0.2.1"
 takumi-svg = "0.3.17"
 url = "2.5.8"
+
+[lints]
+workspace = true

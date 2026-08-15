@@ -22,12 +22,13 @@ pub(in crate::realm) fn install(ctx: &Ctx<'_>, dom: &Rc<Dom>) -> Result<()> {
     api.set("registerInterface", Function::new(ctx.clone(), register)?)?;
 
     // `style` is a Proxy, which is a JavaScript mechanism with no Rust
-    // equivalent, so the shell stays in the Prelude and the parsing lives here.
+    // equivalent, so the shell stays in the Prelude and what a declaration
+    // means lives in `style`.
     let dom_get = Rc::clone(dom);
     api.set(
         "styleGet",
         Function::new(ctx.clone(), move |id: usize, property: String| {
-            super::objects::style_get(&dom_get, id, &property)
+            super::style::get(&dom_get, id, &property)
         })?,
     )?;
     let dom_set = Rc::clone(dom);
@@ -36,7 +37,7 @@ pub(in crate::realm) fn install(ctx: &Ctx<'_>, dom: &Rc<Dom>) -> Result<()> {
         Function::new(
             ctx.clone(),
             move |id: usize, property: String, value: Coerced<String>| {
-                super::objects::style_set(&dom_set, id, &property, &value.0);
+                super::style::set(&dom_set, id, &property, &value.0);
             },
         )?,
     )?;

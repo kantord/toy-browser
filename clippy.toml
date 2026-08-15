@@ -1,0 +1,16 @@
+# The budget for `cognitive-complexity`, which clippy reads for itself.
+#
+# It is not in `.claude/checks/limits.toml` with the others because clippy owns
+# both the measurement and the comparison — the check only forwards what it
+# says. A finding carries the number with it, as "(9/7)", so there is still one
+# place to read it from.
+#
+# 5, against a tree whose worst function scores 7. Unlike the line budget, this
+# one did not start at what the code already was: three attempts to trigger it
+# from clean code all failed, because a competent author decomposes as they go.
+# A threshold nothing can reach teaches nothing, so it was set below the four
+# functions already over it — they report as `inherited`, and the conversation
+# happens the first time anyone touches one. See docs/adr/0008.
+#
+# It comes down by deliberate commits, never up to make a finding go away.
+cognitive-complexity-threshold = 5

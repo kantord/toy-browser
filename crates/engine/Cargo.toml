@@ -11,3 +11,6 @@ serde_json.workspace = true
 blitz-dom = "0.2.4"
 blitz-html = "0.2.0"
 rquickjs = { version = "0.12.2", features = ["macro", "classes", "properties", "loader"] }
+
+[lints]
+workspace = true

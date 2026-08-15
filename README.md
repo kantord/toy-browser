@@ -68,6 +68,14 @@ keeps the lessons conformant. The budget in `limits.toml` comes down by
 deliberate commits, never to make a finding go away.
 `.claude/skills/code-style/SKILL.md` is the protocol.
 
+`cognitive-complexity` is the second budget, and it is set *below* the code
+rather than at it: four functions are over it on purpose. Three attempts to
+trick an agent into writing a function tangled enough to trip it all failed —
+each one decomposed the work unprompted — so a threshold placed where the tree
+already was could never have fired. `docs/adr/0008` records the experiment,
+including that clippy counts match *guards* but not match *arms*, which makes
+the score a tripwire rather than a ranking.
+
 Formatting is the exception that shows what the lessons are for. `format.sh`
 runs `rustfmt` on every file as it is written and says nothing — no finding, no
 lesson. A lesson is worth writing when the repo answered a question one way and

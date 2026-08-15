@@ -97,10 +97,44 @@ impl Failure {
     }
 
     /// The status the spec pairs with each error code.
+    ///
+    /// The table is the one in the WebDriver spec's "Errors" section, in full.
+    /// A code that is not in it is not a WebDriver error code, and `unknown
+    /// error` — 500 — is what the spec has for anything it does not name.
     fn status(&self) -> u16 {
         match self.code {
-            "unknown command" | "no such element" | "no such window" | "invalid session id" => 404,
-            "invalid argument" | "invalid selector" => 400,
+            "element click intercepted"
+            | "element not interactable"
+            | "insecure certificate"
+            | "invalid argument"
+            | "invalid cookie domain"
+            | "invalid element state"
+            | "invalid selector" => 400,
+
+            "detached shadow root"
+            | "invalid session id"
+            | "no such alert"
+            | "no such cookie"
+            | "no such element"
+            | "no such frame"
+            | "no such shadow root"
+            | "no such window"
+            | "stale element reference"
+            | "unknown command" => 404,
+
+            "unknown method" => 405,
+
+            "javascript error"
+            | "move target out of bounds"
+            | "script timeout"
+            | "session not created"
+            | "timeout"
+            | "unable to capture screen"
+            | "unable to set cookie"
+            | "unknown error"
+            | "unsupported operation" => 500,
+
+            // Not a code the spec names, so it is an `unknown error`.
             _ => 500,
         }
     }
@@ -140,4 +174,26 @@ fn respond(request: Request, answer: Answer) -> Result<()> {
                 .with_status_code(status),
         )
         .context("writing the response")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Failure;
+
+    fn status_of(code: &'static str) -> u16 {
+        Failure::new(code, "").status()
+    }
+
+    #[test]
+    fn each_status_in_the_spec_table_has_a_code() {
+        assert_eq!(status_of("invalid argument"), 400);
+        assert_eq!(status_of("no such element"), 404);
+        assert_eq!(status_of("unknown method"), 405);
+        assert_eq!(status_of("javascript error"), 500);
+    }
+
+    #[test]
+    fn a_code_outside_the_table_is_an_unknown_error() {
+        assert_eq!(status_of("no such thing"), 500);
+    }
 }

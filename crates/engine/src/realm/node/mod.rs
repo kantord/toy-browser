@@ -18,18 +18,19 @@ use rquickjs::{
 mod binder;
 mod install;
 mod objects;
-mod tasks;
+mod style;
 mod support;
+mod tasks;
 
 use binder::dom_members;
 pub use support::Sharing;
+use support::{
+    add_listener, descendants_matching, descends_from, dispatch, dom_of, or_null, remove_listener,
+    step, wrap, wrap_all, wrap_maybe,
+};
 pub(super) use support::{
     add_listener as listen_on, dispatch as dispatch_on, remove_listener as unlisten_on,
     wrap as wrap_id, wrap_all as wrap_all_ids, wrap_maybe as wrap_maybe_id,
-};
-use support::{
-    add_listener, descendants_matching, descends_from, dispatch, dom_of, or_null,
-    remove_listener, step, wrap, wrap_all, wrap_maybe,
 };
 
 use crate::dom::Dom;

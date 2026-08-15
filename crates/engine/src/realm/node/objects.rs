@@ -2,7 +2,10 @@
 
 use std::rc::Rc;
 
-use rquickjs::{Array, Ctx, Function, Object, function::{Rest, This}};
+use rquickjs::{
+    Array, Ctx, Function, Object,
+    function::{Rest, This},
+};
 
 use crate::dom::Dom;
 
@@ -103,62 +106,6 @@ pub(super) fn attributes<'js>(
     Ok(object)
 }
 
-/// The declarations of an element's `style` attribute, in order.
-pub(super) fn declarations(dom: &Dom, id: usize) -> Vec<(String, String)> {
-    dom.attribute(id, "style")
-        .unwrap_or_default()
-        .split(';')
-        .filter_map(|declaration| {
-            let colon = declaration.find(':')?;
-            let name = declaration[..colon].trim();
-            if name.is_empty() {
-                return None;
-            }
-            Some((name.to_owned(), declaration[colon + 1..].trim().to_owned()))
-        })
-        .collect()
-}
-
-/// One inline style property, or empty when it is not set.
-pub(super) fn style_get(dom: &Dom, id: usize, property: &str) -> String {
-    let wanted = kebab_case(property);
-    declarations(dom, id)
-        .into_iter()
-        .find(|(name, _)| *name == wanted)
-        .map(|(_, value)| value)
-        .unwrap_or_default()
-}
-
-/// Sets one inline style property, leaving the rest in place.
-pub(super) fn style_set(dom: &Dom, id: usize, property: &str, value: &str) {
-    let wanted = kebab_case(property);
-    let mut declarations = declarations(dom, id);
-    match declarations.iter_mut().find(|(name, _)| *name == wanted) {
-        Some(existing) => existing.1 = value.to_owned(),
-        None => declarations.push((wanted, value.to_owned())),
-    }
-    let serialized: Vec<String> = declarations
-        .into_iter()
-        .map(|(name, value)| format!("{name}: {value}"))
-        .collect();
-    dom.set_attribute(id, "style", &serialized.join("; "));
-}
-
-/// `backgroundColor` as `background-color`: a style property named the way
-/// JavaScript writes it, spelled the way CSS does.
-fn kebab_case(property: &str) -> String {
-    let mut out = String::with_capacity(property.len() + 4);
-    for ch in property.chars() {
-        if ch.is_ascii_uppercase() {
-            out.push('-');
-            out.push(ch.to_ascii_lowercase());
-        } else {
-            out.push(ch);
-        }
-    }
-    out
-}
-
 /// The box layout measured for an element, in the shape `getBoundingClientRect`
 /// promises. An element layout never produced a box for reports an empty rect.
 pub(super) fn rect<'js>(ctx: Ctx<'js>, id: usize) -> rquickjs::Result<Object<'js>> {
@@ -195,7 +142,11 @@ pub(super) fn client_rects<'js>(ctx: Ctx<'js>, id: usize) -> rquickjs::Result<Ar
 }
 
 /// `dataset`: the `data-` attributes, with `data-foo-bar` read as `fooBar`.
-pub(super) fn dataset<'js>(ctx: Ctx<'js>, dom: &Rc<Dom>, id: usize) -> rquickjs::Result<Object<'js>> {
+pub(super) fn dataset<'js>(
+    ctx: Ctx<'js>,
+    dom: &Rc<Dom>,
+    id: usize,
+) -> rquickjs::Result<Object<'js>> {
     let data = Object::new(ctx)?;
     for (name, value) in dom.attributes(id) {
         if let Some(rest) = name.strip_prefix("data-") {

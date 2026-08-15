@@ -20,6 +20,9 @@ Nothing here needs a runtime, an index to rebuild, or a tool to read it.
 - [file-too-long](/.claude/skills/code-style/lints/file-too-long.md) — a file
   over its line budget. Splits by reason to change, and distinguishes debt you
   caused from debt you inherited.
+- [cognitive-complexity](/.claude/skills/code-style/lints/cognitive-complexity.md)
+  — a function over its branch budget. Sorts nested branches from a flat run,
+  and says how to work out an origin clippy does not report.
 
 A lesson is written only after a grilling session has settled how this repo
 handles that kind — see [the playbook](/.claude/skills/code-style/SKILL.md). An
