@@ -1,9 +1,12 @@
-//! The command line, and the Chrome DevTools Protocol front end.
+//! The command line, and the protocol front ends.
 //!
 //! Talks to the browser layer and nothing below it — this crate cannot name the
-//! engine or the resource cache, which is what keeps the layering honest.
+//! engine or the resource cache, which is what keeps the layering honest. Both
+//! front ends are built out of the same browser-layer calls, which is the point
+//! of there being two.
 
 mod cdp;
+mod webdriver;
 
 use std::path::PathBuf;
 
@@ -13,7 +16,7 @@ use toy_browser::{Browser, Loaded, Viewport};
 use toy_browser_fetch::{Resources, Url};
 
 #[derive(Parser)]
-#[command(about = "Render HTML to PNG, or serve it over the DevTools protocol", version)]
+#[command(about = "Render HTML to PNG, or serve it over CDP or WebDriver", version)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -25,6 +28,8 @@ enum Command {
     Render(RenderArgs),
     /// Serve the Chrome DevTools Protocol so Playwright can drive this browser.
     Serve(ServeArgs),
+    /// Serve W3C WebDriver so Selenium clients can drive this browser.
+    Webdriver(WebdriverArgs),
 }
 
 #[derive(clap::Args)]
@@ -55,6 +60,17 @@ struct RenderArgs {
 }
 
 #[derive(clap::Args)]
+struct WebdriverArgs {
+    /// Port to listen on. Point a client at `http://127.0.0.1:<port>`.
+    #[arg(long, default_value_t = 4444)]
+    port: u16,
+
+    /// Font files to register. Defaults to an auto-detected system sans-serif.
+    #[arg(long = "font", value_name = "PATH")]
+    fonts: Vec<PathBuf>,
+}
+
+#[derive(clap::Args)]
 struct ServeArgs {
     /// Port to listen on. Connect with `chromium.connectOverCDP("ws://127.0.0.1:<port>/")`.
     #[arg(long, default_value_t = 9222)]
@@ -73,6 +89,10 @@ fn main() -> Result<()> {
             // through it.
             let browser = Browser::new(Resources::new(), &args.fonts)?;
             cdp::serve(args.port, browser)
+        }
+        Command::Webdriver(args) => {
+            let browser = Browser::new(Resources::new(), &args.fonts)?;
+            webdriver::serve(args.port, browser)
         }
     }
 }

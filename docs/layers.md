@@ -1,7 +1,7 @@
 # The layers
 
 ```
-crates/cli       CLI, and the CDP front end      deps: browser
+crates/cli       CLI, CDP and WebDriver           deps: browser
 crates/browser   pages, elements, measuring,     deps: engine, fetch
                  rendering
 crates/engine    the door                        deps: fetch
@@ -86,13 +86,20 @@ business.
 
 ## cli — front ends
 
-The command line, and the CDP front end. A front end translates one wire
-protocol into page operations; there can be several, and none of them can reach
-past the browser layer.
+The command line, and two protocols: Chrome DevTools (`cdp/`) and W3C WebDriver
+(`webdriver/`). A front end translates one wire protocol into page operations;
+none of them can reach past the browser layer, because this crate does not
+depend on anything below it.
 
-`cdp::Page` is now only protocol identity: target, frame and loader ids,
-execution contexts, and the objectIds a client holds. Everything about the
-document lives below it.
+Both are built out of the same browser-layer calls, and they hold entirely
+different state. `cdp::Page` is target, frame and loader ids, execution contexts
+and objectIds. `webdriver::Session` is a page and a table of element references.
+Neither knows the other exists.
+
+They also use different halves of the browser layer, which is the useful part:
+CDP drives everything through `evaluate` because that is what its client does,
+while WebDriver's `find`, `text` and `attribute` run no JavaScript at all.
+See `docs/cdp-surface.md` and `docs/webdriver-surface.md`.
 
 ## Concurrency
 

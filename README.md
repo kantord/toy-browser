@@ -30,10 +30,10 @@ drives it.
 crates/fetch/      one shared, thread-safe, cached place bytes are read
 crates/engine/     the door — sessions, DOM, JavaScript, HTML
 crates/browser/    pages, elements, measuring, rendering
-crates/cli/        the command line, and the CDP front end
+crates/cli/        the command line, and the CDP and WebDriver front ends
 tests/fixtures/    sample pages
 tests/playwright/  @toy-browser/playwright — the acceptance suite
-docs/              layers, protocol surface, JS entry points, ADRs
+docs/              layers, protocol surfaces, JS entry points, ADRs
 CONTEXT.md         the vocabulary this project uses
 ```
 
@@ -160,6 +160,32 @@ Navigation handles `about:` and `file://` only; anything else comes back as
 
 `pnpm test:smoke` runs a lower-level script that drives the same protocol
 without the test runner.
+
+## Driving it from Selenium
+
+The same browser also speaks W3C WebDriver, so Selenium clients can drive it:
+
+```sh
+cargo run -- webdriver --port 4444
+```
+
+```rust
+let driver = WebDriver::new("http://127.0.0.1:4444", DesiredCapabilities::chrome()).await?;
+driver.goto("file:///…/tests/fixtures/hello.html").await?;
+let heading = driver.find(By::Css("h1")).await?;
+assert_eq!(heading.text().await?, "Hello, toy browser");
+```
+
+`crates/cli/tests/webdriver.rs` proves it with [thirtyfour](https://github.com/stevepryde/thirtyfour),
+a real Selenium client with no knowledge of this project: session, navigate,
+find, text, attributes, element rect, execute script, screenshot.
+
+Finding elements and reading their text and attributes runs **no JavaScript** —
+it is the DOM's own selector engine. Actions, XPath and waiting are not
+implemented; `docs/webdriver-surface.md` has the full list.
+
+Two front ends now talk to the same browser layer, and neither can reach past
+it. That is the claim `docs/layers.md` makes, and this is the evidence for it.
 
 `docs/cdp-surface.md` records the protocol surface, how much of Playwright
 works, and the non-obvious things it requires.

@@ -260,22 +260,29 @@ impl Browser {
         self.sync(page)?;
         let session = self.session(page)?;
 
-        let receiver = receiver.and_then(as_handle);
+        // An element found without JavaScript has no JS identity yet. Give it
+        // one, so `this` and arguments mean the same thing however the caller
+        // came by the element.
+        let receiver = match receiver {
+            Some(remote) => self.as_handle(&session, remote)?,
+            None => None,
+        };
         let arguments: Vec<Argument> = arguments
             .iter()
             .map(|remote| match remote {
-                Remote::Object(handle) => Argument::Handle(handle.clone()),
-                Remote::Value(value) => Argument::Value(value.clone()),
-                // An element found without JavaScript has no JS identity to
-                // pass, so it goes as its id.
-                Remote::Element(node) => Argument::Value(serde_json::json!(node)),
-                Remote::Threw(message) => Argument::Value(serde_json::json!(message)),
+                Remote::Object(handle) => Ok(Argument::Handle(handle.clone())),
+                Remote::Value(value) => Ok(Argument::Value(value.clone())),
+                Remote::Element(_) => match self.as_handle(&session, remote)? {
+                    Some(handle) => Ok(Argument::Handle(handle)),
+                    None => Ok(Argument::Value(serde_json::Value::Null)),
+                },
+                Remote::Threw(message) => Ok(Argument::Value(serde_json::json!(message))),
             })
-            .collect();
+            .collect::<Result<_>>()?;
 
         let outcome =
             self.engine
-                .call(&session, declaration, receiver, &arguments, mode(by_value))?;
+                .call(&session, declaration, receiver.as_ref(), &arguments, mode(by_value))?;
         Ok(self.remote(outcome.value))
     }
 
@@ -317,6 +324,15 @@ impl Browser {
                     _ => None,
                 })
             }
+            _ => Ok(None),
+        }
+    }
+
+    /// An element's tag name, lowercased. Runs no JavaScript.
+    pub fn tag_name(&mut self, page: &PageId, remote: &Remote) -> Result<Option<String>> {
+        let session = self.session(page)?;
+        match remote {
+            Remote::Element(node) => self.engine.tag_name(&session, *node),
             _ => Ok(None),
         }
     }
@@ -464,6 +480,24 @@ impl Browser {
             .ok_or_else(|| anyhow::anyhow!("no such page"))
     }
 
+    /// A JavaScript reference for a remote, materializing one for an element
+    /// the DOM found without running anything.
+    fn as_handle(&mut self, session: &SessionId, remote: &Remote) -> Result<Option<Handle>> {
+        match remote {
+            Remote::Object(handle) => Ok(Some(handle.clone())),
+            Remote::Element(node) => {
+                let outcome = self
+                    .engine
+                    .evaluate(session, &format!("__node({node})"), Mode::ByRef)?;
+                Ok(match outcome.value {
+                    Evaluated::Handle(handle) => Some(handle),
+                    _ => None,
+                })
+            }
+            _ => Ok(None),
+        }
+    }
+
     fn remote(&self, evaluated: Evaluated) -> Remote {
         match evaluated {
             Evaluated::Value(value) => Remote::Value(value),
@@ -491,3 +525,4 @@ fn as_handle(remote: &Remote) -> Option<&Handle> {
         _ => None,
     }
 }
+

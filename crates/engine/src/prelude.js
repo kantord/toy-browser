@@ -753,6 +753,10 @@
     },
   };
 
+  // The bridge from a node id to the object model, for a caller that found an
+  // element without JavaScript and now needs to pass it into some.
+  globals.__node = (id) => wrap(id);
+
   globals.document = document;
   globals.window = globals;
   globals.self = globals;
