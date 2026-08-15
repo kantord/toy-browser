@@ -35,6 +35,7 @@ tests/fixtures/    sample pages
 tests/playwright/  @toy-browser/playwright — the acceptance suite
 docs/              layers, protocol surfaces, JS entry points, ADRs
 CONTEXT.md         the vocabulary this project uses
+.claude/           code-style checks, and the lessons they point at
 ```
 
 Each crate can only name what its dependency list allows: `cli` cannot say
@@ -43,6 +44,28 @@ the smallest set of operations a browser automation API can be built on — open
 a session, load a page, evaluate JavaScript, read HTML and elements back. It
 performs no I/O and knows nothing about fonts, pixels or any wire protocol.
 See `docs/layers.md`.
+
+## Code style
+
+A `Stop` hook runs checks over the files a session touched and reports what it
+finds, pointing at a lesson for each kind:
+
+```
+file-too-long  crates/engine/src/realm.rs
+  654 lines, budget is 400
+  lesson: .claude/skills/code-style/lints/file-too-long.md  (MISSING)
+```
+
+A lesson is a short file of worked examples recording how this repo has decided
+to handle that finding. **When there is no lesson — or the one there is does not
+settle the case — the agent stops and asks for a grilling session**, and writes
+the outcome back as the lesson. The rules accumulate from decisions actually
+made rather than being guessed up front.
+
+Checks live in `.claude/checks/`; clippy supplies most kinds, and a line-count
+check supplies `file-too-long`, which clippy has no lint for. The budget in
+`limits.toml` comes down by deliberate commits, never to make a finding go away.
+`.claude/skills/code-style/SKILL.md` is the protocol.
 
 ## Usage
 
