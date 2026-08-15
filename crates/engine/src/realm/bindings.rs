@@ -120,6 +120,7 @@ pub(super) fn install_globals(
     globals.set("__dom", api)?;
     globals.set("__console", console)?;
     super::node::install(ctx, dom)?;
+    super::document::install(ctx, dom)?;
     Ok(())
 }
 

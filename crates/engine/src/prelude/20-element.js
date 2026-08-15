@@ -15,50 +15,7 @@
       this.__id = id;
     }
 
-    // Geometry is measured outside and published before anything reads it. An
-    // element the layout never produced a box for reports an empty rect, the
-    // same as a display:none element in a browser.
-    getBoundingClientRect() {
-      const [x = 0, y = 0, width = 0, height = 0] = globalThis.__boxes?.[this.__id] ?? [];
-      return {
-        x,
-        y,
-        width,
-        height,
-        top: y,
-        left: x,
-        right: x + width,
-        bottom: y + height,
-        toJSON() {
-          return this;
-        },
-      };
-    }
-
-    getClientRects() {
-      const rect = this.getBoundingClientRect();
-      return rect.width === 0 && rect.height === 0 ? [] : [rect];
-    }
-
     scrollIntoView() {}
-
-    get offsetWidth() {
-      return this.getBoundingClientRect().width;
-    }
-
-    get offsetHeight() {
-      return this.getBoundingClientRect().height;
-    }
-
-    // The border box, which is all we measure. Padding and border are not
-    // subtracted because nothing here knows them.
-    get clientWidth() {
-      return this.getBoundingClientRect().width;
-    }
-
-    get clientHeight() {
-      return this.getBoundingClientRect().height;
-    }
 
     // Nothing here has a shadow tree, and saying so is better than pretending.
     get shadowRoot() {

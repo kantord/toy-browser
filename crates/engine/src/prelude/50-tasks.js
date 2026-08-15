@@ -7,28 +7,12 @@
 (() => {
   const tb = globalThis.__tb;
 
-  const timers = [];
-  const frames = [];
-  let nextTimerId = 1;
-
-  globalThis.setTimeout = (callback, delay = 0, ...args) => {
-    const handle = nextTimerId++;
-    timers.push({ handle, callback, delay: Number(delay) || 0, args });
-    return handle;
-  };
-  globalThis.clearTimeout = (handle) => {
-    const index = timers.findIndex((timer) => timer.handle === handle);
-    if (index >= 0) timers.splice(index, 1);
-  };
-  // A single load produces one frame, so an interval is a timeout.
+  // The queue lives in Rust — see `realm/node/tasks.rs` — because it retains a
+  // page's callbacks and has to release them with the Realm. What stays here is
+  // the aliasing: a single load produces one frame, so an interval is a
+  // timeout, and there is no idle to wait for.
   globalThis.setInterval = globalThis.setTimeout;
   globalThis.clearInterval = globalThis.clearTimeout;
-
-  globalThis.requestAnimationFrame = (callback) => {
-    const handle = nextTimerId++;
-    frames.push({ handle, callback });
-    return handle;
-  };
   globalThis.cancelAnimationFrame = globalThis.clearTimeout;
   globalThis.requestIdleCallback = globalThis.setTimeout;
 
@@ -44,19 +28,7 @@
     }
   };
 
-  // Drains one round of queued work. Returns true while there is more.
-  tb.drainTasks = () => {
-    if (timers.length === 0 && frames.length === 0) return false;
-
-    // Timers fire by delay, then by the order they were scheduled.
-    const dueTimers = timers.splice(0).sort((a, b) => a.delay - b.delay || a.handle - b.handle);
-    for (const timer of dueTimers) tb.runTask(timer.callback, timer.args);
-
-    const dueFrames = frames.splice(0);
-    for (const frame of dueFrames) tb.runTask(frame.callback, [0]);
-
-    return true;
-  };
+  tb.drainTasks = __dom.drainTasks;
 
   globalThis.customElements = {
     __definitions: new Map(),

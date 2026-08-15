@@ -2,7 +2,7 @@
 
 use std::rc::Rc;
 
-use rquickjs::{Ctx, Function, Object, function::Rest};
+use rquickjs::{Array, Ctx, Function, Object, function::{Rest, This}};
 
 use crate::dom::Dom;
 
@@ -157,4 +157,50 @@ fn kebab_case(property: &str) -> String {
         }
     }
     out
+}
+
+/// The box layout measured for an element, in the shape `getBoundingClientRect`
+/// promises. An element layout never produced a box for reports an empty rect.
+pub(super) fn rect<'js>(ctx: Ctx<'js>, id: usize) -> rquickjs::Result<Object<'js>> {
+    let [x, y, width, height] = super::support::measured(&ctx, id)?;
+    let rect = Object::new(ctx.clone())?;
+    for (name, value) in [
+        ("x", x),
+        ("y", y),
+        ("width", width),
+        ("height", height),
+        ("top", y),
+        ("left", x),
+        ("right", x + width),
+        ("bottom", y + height),
+    ] {
+        rect.set(name, value)?;
+    }
+    // Serializing a rect is how a client reads one back over a protocol.
+    rect.set(
+        "toJSON",
+        Function::new(ctx, |this: This<Object<'js>>| this.0)?,
+    )?;
+    Ok(rect)
+}
+
+/// The rects an element occupies: one, or none when it has no box at all.
+pub(super) fn client_rects<'js>(ctx: Ctx<'js>, id: usize) -> rquickjs::Result<Array<'js>> {
+    let rects = Array::new(ctx.clone())?;
+    let [_, _, width, height] = super::support::measured(&ctx, id)?;
+    if width != 0.0 || height != 0.0 {
+        rects.set(0, rect(ctx, id)?)?;
+    }
+    Ok(rects)
+}
+
+/// `dataset`: the `data-` attributes, with `data-foo-bar` read as `fooBar`.
+pub(super) fn dataset<'js>(ctx: Ctx<'js>, dom: &Rc<Dom>, id: usize) -> rquickjs::Result<Object<'js>> {
+    let data = Object::new(ctx)?;
+    for (name, value) in dom.attributes(id) {
+        if let Some(rest) = name.strip_prefix("data-") {
+            data.set(super::support::camel_case(rest), value)?;
+        }
+    }
+    Ok(data)
 }

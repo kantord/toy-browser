@@ -40,7 +40,36 @@ pub(in crate::realm) fn install(ctx: &Ctx<'_>, dom: &Rc<Dom>) -> Result<()> {
             },
         )?,
     )?;
+    // The Prelude dispatches to `window` and to the document, neither of which
+    // is a node, so the table is reachable by name as well as through a node.
+    api.set("addListener", Function::new(ctx.clone(), listen)?)?;
+    api.set("removeListener", Function::new(ctx.clone(), unlisten)?)?;
+    api.set("dispatch", Function::new(ctx.clone(), fire)?)?;
+
+    super::tasks::install(ctx, &api)?;
     Ok(())
+}
+
+fn listen<'js>(
+    ctx: Ctx<'js>,
+    target: Coerced<String>,
+    kind: String,
+    listener: Function<'js>,
+) -> rquickjs::Result<()> {
+    support::add_listener(&ctx, target.0, kind, listener)
+}
+
+fn unlisten<'js>(
+    ctx: Ctx<'js>,
+    target: Coerced<String>,
+    kind: String,
+    listener: Function<'js>,
+) -> rquickjs::Result<()> {
+    support::remove_listener(&ctx, target.0, kind, listener)
+}
+
+fn fire<'js>(ctx: Ctx<'js>, target: Coerced<String>, event: Value<'js>) -> rquickjs::Result<()> {
+    support::dispatch(&ctx, target.0, event)
 }
 
 fn mint<'js>(ctx: Ctx<'js>, id: Option<usize>) -> rquickjs::Result<Value<'js>> {

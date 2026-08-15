@@ -6,21 +6,7 @@
 // listener table, and the constants a page compares against.
 
 (() => {
-  const tb = globalThis.__tb;
   const proto = globalThis.Node.prototype;
-
-  proto.addEventListener = function addEventListener(type, listener) {
-    tb.addListener(this.__id, type, listener);
-  };
-
-  proto.removeEventListener = function removeEventListener(type, listener) {
-    tb.removeListener(this.__id, type, listener);
-  };
-
-  proto.dispatchEvent = function dispatchEvent(event) {
-    tb.dispatch(this.__id, event);
-    return true;
-  };
 
   proto.getRootNode = function getRootNode() {
     return globalThis.document;

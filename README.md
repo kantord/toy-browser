@@ -126,10 +126,19 @@ against the blitz DOM. What works:
   `textContent`, `innerHTML`, `className`, `classList`, inline `style`,
   `addEventListener`, `document.write`, `console`.
 
-The engine boundary is deliberately thin. `crates/engine/src/dom.rs` exposes
-about twenty primitives that speak only in node ids, and `prelude/` builds
-`window`, `document` and the element object model on top of them — so no
-JavaScript value is ever held on the Rust side.
+The object model is Rust. `Node` and `Document` are QuickJS classes in
+`crates/engine/src/realm/`, so `el.textContent`, `classList`, `style`,
+selectors, the tree and the timers all run compiled rather than interpreted.
+`prelude/` is what is left: the things that are about JavaScript rather than
+about the document — `class extends` for the per-tag interfaces, a `Proxy` for
+`style`, the `Event` objects a page constructs, and the `window` globals.
+
+That reverses the original boundary, where Rust exposed primitives and
+JavaScript built everything on top. `docs/adr/0007` records why, with the
+measurements: Rust is 13–30x faster on anything that computes, the binding
+crossing costs 27ns, and a native getter is 11x slower than a JavaScript
+property read. The cost is that Rust now retains JavaScript values — every
+wrapper, listener and timer callback — which a Realm releases when it drops.
 
 Simplifications worth knowing: the whole document is parsed before anything
 runs, so `async` and `defer` do not reorder anything and `document.write()`

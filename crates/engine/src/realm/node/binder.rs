@@ -25,6 +25,9 @@ macro_rules! dom_members {
         $(node { $($nr:ident $nj:literal => |$ns:ident| $nb:expr),* $(,)? })?
         $(list { $($lr:ident $lj:literal => |$ls:ident| $lb:expr),* $(,)? })?
         $(object { $($or:ident $oj:literal => |$oc:ident, $os:ident| $ob:expr),* $(,)? })?
+        $(method { $($or2:ident $oj2:literal -> $ort:ty => |$oc2:ident, $os2:ident| $ob2:expr),* $(,)? })?
+        $(number { $($mr:ident $mj:literal => |$mc:ident, $ms:ident| $mb:expr),* $(,)? })?
+        $(event_target { |$er:ident| $ekey:expr })?
         rest { $($rest:tt)* }
     ) => {
         #[rquickjs::methods]
@@ -81,6 +84,60 @@ macro_rules! dom_members {
                     $ob
                 }
             )*)?
+
+            $($(
+                #[qjs(rename = $oj2)]
+                pub fn $or2<'js>(&self, ctx: Ctx<'js>) -> rquickjs::Result<$ort> {
+                    let ($oc2, $os2) = (ctx, self);
+                    $ob2
+                }
+            )*)?
+
+            $($(
+                /// A measurement, which is zero until someone has measured.
+                #[qjs(get, rename = $mj)]
+                pub fn $mr<'js>(&self, ctx: Ctx<'js>) -> rquickjs::Result<f64> {
+                    let ($mc, $ms) = (ctx, self);
+                    $mb
+                }
+            )*)?
+
+            $(
+                /// Registering, unregistering and firing. There is no capture
+                /// and no bubbling: a dispatch reaches exactly one target.
+                #[qjs(rename = "addEventListener")]
+                pub fn add_event_listener<'js>(
+                    &self,
+                    ctx: Ctx<'js>,
+                    kind: String,
+                    listener: Function<'js>,
+                ) -> rquickjs::Result<()> {
+                    let $er = self;
+                    add_listener(&ctx, $ekey, kind, listener)
+                }
+
+                #[qjs(rename = "removeEventListener")]
+                pub fn remove_event_listener<'js>(
+                    &self,
+                    ctx: Ctx<'js>,
+                    kind: String,
+                    listener: Function<'js>,
+                ) -> rquickjs::Result<()> {
+                    let $er = self;
+                    remove_listener(&ctx, $ekey, kind, listener)
+                }
+
+                #[qjs(rename = "dispatchEvent")]
+                pub fn dispatch_event<'js>(
+                    &self,
+                    ctx: Ctx<'js>,
+                    event: Value<'js>,
+                ) -> rquickjs::Result<bool> {
+                    let $er = self;
+                    dispatch(&ctx, $ekey, event)?;
+                    Ok(true)
+                }
+            )?
 
             $($rest)*
         }

@@ -8,35 +8,13 @@
 (() => {
   const tb = globalThis.__tb;
 
-  // Keyed by node id; `window` gets its own key since it is not a node.
+  // The listener table lives in Rust — see `realm/node/support.rs` — because it
+  // outlives every call and has to be released with the Realm. `window` is not
+  // a node, so it needs a key of its own.
   tb.WINDOW = "window";
-  const listeners = new Map();
-
-  tb.addListener = (target, type, listener) => {
-    const key = `${target}:${type}`;
-    const existing = listeners.get(key);
-    if (existing) existing.push(listener);
-    else listeners.set(key, [listener]);
-  };
-
-  tb.removeListener = (target, type, listener) => {
-    const key = `${target}:${type}`;
-    const existing = listeners.get(key) ?? [];
-    listeners.set(
-      key,
-      existing.filter((candidate) => candidate !== listener),
-    );
-  };
-
-  tb.dispatch = (target, event) => {
-    for (const listener of listeners.get(`${target}:${event.type}`) ?? []) {
-      try {
-        listener.call(event.currentTarget ?? null, event);
-      } catch (error) {
-        __console.error(`listener for "${event.type}" threw: ${error}`);
-      }
-    }
-  };
+  tb.addListener = __dom.addListener;
+  tb.removeListener = __dom.removeListener;
+  tb.dispatch = __dom.dispatch;
 
   // Constructible events. Only the fields anything here reads are real.
   class Event {

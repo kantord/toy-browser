@@ -6,6 +6,7 @@
 //! the network. See `docs/js-entry-points.md` for what that leaves out.
 
 mod bindings;
+mod document;
 mod node;
 mod convert;
 mod eval;
@@ -197,24 +198,33 @@ impl Realm {
 
     /// Publishes what the page cannot work out for itself.
     pub fn set_environment(&self, environment: &Environment) {
-        let boxes: Vec<String> = environment
+        let boxes: std::collections::HashMap<usize, [f64; 4]> = environment
             .boxes
             .iter()
             .map(|(id, area)| {
-                format!(
-                    "{id}:[{},{},{},{}]",
-                    area.x, area.y, area.width, area.height
+                (
+                    *id,
+                    [
+                        area.x as f64,
+                        area.y as f64,
+                        area.width as f64,
+                        area.height as f64,
+                    ],
                 )
             })
             .collect();
         let (width, height) = environment.viewport;
+        // The viewport and the URL are plain globals a page reads directly; the
+        // boxes are not, because every element asks for its own.
         let script = format!(
             "globalThis.innerWidth = {width}; globalThis.innerHeight = {height}; \
-             globalThis.location.href = {}; globalThis.__boxes = {{{}}};",
+             globalThis.location.href = {};",
             quote(&environment.url),
-            boxes.join(","),
         );
         self.context.with(|ctx| {
+            if let Some(shared) = ctx.userdata::<node::Sharing>() {
+                shared.set_boxes(boxes);
+            }
             let _ = ctx.eval::<Value, _>(script);
         });
     }

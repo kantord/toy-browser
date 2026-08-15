@@ -10,22 +10,26 @@
 
 use std::rc::Rc;
 
-use anyhow::Result;
 use rquickjs::{
-    Class, Coerced, Ctx, Object, Value,
+    Class, Coerced, Ctx, Function, Object, Value,
     class::{Trace, Tracer},
 };
 
 mod binder;
 mod install;
 mod objects;
+mod tasks;
 mod support;
 
 use binder::dom_members;
 pub use support::Sharing;
+pub(super) use support::{
+    add_listener as listen_on, dispatch as dispatch_on, remove_listener as unlisten_on,
+    wrap as wrap_id, wrap_all as wrap_all_ids, wrap_maybe as wrap_maybe_id,
+};
 use support::{
-    camel_case, descendants_matching, descends_from, dom_of, or_null, step, wrap, wrap_all,
-    wrap_maybe,
+    add_listener, descendants_matching, descends_from, dispatch, dom_of, or_null,
+    remove_listener, step, wrap, wrap_all, wrap_maybe,
 };
 
 use crate::dom::Dom;
@@ -92,11 +96,28 @@ dom_members! {
     object {
         class_list "classList" => |ctx, n| objects::class_list(ctx, &n.dom, n.id),
         attributes "attributes" => |ctx, n| objects::attributes(ctx, &n.dom, n.id),
+        dataset "dataset" => |ctx, n| objects::dataset(ctx, &n.dom, n.id),
     }
+
+    method {
+        bounding_client_rect "getBoundingClientRect" -> Object<'js> => |ctx, n| objects::rect(ctx, n.id),
+        client_rects "getClientRects" -> rquickjs::Array<'js> => |ctx, n| objects::client_rects(ctx, n.id),
+    }
+
+    number {
+        offset_width "offsetWidth" => |ctx, n| Ok(support::measured(&ctx, n.id)?[2]),
+        offset_height "offsetHeight" => |ctx, n| Ok(support::measured(&ctx, n.id)?[3]),
+        // The border box, which is all we measure: padding and border are not
+        // subtracted because nothing here knows them.
+        client_width "clientWidth" => |ctx, n| Ok(support::measured(&ctx, n.id)?[2]),
+        client_height "clientHeight" => |ctx, n| Ok(support::measured(&ctx, n.id)?[3]),
+    }
+
+    event_target { |n| n.id.to_string() }
 
     rest {
         #[qjs(constructor)]
-        pub fn new(ctx: Ctx<'_>, id: usize) -> Result<Self, rquickjs::Error> {
+        pub fn new(ctx: Ctx<'_>, id: usize) -> rquickjs::Result<Self> {
             Ok(Self { id, dom: dom_of(&ctx)? })
         }
 
@@ -203,18 +224,6 @@ dom_members! {
         #[qjs(rename = "hasAttributes")]
         pub fn has_attributes(&self) -> bool {
             !self.dom.attributes(self.id).is_empty()
-        }
-
-        /// `data-foo-bar` reads as `fooBar`, as the DOM says.
-        #[qjs(get, rename = "dataset")]
-        pub fn dataset<'js>(&self, ctx: Ctx<'js>) -> rquickjs::Result<Object<'js>> {
-            let data = Object::new(ctx)?;
-            for (name, value) in self.dom.attributes(self.id) {
-                if let Some(rest) = name.strip_prefix("data-") {
-                    data.set(camel_case(rest), value)?;
-                }
-            }
-            Ok(data)
         }
 
         /// Moves `child` here, and hands it back the way the DOM does.
