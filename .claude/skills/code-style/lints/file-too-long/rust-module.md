@@ -27,9 +27,11 @@ realm/convert.rs    js_to_json, json_to_js, exception_text, quote
 realm/load.rs       run_scripts, run_lifecycle, drain_tasks, load_import_maps
 ```
 
-Carried out: mod.rs 371, load.rs 165, bindings.rs 128, convert.rs 69 — the
-three files first listed here left mod.rs at ~525, because driving the load is a
-fourth reason to change and needed naming before the budget was met.
+Carried out: mod.rs 232, load.rs 165, eval.rs 157, bindings.rs 128, convert.rs
+69. The three files first listed here left mod.rs at ~525, because driving the
+load is a fourth reason to change and needed naming before the budget was met;
+`eval.rs` — running JavaScript on demand and the handle table — came out later
+when the budget dropped to 320.
 
 **`crates/cli/src/cdp/mod.rs` (591)** — the same shape: a transport, a command
 dispatch, and a pile of message builders. Split into `mod.rs` (serve, the
@@ -41,6 +43,20 @@ messages, leaving no fourth job unnamed.
 
 **`crates/browser/src/lib.rs` (528)** — also this shape. The public types, the
 `Browser` facade, and the measure-and-sync machinery are three jobs.
+
+Carried out: lib.rs 177, navigate.rs 116, script.rs 116, view.rs 101, dom.rs 75.
+Three left the facade at ~315 — under the number, but navigation, scripting and
+DOM reads in one grab-bag. **Count the jobs, then check the arithmetic before
+you start.** Twice now the recorded plan named one job too few, and both times
+the missing file was obvious once the sum was written down.
+
+## Others of this shape
+
+`engine/lib.rs` → `lib.rs` + `engine.rs` (vocabulary vs. facade),
+`engine/scripts.rs` → `scripts/{mod,collect,report}.rs` (what counts as an entry
+point vs. rendering a survey for a person), `engine/dom.rs` →
+`dom/{mod,markup}.rs` (the tree vs. the string-of-HTML boundary). All three fit
+the examples above and needed no new case.
 
 ## Why not by kind
 

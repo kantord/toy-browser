@@ -1,14 +1,16 @@
-//! WebDriver sessions, and the commands that act on them.
+//! WebDriver sessions, and the commands that act on one.
 //!
 //! Every command here is one or two calls into the browser layer. The mapping
 //! is the point: if a protocol needs something this cannot express, that is a
-//! gap in the browser layer, not here.
+//! gap in the browser layer, not here. What a client can ask about a single
+//! element is `element`; routing sends it there.
 
 use std::collections::HashMap;
 
 use serde_json::{Value, json};
 use toy_browser::{Browser, PageId, Remote, Viewport};
 
+use super::element::First;
 use super::{Answer, Failure, Route};
 
 /// The key a W3C client recognises an element reference by.
@@ -21,7 +23,7 @@ const DEFAULT_VIEWPORT: Viewport = Viewport {
 };
 
 /// One WebDriver session: a page, and the element references handed out for it.
-struct Session {
+pub(super) struct Session {
     page: PageId,
     elements: HashMap<String, Remote>,
     next_element: u32,
@@ -29,7 +31,7 @@ struct Session {
 
 impl Session {
     /// Names a reference so the client can send it back.
-    fn remember(&mut self, remote: Remote) -> Value {
+    pub(super) fn remember(&mut self, remote: Remote) -> Value {
         self.next_element += 1;
         let id = format!("e{}", self.next_element);
         self.elements.insert(id.clone(), remote);
@@ -39,7 +41,7 @@ impl Session {
 
 /// Every open session, and the browser they run in.
 pub struct Sessions {
-    browser: Browser,
+    pub(super) browser: Browser,
     open: HashMap<String, Session>,
     next_id: u32,
 }
@@ -205,109 +207,6 @@ impl Sessions {
         }
     }
 
-    fn find(&mut self, id: &str, body: &Value, first: First) -> Answer {
-        let page = self.page(id)?;
-        let using = body["using"].as_str().unwrap_or_default();
-        let value = body["value"].as_str().unwrap_or_default();
-
-        // Only what the DOM's own selector engine can answer. XPath and the
-        // link-text strategies would need machinery this browser lacks, and
-        // saying so beats returning nothing.
-        let selector = match using {
-            "css selector" => value.to_owned(),
-            "tag name" => value.to_owned(),
-            other => {
-                return Err(Failure::new(
-                    "invalid selector",
-                    format!("unsupported strategy: {other}"),
-                ));
-            }
-        };
-
-        let found = self.browser.query(&page, &selector).map_err(internal)?;
-        let session = self.session_mut(id)?;
-
-        match first {
-            First::Yes => match found.into_iter().next() {
-                Some(remote) => Ok(session.remember(remote)),
-                None => Err(Failure::no_such_element(format!("no match for {selector}"))),
-            },
-            First::No => Ok(Value::Array(
-                found.into_iter().map(|r| session.remember(r)).collect(),
-            )),
-        }
-    }
-
-    fn text(&mut self, id: &str, element: &str) -> Answer {
-        let page = self.page(id)?;
-        let remote = self.element(id, element)?;
-        Ok(json!(
-            self.browser
-                .text(&page, &remote)
-                .map_err(internal)?
-                .unwrap_or_default()
-        ))
-    }
-
-    fn tag_name(&mut self, id: &str, element: &str) -> Answer {
-        let page = self.page(id)?;
-        let remote = self.element(id, element)?;
-        Ok(json!(
-            self.browser
-                .tag_name(&page, &remote)
-                .map_err(internal)?
-                .unwrap_or_default()
-        ))
-    }
-
-    fn attribute(&mut self, id: &str, element: &str, name: &str) -> Answer {
-        let page = self.page(id)?;
-        let remote = self.element(id, element)?;
-        Ok(match self.browser.attribute(&page, &remote, name).map_err(internal)? {
-            Some(value) => json!(value),
-            None => Value::Null,
-        })
-    }
-
-    /// A property is read off the live object, not the markup — so it goes
-    /// through JavaScript where an attribute does not.
-    fn property(&mut self, id: &str, element: &str, name: &str) -> Answer {
-        let page = self.page(id)?;
-        let remote = self.element(id, element)?;
-        let declaration = format!("function() {{ return this[{}] ?? null }}", json!(name));
-        let value = self
-            .browser
-            .call(&page, &declaration, Some(&remote), &[], true)
-            .map_err(internal)?;
-        Ok(match value {
-            Remote::Value(value) => value,
-            _ => Value::Null,
-        })
-    }
-
-    fn rect(&mut self, id: &str, element: &str) -> Answer {
-        let page = self.page(id)?;
-        let remote = self.element(id, element)?;
-        Ok(match self.browser.bounding_box(&page, &remote).map_err(internal)? {
-            Some(area) => json!({
-                "x": area.x, "y": area.y,
-                "width": area.width, "height": area.height,
-            }),
-            None => json!({ "x": 0, "y": 0, "width": 0, "height": 0 }),
-        })
-    }
-
-    /// Visible enough: it has a box. Nothing here computes style, so
-    /// `visibility: hidden` is not something this can see.
-    fn displayed(&mut self, id: &str, element: &str) -> Answer {
-        let page = self.page(id)?;
-        let remote = self.element(id, element)?;
-        let area = self.browser.bounding_box(&page, &remote).map_err(internal)?;
-        Ok(json!(
-            area.is_some_and(|area| area.width > 0.0 && area.height > 0.0)
-        ))
-    }
-
     /// A script argument: an element reference if the client sent one back,
     /// otherwise a plain value.
     fn remote_of(&self, id: &str, argument: &Value) -> Remote {
@@ -317,20 +216,20 @@ impl Sessions {
             .unwrap_or_else(|| Remote::Value(argument.clone()))
     }
 
-    fn page(&self, id: &str) -> Result<PageId, Failure> {
+    pub(super) fn page(&self, id: &str) -> Result<PageId, Failure> {
         self.open
             .get(id)
             .map(|session| session.page.clone())
             .ok_or_else(|| Failure::new("invalid session id", format!("no session {id}")))
     }
 
-    fn session_mut(&mut self, id: &str) -> Result<&mut Session, Failure> {
+    pub(super) fn session_mut(&mut self, id: &str) -> Result<&mut Session, Failure> {
         self.open
             .get_mut(id)
             .ok_or_else(|| Failure::new("invalid session id", format!("no session {id}")))
     }
 
-    fn element(&self, id: &str, element: &str) -> Result<Remote, Failure> {
+    pub(super) fn element(&self, id: &str, element: &str) -> Result<Remote, Failure> {
         self.open
             .get(id)
             .and_then(|session| session.elements.get(element).cloned())
@@ -338,12 +237,6 @@ impl Sessions {
     }
 }
 
-/// Whether a find returns one element or all of them.
-enum First {
-    Yes,
-    No,
-}
-
-fn internal(error: anyhow::Error) -> Failure {
+pub(super) fn internal(error: anyhow::Error) -> Failure {
     Failure::new("unknown error", error.to_string())
 }

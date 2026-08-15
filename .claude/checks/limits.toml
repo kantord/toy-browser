@@ -3,4 +3,4 @@
 # Lowered deliberately, one commit at a time, once the codebase has caught up
 # with the current number. Findings quote it back, so the ratchet is visible in
 # the message an agent receives.
-max_file_lines = 400
+max_file_lines = 320

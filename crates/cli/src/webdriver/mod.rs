@@ -7,8 +7,8 @@
 //! HTTP is served one request at a time. A `Browser` cannot move between
 //! threads, and only one piece of JavaScript runs at a time regardless.
 
+mod element;
 mod session;
-
 
 use anyhow::{Context, Result};
 use serde_json::{Value, json};

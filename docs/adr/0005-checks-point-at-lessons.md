@@ -54,9 +54,15 @@ commits once the codebase has caught up. Editing it to clear a finding, adding
 `#[allow]`, or cutting a file at an arbitrary line are all named in the skill as
 things that are not fixes.
 
-**The hook blocks whoever is waiting, not whoever is editing.** Findings are
-scoped by `git status`, which sees a working tree and not authorship. During the
-three migrations the parent session was blocked seven times by findings a
-delegated subagent was actively fixing and the parent must not touch. Exempting
-files a live subagent owns, or blocking only the editing agent, would both need
-authorship information the working tree does not carry. Left as is, and noted.
+**Findings are scoped to a working tree, not to an author.** `git status` cannot
+say who changed a file, so a finding reaches whoever stops next rather than
+whoever caused it. This shows up two ways. The parent session was blocked seven
+times by findings a delegated subagent was actively fixing and the parent must
+not touch. And when three agents split three crates in parallel, each was
+reported the other two's half-finished files — one was handed a `new file`
+finding for a module directory another agent was mid-way through creating.
+
+Both agents and the parent handled it correctly by refusing to touch what they
+did not own, so the cost is noise and blocked turns rather than corruption. The
+fixes — exempting files a live agent owns, or reporting only to the editing
+agent — need authorship the working tree does not carry. Left as is, and noted.

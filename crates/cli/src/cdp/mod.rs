@@ -5,12 +5,14 @@
 //! Everything else answers `{}` and logs its name, so the log is an accurate
 //! list of what a real client asks for. See `docs/cdp-surface.md`.
 //!
-//! This file is the socket: it accepts connections and moves messages. What each
-//! command does is `dispatch`, and the JSON it answers with is `events`.
+//! This file is the socket: it accepts connections and moves messages. Routing
+//! and the target lifecycle are `dispatch`, a page's own commands are
+//! `page_commands`, and the JSON they answer with is `events`.
 
 mod dispatch;
 mod events;
 mod page;
+mod page_commands;
 
 use std::net::{TcpListener, TcpStream};
 
