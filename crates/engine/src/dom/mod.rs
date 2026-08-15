@@ -75,7 +75,10 @@ impl Dom {
 
     pub fn append_child(&self, parent: usize, child: usize) {
         self.touched();
-        self.doc.borrow_mut().mutate().append_children(parent, &[child]);
+        self.doc
+            .borrow_mut()
+            .mutate()
+            .append_children(parent, &[child]);
     }
 
     pub fn remove_node(&self, id: usize) {
@@ -135,12 +138,7 @@ impl Dom {
             .map(|attrs| {
                 attrs
                     .iter()
-                    .map(|attribute| {
-                        (
-                            attribute.name.local.to_string(),
-                            attribute.value.clone(),
-                        )
-                    })
+                    .map(|attribute| (attribute.name.local.to_string(), attribute.value.clone()))
                     .collect()
             })
             .unwrap_or_default()

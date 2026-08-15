@@ -16,7 +16,10 @@ use toy_browser::{Browser, Loaded, Viewport};
 use toy_browser_fetch::{Resources, Url};
 
 #[derive(Parser)]
-#[command(about = "Render HTML to PNG, or serve it over CDP or WebDriver", version)]
+#[command(
+    about = "Render HTML to PNG, or serve it over CDP or WebDriver",
+    version
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,

@@ -75,10 +75,16 @@ impl Sessions {
     pub(super) fn attribute(&mut self, id: &str, element: &str, name: &str) -> Answer {
         let page = self.page(id)?;
         let remote = self.element(id, element)?;
-        Ok(match self.browser.attribute(&page, &remote, name).map_err(internal)? {
-            Some(value) => json!(value),
-            None => Value::Null,
-        })
+        Ok(
+            match self
+                .browser
+                .attribute(&page, &remote, name)
+                .map_err(internal)?
+            {
+                Some(value) => json!(value),
+                None => Value::Null,
+            },
+        )
     }
 
     /// A property is read off the live object, not the markup — so it goes
@@ -100,13 +106,19 @@ impl Sessions {
     pub(super) fn rect(&mut self, id: &str, element: &str) -> Answer {
         let page = self.page(id)?;
         let remote = self.element(id, element)?;
-        Ok(match self.browser.bounding_box(&page, &remote).map_err(internal)? {
-            Some(area) => json!({
-                "x": area.x, "y": area.y,
-                "width": area.width, "height": area.height,
-            }),
-            None => json!({ "x": 0, "y": 0, "width": 0, "height": 0 }),
-        })
+        Ok(
+            match self
+                .browser
+                .bounding_box(&page, &remote)
+                .map_err(internal)?
+            {
+                Some(area) => json!({
+                    "x": area.x, "y": area.y,
+                    "width": area.width, "height": area.height,
+                }),
+                None => json!({ "x": 0, "y": 0, "width": 0, "height": 0 }),
+            },
+        )
     }
 
     /// Visible enough: it has a box. Nothing here computes style, so
@@ -114,7 +126,10 @@ impl Sessions {
     pub(super) fn displayed(&mut self, id: &str, element: &str) -> Answer {
         let page = self.page(id)?;
         let remote = self.element(id, element)?;
-        let area = self.browser.bounding_box(&page, &remote).map_err(internal)?;
+        let area = self
+            .browser
+            .bounding_box(&page, &remote)
+            .map_err(internal)?;
         Ok(json!(
             area.is_some_and(|area| area.width > 0.0 && area.height > 0.0)
         ))

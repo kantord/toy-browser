@@ -174,7 +174,10 @@ impl Session<'_> {
                     .unwrap_or_default()
                     .iter()
                     .map(|argument| match argument["objectId"].as_str() {
-                        Some(id) => page.recall(id).cloned().unwrap_or(Remote::Value(Value::Null)),
+                        Some(id) => page
+                            .recall(id)
+                            .cloned()
+                            .unwrap_or(Remote::Value(Value::Null)),
                         None => Remote::Value(argument["value"].clone()),
                     })
                     .collect();

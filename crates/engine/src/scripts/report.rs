@@ -59,10 +59,9 @@ impl ScriptSurvey {
                 Payload::External { specifier, fetch } => {
                     out.push_str(&format!("- specifier: `{specifier}`\n"));
                     match fetch {
-                        Fetch::Loaded { url, source } => out.push_str(&format!(
-                            "- loaded `{url}`, {} bytes\n\n",
-                            source.len()
-                        )),
+                        Fetch::Loaded { url, source } => {
+                            out.push_str(&format!("- loaded `{url}`, {} bytes\n\n", source.len()))
+                        }
                         Fetch::NotFound { url } => {
                             out.push_str(&format!("- NOT FOUND at `{url}`\n\n"));
                         }

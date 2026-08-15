@@ -93,7 +93,11 @@ impl Engine {
     /// A script that throws is reported and the load continues, which is what a
     /// browser does. A load that fails outright leaves the previous Realm in
     /// place.
-    pub fn load_page(&mut self, session: &SessionId, page: LoadPage<'_>) -> Result<Outcome<LoadReport>> {
+    pub fn load_page(
+        &mut self,
+        session: &SessionId,
+        page: LoadPage<'_>,
+    ) -> Result<Outcome<LoadReport>> {
         let init_scripts = self.session(session)?.init_scripts.clone();
         let realm = Realm::open(
             page.source,

@@ -50,9 +50,13 @@ impl Browser {
             })
             .collect::<Result<_>>()?;
 
-        let outcome =
-            self.engine
-                .call(&session, declaration, receiver.as_ref(), &arguments, mode(by_value))?;
+        let outcome = self.engine.call(
+            &session,
+            declaration,
+            receiver.as_ref(),
+            &arguments,
+            mode(by_value),
+        )?;
         Ok(self.remote(outcome.value))
     }
 
@@ -80,9 +84,9 @@ impl Browser {
         match remote {
             Remote::Object(handle) => Ok(Some(handle.clone())),
             Remote::Element(node) => {
-                let outcome = self
-                    .engine
-                    .evaluate(session, &format!("__node({node})"), Mode::ByRef)?;
+                let outcome =
+                    self.engine
+                        .evaluate(session, &format!("__node({node})"), Mode::ByRef)?;
                 Ok(match outcome.value {
                     Evaluated::Handle(handle) => Some(handle),
                     _ => None,

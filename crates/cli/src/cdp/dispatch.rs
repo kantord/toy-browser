@@ -47,8 +47,8 @@ impl<'b> Session<'b> {
         let params = &request["params"];
         let session_id = request["sessionId"].as_str();
 
-        let addressed_to_browser = session_id
-            .is_none_or(|session| self.browser_sessions.iter().any(|id| id == session));
+        let addressed_to_browser =
+            session_id.is_none_or(|session| self.browser_sessions.iter().any(|id| id == session));
         let outcome = match session_id {
             Some(session) if !addressed_to_browser => self.page_command(method, params, session)?,
             _ => self.browser_command(method, params)?,

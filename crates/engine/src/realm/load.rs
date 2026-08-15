@@ -110,12 +110,7 @@ fn drain_microtasks(ctx: &Ctx<'_>) {
     while ctx.execute_pending_job() {}
 }
 
-pub(super) fn evaluate(
-    ctx: &Ctx<'_>,
-    report: &Rc<RefCell<Diagnostics>>,
-    name: &str,
-    source: &str,
-) {
+pub(super) fn evaluate(ctx: &Ctx<'_>, report: &Rc<RefCell<Diagnostics>>, name: &str, source: &str) {
     if let Err(error) = ctx.eval::<Value, _>(source) {
         record_error(ctx, report, name, error);
     }

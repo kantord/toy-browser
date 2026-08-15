@@ -43,11 +43,22 @@ pub(super) fn install_globals(
         .create_text_node(&text));
     dom_method!(api, ctx, dom, "tagName", |d, id: usize| d.tag_name(id));
     dom_method!(api, ctx, dom, "text", |d, id: usize| d.text(id));
-    dom_method!(api, ctx, dom, "removeNode", |d, id: usize| d.remove_node(id));
-    dom_method!(api, ctx, dom, "appendChild", |d, parent: usize, child: usize| d
-        .append_child(parent, child));
-    dom_method!(api, ctx, dom, "getAttribute", |d, id: usize, name: String| d
-        .attribute(id, &name));
+    dom_method!(api, ctx, dom, "removeNode", |d, id: usize| d
+        .remove_node(id));
+    dom_method!(
+        api,
+        ctx,
+        dom,
+        "appendChild",
+        |d, parent: usize, child: usize| d.append_child(parent, child)
+    );
+    dom_method!(
+        api,
+        ctx,
+        dom,
+        "getAttribute",
+        |d, id: usize, name: String| d.attribute(id, &name)
+    );
     dom_method!(
         api,
         ctx,
@@ -57,8 +68,13 @@ pub(super) fn install_globals(
     );
     dom_method!(api, ctx, dom, "setText", |d, id: usize, text: String| d
         .set_text(id, &text));
-    dom_method!(api, ctx, dom, "setInnerHtml", |d, id: usize, html: String| d
-        .set_inner_html(id, &html));
+    dom_method!(
+        api,
+        ctx,
+        dom,
+        "setInnerHtml",
+        |d, id: usize, html: String| d.set_inner_html(id, &html)
+    );
     dom_method!(api, ctx, dom, "innerHtml", |d, id: usize| d.inner_html(id));
     dom_method!(api, ctx, dom, "outerHtml", |d, id: usize| d.outer_html(id));
     dom_method!(api, ctx, dom, "queryAll", |d, selector: String| d
@@ -71,13 +87,24 @@ pub(super) fn install_globals(
         .into_iter()
         .map(|(name, value)| vec![name, value])
         .collect::<Vec<_>>());
-    dom_method!(api, ctx, dom, "removeAttribute", |d, id: usize, name: String| d
-        .remove_attribute(id, &name));
-    dom_method!(api, ctx, dom, "childNodes", |d, id: usize| d.child_nodes(id));
+    dom_method!(
+        api,
+        ctx,
+        dom,
+        "removeAttribute",
+        |d, id: usize, name: String| d.remove_attribute(id, &name)
+    );
+    dom_method!(api, ctx, dom, "childNodes", |d, id: usize| d
+        .child_nodes(id));
     dom_method!(api, ctx, dom, "nodeType", |d, id: usize| d.node_type(id));
     dom_method!(api, ctx, dom, "nodeValue", |d, id: usize| d.node_value(id));
-    dom_method!(api, ctx, dom, "insertBefore", |d, node: usize, anchor: usize| d
-        .insert_before(node, anchor));
+    dom_method!(
+        api,
+        ctx,
+        dom,
+        "insertBefore",
+        |d, node: usize, anchor: usize| d.insert_before(node, anchor)
+    );
     dom_method!(api, ctx, dom, "cloneNode", |d, id: usize| d.clone_node(id));
     dom_method!(api, ctx, dom, "elementChildren", |d, id: usize| d
         .element_children(id));
@@ -105,13 +132,16 @@ fn logger<'js>(
     // `Rest` and not `Vec`: console takes any number of arguments of any type,
     // whereas a `Vec` parameter would read the first argument as an array and
     // fail the whole call on `console.log("one")`.
-    let function = Function::new(ctx.clone(), move |ctx: Ctx<'js>, parts: Rest<Value<'js>>| {
-        let rendered: Vec<String> = parts.0.iter().map(|part| display(&ctx, part)).collect();
-        report
-            .borrow_mut()
-            .console
-            .push(format!("[{level}] {}", rendered.join(" ")));
-    })?;
+    let function = Function::new(
+        ctx.clone(),
+        move |ctx: Ctx<'js>, parts: Rest<Value<'js>>| {
+            let rendered: Vec<String> = parts.0.iter().map(|part| display(&ctx, part)).collect();
+            report
+                .borrow_mut()
+                .console
+                .push(format!("[{level}] {}", rendered.join(" ")));
+        },
+    )?;
     Ok(function)
 }
 

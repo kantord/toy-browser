@@ -49,11 +49,17 @@ fn text_and_attributes_read_without_javascript() {
 
     let heading = engine.query(&session, "h1.title").unwrap()[0];
     assert_eq!(engine.text(&session, heading).unwrap(), "Hello");
-    assert_eq!(engine.tag_name(&session, heading).unwrap().as_deref(), Some("h1"));
+    assert_eq!(
+        engine.tag_name(&session, heading).unwrap().as_deref(),
+        Some("h1")
+    );
 
     let marked = engine.query(&session, "p[data-mark]").unwrap()[0];
     assert_eq!(
-        engine.attribute(&session, marked, "data-mark").unwrap().as_deref(),
+        engine
+            .attribute(&session, marked, "data-mark")
+            .unwrap()
+            .as_deref(),
         Some("x")
     );
     assert_eq!(engine.attribute(&session, marked, "missing").unwrap(), None);
@@ -93,7 +99,10 @@ fn keyed_html_carries_a_key_per_element() {
     assert!(keyed.contains(&key), "expected {key} in {keyed}");
 
     // The class the door writes is the class the door reads.
-    assert_eq!(toy_browser_engine::key_of(&format!("title {key}")), Some(heading));
+    assert_eq!(
+        toy_browser_engine::key_of(&format!("title {key}")),
+        Some(heading)
+    );
 }
 
 #[test]
@@ -165,12 +174,16 @@ fn timers_wait_for_the_task_queue_to_be_turned() {
         )
         .unwrap();
 
-    let before = engine.evaluate(&session, "globalThis.ran", Mode::ByValue).unwrap();
+    let before = engine
+        .evaluate(&session, "globalThis.ran", Mode::ByValue)
+        .unwrap();
     assert_eq!(json(&before), serde_json::json!(false));
 
     engine.run_tasks(&session, Budget::default()).unwrap();
 
-    let after = engine.evaluate(&session, "globalThis.ran", Mode::ByValue).unwrap();
+    let after = engine
+        .evaluate(&session, "globalThis.ran", Mode::ByValue)
+        .unwrap();
     assert_eq!(json(&after), serde_json::json!(true));
 }
 

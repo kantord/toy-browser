@@ -64,7 +64,11 @@ impl Page {
 
     /// Mints another session id addressing this same page.
     pub fn attach(&mut self) -> String {
-        let id = format!("{}-cdp{}", self.cdp_session_id, self.extra_sessions.len() + 1);
+        let id = format!(
+            "{}-cdp{}",
+            self.cdp_session_id,
+            self.extra_sessions.len() + 1
+        );
         self.extra_sessions.push(id.clone());
         id
     }

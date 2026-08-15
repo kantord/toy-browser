@@ -134,6 +134,10 @@ fn respond(request: Request, answer: Answer) -> Result<()> {
         .map_err(|()| anyhow::anyhow!("building a header"))?;
 
     request
-        .respond(Response::from_string(body.to_string()).with_header(header).with_status_code(status))
+        .respond(
+            Response::from_string(body.to_string())
+                .with_header(header)
+                .with_status_code(status),
+        )
         .context("writing the response")
 }

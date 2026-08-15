@@ -62,7 +62,14 @@ async fn thirtyfour_can_drive_the_browser() {
     .expect("a session");
 
     driver.goto(fixture("hello.html")).await.expect("goto");
-    assert!(driver.current_url().await.expect("url").as_str().ends_with("hello.html"));
+    assert!(
+        driver
+            .current_url()
+            .await
+            .expect("url")
+            .as_str()
+            .ends_with("hello.html")
+    );
     assert_eq!(driver.title().await.expect("title"), "Hello");
 
     let heading = driver.find(By::Css("h1")).await.expect("h1");
@@ -82,7 +89,10 @@ async fn thirtyfour_can_drive_the_browser() {
     );
 
     // A page whose content only exists because its scripts ran.
-    driver.goto(fixture("js/js-module.html")).await.expect("goto");
+    driver
+        .goto(fixture("js/js-module.html"))
+        .await
+        .expect("goto");
     let swatches = driver.find_all(By::Css(".swatch")).await.expect("swatches");
     assert_eq!(swatches.len(), 3);
 

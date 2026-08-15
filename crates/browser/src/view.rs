@@ -8,7 +8,7 @@
 use anyhow::Result;
 use toy_browser_engine::Keyed;
 
-use crate::{measure, pipeline, Browser, Measured, PageId, Remote, Viewport};
+use crate::{Browser, Measured, PageId, Remote, Viewport, measure, pipeline};
 
 impl Browser {
     /// Where an element sits, measured at the page's current viewport.

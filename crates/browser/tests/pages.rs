@@ -41,7 +41,9 @@ fn navigating_loads_the_document_and_runs_its_scripts() {
 fn elements_read_without_running_anything() {
     let mut browser = browser();
     let page = browser.new_page().unwrap();
-    browser.navigate(&page, fixture("hello.html").as_str()).unwrap();
+    browser
+        .navigate(&page, fixture("hello.html").as_str())
+        .unwrap();
 
     let heading = &browser.query(&page, "h1").unwrap()[0];
     assert!(matches!(heading, Remote::Element(_)));
@@ -64,10 +66,15 @@ fn elements_are_measured_at_the_pages_viewport() {
             height: Some(600),
         },
     );
-    browser.navigate(&page, fixture("hello.html").as_str()).unwrap();
+    browser
+        .navigate(&page, fixture("hello.html").as_str())
+        .unwrap();
 
     let heading = browser.query(&page, "h1").unwrap()[0].clone();
-    let area = browser.bounding_box(&page, &heading).unwrap().expect("a box");
+    let area = browser
+        .bounding_box(&page, &heading)
+        .unwrap()
+        .expect("a box");
 
     // 800 viewport, less the body's 32px padding and the heading's 8px margin.
     assert_eq!(area.x, 40.0);
@@ -79,7 +86,9 @@ fn elements_are_measured_at_the_pages_viewport() {
 fn a_screenshot_is_the_size_it_was_asked_for() {
     let mut browser = browser();
     let page = browser.new_page().unwrap();
-    browser.navigate(&page, fixture("hello.html").as_str()).unwrap();
+    browser
+        .navigate(&page, fixture("hello.html").as_str())
+        .unwrap();
 
     let png = browser
         .screenshot(
@@ -101,7 +110,9 @@ fn an_unsupported_scheme_is_refused_by_reason() {
     let mut browser = browser();
     let page = browser.new_page().unwrap();
 
-    let error = browser.navigate(&page, "https://example.invalid/").unwrap_err();
+    let error = browser
+        .navigate(&page, "https://example.invalid/")
+        .unwrap_err();
     assert!(
         matches!(error, NavigationError::UnsupportedScheme(ref scheme) if scheme == "https"),
         "got {error:?}"
@@ -126,7 +137,10 @@ fn one_cache_serves_every_page() {
     let second = browser.new_page().unwrap();
     browser.navigate(&second, target.as_str()).unwrap();
 
-    assert!(after_one > 1, "expected the document and its modules, got {after_one}");
+    assert!(
+        after_one > 1,
+        "expected the document and its modules, got {after_one}"
+    );
     assert_eq!(resources.len(), after_one);
 }
 
@@ -141,7 +155,9 @@ fn evaluating_sees_geometry() {
             height: Some(600),
         },
     );
-    browser.navigate(&page, fixture("hello.html").as_str()).unwrap();
+    browser
+        .navigate(&page, fixture("hello.html").as_str())
+        .unwrap();
 
     let width = browser
         .evaluate(

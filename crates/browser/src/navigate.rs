@@ -58,8 +58,7 @@ impl Browser {
             .map_err(|error| NavigationError::Failed(error.to_string()))?;
         let run_scripts = self.pages.get(page).is_none_or(|page| page.run_scripts);
 
-        let target =
-            Url::parse(url).map_err(|_| NavigationError::Malformed(url.to_owned()))?;
+        let target = Url::parse(url).map_err(|_| NavigationError::Malformed(url.to_owned()))?;
         let source = self.document(&target)?;
 
         let outcome = self
@@ -112,5 +111,4 @@ impl Browser {
 
 /// What `about:` URLs load. The doctype matters: without one blitz parses in
 /// quirks mode, and its quirks stylesheet fails to parse noisily.
-const BLANK_HTML: &str =
-    "<!DOCTYPE html><html><head><title></title></head><body></body></html>";
+const BLANK_HTML: &str = "<!DOCTYPE html><html><head><title></title></head><body></body></html>";
