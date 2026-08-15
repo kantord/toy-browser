@@ -39,42 +39,64 @@ impl Realm {
         arguments: &[Argument],
         mode: Mode,
     ) -> Evaluated {
-        self.context.with(|ctx| {
-            let function = match ctx.eval::<Function, _>(format!("({declaration})")) {
-                Ok(function) => function,
-                Err(error) => return Evaluated::Threw(exception_text(&ctx, error)),
-            };
-
-            let mut call_args = rquickjs::function::Args::new(ctx.clone(), arguments.len());
-            let this = receiver.and_then(|handle| self.restore(&ctx, handle));
-            let this = this.unwrap_or_else(|| Value::new_undefined(ctx.clone()));
-            if call_args.this(this).is_err() {
-                return Evaluated::Threw("could not bind `this`".to_owned());
-            }
-
-            for argument in arguments {
-                let value = match argument {
-                    Argument::Value(json) => match json_to_js(&ctx, json) {
-                        Ok(value) => value,
-                        Err(error) => return Evaluated::Threw(exception_text(&ctx, error)),
-                    },
-                    Argument::Handle(handle) => self
-                        .restore(&ctx, handle)
-                        .unwrap_or_else(|| Value::new_undefined(ctx.clone())),
-                };
-                if call_args.push_arg(value).is_err() {
-                    return Evaluated::Threw("could not pass argument".to_owned());
-                }
-            }
-
-            match function.call_arg::<Value>(call_args) {
+        self.context.with(
+            |ctx| match self.invoke(&ctx, declaration, receiver, arguments) {
                 Ok(value) => {
                     let value = self.settle(value);
                     self.describe(&ctx, value, mode)
                 }
-                Err(error) => Evaluated::Threw(exception_text(&ctx, error)),
+                Err(message) => Evaluated::Threw(message),
+            },
+        )
+    }
+
+    /// Compiles the declaration, assembles the call and makes it.
+    ///
+    /// Every way this can fail ends as the same thing — a message for
+    /// [`Evaluated::Threw`] — so they travel as one `Err` rather than as five
+    /// early returns the caller has to read past. What comes back is the raw
+    /// result; settling and describing it is [`Realm::call`]'s job.
+    fn invoke<'js>(
+        &self,
+        ctx: &Ctx<'js>,
+        declaration: &str,
+        receiver: Option<&Handle>,
+        arguments: &[Argument],
+    ) -> Result<Value<'js>, String> {
+        let function: Function = ctx
+            .eval(format!("({declaration})"))
+            .map_err(|error| exception_text(ctx, error))?;
+
+        let mut call_args = rquickjs::function::Args::new(ctx.clone(), arguments.len());
+        let this = receiver
+            .and_then(|handle| self.restore(ctx, handle))
+            .unwrap_or_else(|| Value::new_undefined(ctx.clone()));
+        call_args
+            .this(this)
+            .map_err(|_| "could not bind `this`".to_owned())?;
+
+        for argument in arguments {
+            call_args
+                .push_arg(self.argument(ctx, argument)?)
+                .map_err(|_| "could not pass argument".to_owned())?;
+        }
+
+        function
+            .call_arg::<Value>(call_args)
+            .map_err(|error| exception_text(ctx, error))
+    }
+
+    /// One argument as a JavaScript value: a JSON copy, or whatever a handle
+    /// still stands for — undefined, if it stands for nothing.
+    fn argument<'js>(&self, ctx: &Ctx<'js>, argument: &Argument) -> Result<Value<'js>, String> {
+        match argument {
+            Argument::Value(json) => {
+                json_to_js(ctx, json).map_err(|error| exception_text(ctx, error))
             }
-        })
+            Argument::Handle(handle) => Ok(self
+                .restore(ctx, handle)
+                .unwrap_or_else(|| Value::new_undefined(ctx.clone()))),
+        }
     }
 
     /// Forgets a retained value.
