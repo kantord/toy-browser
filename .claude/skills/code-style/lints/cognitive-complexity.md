@@ -28,7 +28,17 @@ Work it out yourself: `git diff -- <file>`, and look at the flagged function.
   touches one.
 - **You changed it — caused.** Fix it, using the case below that matches.
 
-## Second: is the count nested, or spread?
+## Second: are the branches even this function's own?
+
+Ask before cutting anything. If the function was widened to serve two callers,
+the branches belong to the callers and no cut inside the function will do more
+than move them around.
+
+- [A function that got too parametric](/.claude/skills/code-style/lints/cognitive-complexity/over-parametric.md)
+  — a parameter passed through unchanged is a caller's identity, not data. This
+  was the whole of the worst score the repo has had.
+
+## Third: is the count nested, or spread?
 
 The number is the same either way and the fix is not.
 
