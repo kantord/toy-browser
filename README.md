@@ -68,6 +68,12 @@ keeps the lessons conformant. The budget in `limits.toml` comes down by
 deliberate commits, never to make a finding go away.
 `.claude/skills/code-style/SKILL.md` is the protocol.
 
+Formatting is the exception that shows what the lessons are for. `format.sh`
+runs `rustfmt` on every file as it is written and says nothing — no finding, no
+lesson. A lesson is worth writing when the repo answered a question one way and
+could have answered it another. `rustfmt` has one right answer, so a check that
+could only ever teach "run rustfmt" just runs it.
+
 **The budget applies to prose too** — `.rs`, `.md`, `.js` and `.sh` alike, the
 skill and its lessons included. That is what forces knowledge into small linked
 files rather than one wall of prose: the lessons are an
