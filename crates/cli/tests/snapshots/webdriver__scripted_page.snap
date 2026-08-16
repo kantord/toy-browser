@@ -1,0 +1,7 @@
+---
+source: crates/cli/tests/webdriver.rs
+expression: read_scripted_page(&driver).await
+---
+swatches: 3
+evaluated_sum: 2
+screenshot_width: 1280

@@ -1,0 +1,11 @@
+---
+source: crates/cli/tests/webdriver.rs
+expression: read_static_page(&driver).await
+---
+url_names_the_fixture: true
+title: Hello
+heading_text: "Hello, toy browser"
+heading_tag: h1
+heading_was_laid_out: true
+paragraphs: 2
+muted_class: muted

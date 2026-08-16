@@ -76,6 +76,16 @@ already was could never have fired. `docs/adr/0008` records the experiment,
 including that clippy counts match *guards* but not match *arms*, which makes
 the score a tripwire rather than a ranking.
 
+**An `#[allow]` written beside the code it excuses is itself a finding.** When an
+exemption is genuinely right it goes in a *sinkhole*: a file carrying one
+module-level `#![allow(clippy::…)]` and holding only code that needs it. Moving
+code is the cost, and the cost is the point — nobody pays it to get unblocked in
+a hurry. Four invariants are checked, the last of which re-runs clippy with
+`--force-warn` to prove **every function in a sinkhole still trips the lint it is
+exempt from**; anything that doesn't is reported as a freeloader and has to move
+out. That caught one on its first run. `docs/adr/0009` records the mechanism and
+why its first use was borderline.
+
 Two more clippy budgets sit beside it. `too-many-lines` bounds one function's
 body at 40, counting neither comments nor blank lines, because the longest
 function here is 144 lines inside a 218-line file — under the file budget, and

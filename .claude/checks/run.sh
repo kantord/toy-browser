@@ -105,6 +105,13 @@ for file in "${touched[@]}"; do
   fi
 done
 
+# Where an exemption may live is a different question from what any one lint
+# says, so it has its own script. It reports in the same shape.
+if [ -x .claude/checks/sinkholes.sh ]; then
+  sinkholes=$(.claude/checks/sinkholes.sh "${touched[@]}")
+  [ -n "$sinkholes" ] && findings+="$sinkholes"$'\n'
+fi
+
 # Clippy compiles the whole workspace, so its findings are filtered down to the
 # touched files rather than narrowed up front. Warnings only: a tree that does
 # not compile is a different problem, reported elsewhere.

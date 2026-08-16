@@ -27,10 +27,10 @@ use toy_browser_engine::{ElementBox, key_of};
 use crate::pipeline::Viewport;
 
 /// Every element's border box, keyed by DOM node id.
-pub type Boxes = HashMap<toy_browser_engine::NodeId, ElementBox>;
-
+///
 /// Boxes are cloned into pages and into the engine, so the map is small on
 /// purpose: one entry per element, four floats each.
+pub type Boxes = HashMap<toy_browser_engine::NodeId, ElementBox>;
 
 /// Lays out `keyed_html` and reports where each keyed element ended up.
 ///

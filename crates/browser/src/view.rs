@@ -53,34 +53,15 @@ impl Browser {
     pub(crate) fn sync(&mut self, page: &PageId) -> Result<()> {
         let session = self.session(page)?;
         let revision = self.engine.revision(&session)?;
-        let (viewport, url) = match self.pages.get(page) {
-            Some(page) => (page.viewport, page.url.clone()),
-            None => return Ok(()),
-        };
-
-        let stale = self
+        let Some((viewport, url)) = self
             .pages
             .get(page)
-            .and_then(|page| page.measured.as_ref())
-            .is_none_or(|measured| {
-                measured.revision != revision
-                    || measured.width != viewport.width
-                    || measured.height != viewport.height
-            });
+            .map(|page| (page.viewport, page.url.clone()))
+        else {
+            return Ok(());
+        };
 
-        if stale {
-            let keyed = self.engine.html(&session, Keyed::Yes)?;
-            let stylesheet = pipeline::stylesheet(&keyed);
-            let boxes = measure::boxes(&keyed, stylesheet, &self.fonts, viewport)?;
-            if let Some(page) = self.pages.get_mut(page) {
-                page.measured = Some(Measured {
-                    revision,
-                    width: viewport.width,
-                    height: viewport.height,
-                    boxes,
-                });
-            }
-        }
+        self.remeasure_if_stale(page, &session, revision, viewport)?;
 
         let boxes = self
             .pages
@@ -97,5 +78,41 @@ impl Browser {
                 boxes,
             },
         )
+    }
+
+    /// Lays the page out again if anything it was measured against has moved
+    /// on — the document itself, or the viewport it was measured at.
+    fn remeasure_if_stale(
+        &mut self,
+        page: &PageId,
+        session: &toy_browser_engine::SessionId,
+        revision: u64,
+        viewport: Viewport,
+    ) -> Result<()> {
+        let fresh = self
+            .pages
+            .get(page)
+            .and_then(|page| page.measured.as_ref())
+            .is_some_and(|measured| {
+                measured.revision == revision
+                    && measured.width == viewport.width
+                    && measured.height == viewport.height
+            });
+        if fresh {
+            return Ok(());
+        }
+
+        let keyed = self.engine.html(session, Keyed::Yes)?;
+        let stylesheet = pipeline::stylesheet(&keyed);
+        let boxes = measure::boxes(&keyed, stylesheet, &self.fonts, viewport)?;
+        if let Some(page) = self.pages.get_mut(page) {
+            page.measured = Some(Measured {
+                revision,
+                width: viewport.width,
+                height: viewport.height,
+                boxes,
+            });
+        }
+        Ok(())
     }
 }

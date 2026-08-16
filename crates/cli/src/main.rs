@@ -170,31 +170,44 @@ fn write_artifacts(
 
 /// One indented line per thing worth knowing about the render.
 fn report(loaded: &Loaded, raster: &toy_browser::Raster, ran_scripts: bool) {
-    let scripts = &loaded.scripts;
-    if !scripts.entry_points.is_empty() {
-        println!(
-            "  {} JS entry point(s); {} external script(s) loaded, {} unresolved",
-            scripts.entry_points.len(),
-            scripts.loaded_count(),
-            scripts.unresolved_count(),
-        );
-    }
+    report_scripts(loaded, ran_scripts);
+    report_output(loaded);
+    report_raster(raster);
+}
 
-    if ran_scripts && !scripts.entry_points.is_empty() {
+/// What script the page had, and what became of it.
+fn report_scripts(loaded: &Loaded, ran_scripts: bool) {
+    let scripts = &loaded.scripts;
+    if scripts.entry_points.is_empty() {
+        return;
+    }
+    println!(
+        "  {} JS entry point(s); {} external script(s) loaded, {} unresolved",
+        scripts.entry_points.len(),
+        scripts.loaded_count(),
+        scripts.unresolved_count(),
+    );
+    if ran_scripts {
         println!(
             "  js: {} script(s) run, {} skipped",
             loaded.executed, loaded.skipped
         );
     }
+}
 
+/// What the page itself said while it ran.
+fn report_output(loaded: &Loaded) {
     for line in &loaded.emitted.console {
         println!("    {line}");
     }
     for error in &loaded.emitted.errors {
         println!("    error: {error}");
     }
+}
 
-    // A page that needed script it did not get renders as one flat color.
+/// What came out the other end. A page that needed script it did not get
+/// renders as one flat color.
+fn report_raster(raster: &toy_browser::Raster) {
     if let Some([r, g, b, a]) = raster.uniform_color {
         println!("  blank: every pixel is rgba({r}, {g}, {b}, {a})");
     }

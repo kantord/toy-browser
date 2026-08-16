@@ -26,6 +26,11 @@ Nothing here needs a runtime, an index to rebuild, or a tool to read it.
 - [fn-params-excessive-bools](/.claude/skills/code-style/lints/fn-params-excessive-bools.md)
   — two flags in a signature. Points at the over-parametric lesson, which is
   the same finding named at its cause.
+- [allow-outside-sinkhole](/.claude/skills/code-style/lints/allow-outside-sinkhole.md)
+  — an `#[allow]` written next to the code it excuses. Says where an exemption
+  may live instead, and the question that usually means you do not need one.
+- [sinkhole-invalid](/.claude/skills/code-style/lints/sinkhole-invalid.md)
+  — a sinkhole that broke one of the four invariants that keep it honest.
 
 `too-many-lines` has no lesson on purpose. Nobody has yet had to cut a function
 for length here, and writing the node before that happens is how the

@@ -111,6 +111,14 @@ better pattern first and bring *that* back — an exemption is what is left when
 the search failed, argued for in the open, never something a session decides on
 its own to get unblocked.
 
+When one is genuinely right it goes in a **sinkhole**, never beside the code it
+excuses — writing `#[allow]` in place is itself a finding. See
+[the lesson](/.claude/skills/code-style/lints/allow-outside-sinkhole.md), which
+also carries the question that usually means you do not need one: is the rule
+wrong for a whole category, or does this code have to break a rule that is
+otherwise right? Only the second is a sinkhole; the first means the check is
+mis-scoped and the check is what should change.
+
 ## The vocabulary
 
 **Check** — a program that reads the code and emits findings. Clippy is one; the

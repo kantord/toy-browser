@@ -75,7 +75,14 @@ fn collect_script(
     };
 
     let specifier = attr(node, "src");
-    let timing = script_timing(kind, specifier.is_some(), has("async"), has("defer"));
+    let timing = script_timing(
+        kind,
+        ScriptAttributes {
+            external: specifier.is_some(),
+            is_async: has("async"),
+            defer: has("defer"),
+        },
+    );
     let origin = describe_element(node, "script");
 
     let payload = match specifier {
@@ -104,16 +111,44 @@ fn classic_kind(nomodule: bool) -> EntryKind {
     }
 }
 
-fn script_timing(kind: EntryKind, external: bool, is_async: bool, defer: bool) -> Timing {
+/// The `<script>` attributes that decide when it runs.
+///
+/// Together rather than as three `bool` parameters: at a call site three bools
+/// in a row can be transposed and still compile, and these three mean entirely
+/// different things.
+struct ScriptAttributes {
+    /// It has a `src`, so it is fetched rather than read out of the markup.
+    external: bool,
+    is_async: bool,
+    defer: bool,
+}
+
+fn script_timing(kind: EntryKind, attributes: ScriptAttributes) -> Timing {
     match kind {
         EntryKind::ImportMap | EntryKind::DataBlock => Timing::NotExecuted,
-        // Modules are deferred unless marked async. `defer` is meaningless.
-        EntryKind::ModuleScript if is_async => Timing::Async,
-        EntryKind::ModuleScript => Timing::Deferred,
-        // `async`/`defer` only apply to external classic scripts.
-        _ if !external => Timing::ParserBlocking,
-        _ if is_async => Timing::Async,
-        _ if defer => Timing::Deferred,
+        EntryKind::ModuleScript => module_timing(&attributes),
+        _ => classic_timing(&attributes),
+    }
+}
+
+/// A module is deferred unless it is marked async. `defer` means nothing on
+/// one, which is why the module rules are separate from the classic ones.
+fn module_timing(attributes: &ScriptAttributes) -> Timing {
+    match attributes.is_async {
+        true => Timing::Async,
+        false => Timing::Deferred,
+    }
+}
+
+/// `async` and `defer` only apply to a classic script the browser has to go and
+/// fetch; an inline one blocks the parser whatever it is marked.
+fn classic_timing(attributes: &ScriptAttributes) -> Timing {
+    match attributes {
+        ScriptAttributes {
+            external: false, ..
+        } => Timing::ParserBlocking,
+        ScriptAttributes { is_async: true, .. } => Timing::Async,
+        ScriptAttributes { defer: true, .. } => Timing::Deferred,
         _ => Timing::ParserBlocking,
     }
 }

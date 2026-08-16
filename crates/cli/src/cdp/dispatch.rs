@@ -63,91 +63,103 @@ impl<'b> Session<'b> {
     /// Commands addressed to the browser itself, with no session id.
     fn browser_command(&mut self, method: &str, params: &Value) -> Result<Outcome> {
         Ok(match method {
-            "Browser.getVersion" => Outcome::ok(json!({
-                "protocolVersion": "1.3",
-                "product": "HeadlessChrome/126.0.0.0",
-                "revision": "@toy-browser",
-                "userAgent": USER_AGENT,
-                "jsVersion": "quickjs",
-            })),
-
-            "Target.getTargetInfo" => Outcome::ok(json!({
-                "targetInfo": {
-                    "targetId": "BROWSER",
-                    "type": "browser",
-                    "title": "toy-browser",
-                    "url": "",
-                    "attached": true,
-                    "canAccessOpener": false,
-                },
-            })),
-
-            "Target.createTarget" => {
-                let page = Page::new(self.next_index, self.browser.new_page()?);
-                self.next_index += 1;
-                let result = json!({ "targetId": page.target_id });
-                // The attach event must arrive before this response: Playwright
-                // looks the page up by target id on the line after the await,
-                // and finds nothing if the attach has not landed yet.
-                let before = vec![attached_event(&page)];
-                self.pages.push(page);
-
-                Outcome {
-                    before,
-                    result,
-                    after: Vec::new(),
-                }
-            }
-
-            // A client attaching to the browser expects an id to hold the
-            // conversation on. Answering without one makes it register a
-            // session under `undefined` and misroute every reply after.
-            "Target.attachToBrowserTarget" => {
-                let id = format!("BROWSER-cdp{}", self.browser_sessions.len() + 1);
-                self.browser_sessions.push(id.clone());
-                Outcome::ok(json!({ "sessionId": id }))
-            }
-
-            "Target.attachToTarget" => {
-                let target_id = params["targetId"].as_str().unwrap_or_default().to_owned();
-                let attached = self
-                    .pages
-                    .iter_mut()
-                    .find(|page| page.target_id == target_id)
-                    .map(|page| page.attach());
-                Outcome::ok(match attached {
-                    Some(session) => json!({ "sessionId": session }),
-                    None => json!({}),
-                })
-            }
-
-            "Target.closeTarget" => {
-                let target_id = params["targetId"].as_str().unwrap_or_default();
-                let Some(index) = self
-                    .pages
-                    .iter()
-                    .position(|page| page.target_id == target_id)
-                else {
-                    return Ok(Outcome::ok(json!({ "success": false })));
-                };
-                let page = self.pages.remove(index);
-                self.browser.close_page(&page.page);
-
-                Outcome {
-                    before: Vec::new(),
-                    result: json!({ "success": true }),
-                    after: vec![event(
-                        "Target.detachedFromTarget",
-                        json!({
-                            "sessionId": page.cdp_session_id,
-                            "targetId": page.target_id,
-                        }),
-                        None,
-                    )],
-                }
-            }
-
+            "Browser.getVersion" => Outcome::ok(version()),
+            "Target.getTargetInfo" => Outcome::ok(browser_target_info()),
+            "Target.createTarget" => self.create_target()?,
+            "Target.attachToBrowserTarget" => self.attach_to_browser(),
+            "Target.attachToTarget" => self.attach_to_target(params),
+            "Target.closeTarget" => self.close_target(params),
             other => Outcome::ok(unhandled(other)),
         })
     }
+
+    fn create_target(&mut self) -> Result<Outcome> {
+        let page = Page::new(self.next_index, self.browser.new_page()?);
+        self.next_index += 1;
+        let result = json!({ "targetId": page.target_id });
+        // The attach event must arrive before this response: Playwright looks
+        // the page up by target id on the line after the await, and finds
+        // nothing if the attach has not landed yet.
+        let before = vec![attached_event(&page)];
+        self.pages.push(page);
+
+        Ok(Outcome {
+            before,
+            result,
+            after: Vec::new(),
+        })
+    }
+
+    /// A client attaching to the browser expects an id to hold the conversation
+    /// on. Answering without one makes it register a session under `undefined`
+    /// and misroute every reply after.
+    fn attach_to_browser(&mut self) -> Outcome {
+        let id = format!("BROWSER-cdp{}", self.browser_sessions.len() + 1);
+        self.browser_sessions.push(id.clone());
+        Outcome::ok(json!({ "sessionId": id }))
+    }
+
+    fn attach_to_target(&mut self, params: &Value) -> Outcome {
+        let target_id = params["targetId"].as_str().unwrap_or_default().to_owned();
+        let attached = self
+            .pages
+            .iter_mut()
+            .find(|page| page.target_id == target_id)
+            .map(|page| page.attach());
+        Outcome::ok(match attached {
+            Some(session) => json!({ "sessionId": session }),
+            None => json!({}),
+        })
+    }
+
+    fn close_target(&mut self, params: &Value) -> Outcome {
+        let target_id = params["targetId"].as_str().unwrap_or_default();
+        let Some(index) = self
+            .pages
+            .iter()
+            .position(|page| page.target_id == target_id)
+        else {
+            return Outcome::ok(json!({ "success": false }));
+        };
+        let page = self.pages.remove(index);
+        self.browser.close_page(&page.page);
+
+        Outcome {
+            before: Vec::new(),
+            result: json!({ "success": true }),
+            after: vec![event(
+                "Target.detachedFromTarget",
+                json!({
+                    "sessionId": page.cdp_session_id,
+                    "targetId": page.target_id,
+                }),
+                None,
+            )],
+        }
+    }
+}
+
+/// What this browser answers `Browser.getVersion` with.
+fn version() -> Value {
+    json!({
+        "protocolVersion": "1.3",
+        "product": "HeadlessChrome/126.0.0.0",
+        "revision": "@toy-browser",
+        "userAgent": USER_AGENT,
+        "jsVersion": "quickjs",
+    })
+}
+
+/// The browser target itself, which owns no document.
+fn browser_target_info() -> Value {
+    json!({
+        "targetInfo": {
+            "targetId": "BROWSER",
+            "type": "browser",
+            "title": "toy-browser",
+            "url": "",
+            "attached": true,
+            "canAccessOpener": false,
+        },
+    })
 }
