@@ -13,6 +13,8 @@ edition = "2024"
 # clippy reads it from; a finding quotes it back as "(9/7)".
 [workspace.lints.clippy]
 cognitive_complexity = "warn"
+too_many_lines = "warn"
+fn_params_excessive_bools = "warn"
 
 [workspace.dependencies]
 anyhow = "1.0.104"

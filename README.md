@@ -69,12 +69,20 @@ deliberate commits, never to make a finding go away.
 `.claude/skills/code-style/SKILL.md` is the protocol.
 
 `cognitive-complexity` is the second budget, and it is set *below* the code
-rather than at it: four functions are over it on purpose. Three attempts to
+rather than at it: four functions were over it on purpose. Three attempts to
 trick an agent into writing a function tangled enough to trip it all failed —
 each one decomposed the work unprompted — so a threshold placed where the tree
 already was could never have fired. `docs/adr/0008` records the experiment,
 including that clippy counts match *guards* but not match *arms*, which makes
 the score a tripwire rather than a ranking.
+
+Two more clippy budgets sit beside it. `too-many-lines` bounds one function's
+body at 40, counting neither comments nor blank lines, because the longest
+function here is 144 lines inside a 218-line file — under the file budget, and
+nearly branchless, so neither other check could see it. `max-fn-params-bools` is
+1, which fires about never and, when it does, names the reason a function got
+complicated rather than the fact that it did. The line budget ratchets down and
+the floor is deliberately unsettled; ADR-0008 says how it gets found.
 
 Formatting is the exception that shows what the lessons are for. `format.sh`
 runs `rustfmt` on every file as it is written and says nothing — no finding, no

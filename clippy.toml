@@ -14,3 +14,20 @@
 #
 # It comes down by deliberate commits, never up to make a finding go away.
 cognitive-complexity-threshold = 5
+
+# How long one function's body may be, counting neither comments nor blank
+# lines — so it measures code, where `max_file_lines` deliberately measures
+# prose as well. The two do not overlap: the worst offender here is 144 lines
+# inside a 218-line file, which is invisible to a file budget of 320 and scores
+# only 5 on complexity because it barely branches.
+#
+# 40 catches five functions. The floor is deliberately not settled: ratchet
+# 40 -> 30 -> 25 -> 20 and judge from the extractions each notch forces. If they
+# keep naming real concepts, keep going; when they start coming out as
+# `write_node_part2`, that was the floor. See docs/adr/0008.
+too-many-lines-threshold = 40
+
+# Two bools in a signature usually means two callers sharing one body, which is
+# the cause `cognitive-complexity` only ever sees as a symptom. One is enough to
+# say so, and at 1 this fires exactly once in the whole tree.
+max-fn-params-bools = 1

@@ -23,6 +23,15 @@ Nothing here needs a runtime, an index to rebuild, or a tool to read it.
 - [cognitive-complexity](/.claude/skills/code-style/lints/cognitive-complexity.md)
   — a function over its branch budget. Sorts nested branches from a flat run,
   and says how to work out an origin clippy does not report.
+- [fn-params-excessive-bools](/.claude/skills/code-style/lints/fn-params-excessive-bools.md)
+  — two flags in a signature. Points at the over-parametric lesson, which is
+  the same finding named at its cause.
+
+`too-many-lines` has no lesson on purpose. Nobody has yet had to cut a function
+for length here, and writing the node before that happens is how the
+cognitive-complexity one ended up less trustworthy than the rest — see
+[ADR-0008](/docs/adr/0008-a-budget-set-below-the-code.md). The first agent to
+trip it escalates, and writes what gets settled.
 
 A lesson is written only after a grilling session has settled how this repo
 handles that kind — see [the playbook](/.claude/skills/code-style/SKILL.md). An

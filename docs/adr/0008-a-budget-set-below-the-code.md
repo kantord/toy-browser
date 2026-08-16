@@ -77,6 +77,49 @@ rather than the harness guessing. The escalation that produced this ADR made the
 point: a two-doc-comment change on `serialize.rs` was reported for a function it
 never opened.
 
+## Two more levers, because this one stopped catching things
+
+Once `write_node` and `Realm::call` were fixed, the tree's worst score was 6 and
+both remaining findings were flat. Pushing the threshold to 4 was rejected: four
+independent runs put competent new code at **4 or under**, so 5 sits exactly one
+notch above where ordinary work lands. That is where a tripwire belongs. At 4 it
+would fire on normal code, and a check that fires on normal code teaches people
+to skip reading it.
+
+What the complexity budget cannot see is a function that is long and *straight*.
+`page_command` in `crates/cli/src/cdp/page_commands.rs` is 144 lines inside a
+218-line file: under the 320-line file budget, and only 5 on complexity because
+it barely branches. Invisible to both checks. So `too_many_lines` was added at
+40, which catches it and four others.
+
+`fn_params_excessive_bools` was added at 1 on the same pass. It fires exactly
+once in the tree — `script_timing`, which is *also* one of the two remaining
+complexity findings. That is the point of it: it names the cause where
+`cognitive-complexity` only ever saw the symptom, and it would have caught
+`write_node`'s `keyed` flag directly.
+
+## The floor is not settled, deliberately
+
+An aspiration of ~7 lines per function was raised, and the first answer given —
+that Rust cannot go that low — was wrong. `escape_text` was offered as an
+irreducible 8-line function and it was not: extracting the per-character table
+cuts it to 1 line plus a 6-line `entity` function, and doing the same to
+`escape_attribute` showed the two were **the same walk over different tables**,
+a duplication both eight-line versions had hidden. That cut is in the tree now.
+
+Every other supposed floor yields the same way: a `rustfmt`-wrapped registration
+becomes its own `fn`, a wide match becomes a dispatch over one-line arms, a
+struct literal becomes a constructor. Seven is reachable. What it costs is a
+codebase of several hundred three-line functions, where the burden moves from
+holding a long body in your head to chasing six hops to find the work — and
+onto naming functions that do not deserve names.
+
+Nothing available settles that trade, so it is not settled here. Ratchet
+40 -> 30 -> 25 -> 20 and read the extractions each notch forces. While they keep
+coming out like `entity` — naming a real concept, exposing real duplication —
+keep going. When they start coming out like `write_node_part2`, that was the
+floor, found rather than asserted.
+
 ## Consequences
 
 - Four warnings stand in the tree, by design. `cargo clippy` is no longer clean,

@@ -172,23 +172,50 @@ fn write_children<A: Annotate>(
     }
 }
 
-fn escape_text(text: &str, out: &mut String) {
+/// Writes `text`, replacing each character `entity` names with its escape.
+///
+/// The two escapes below are the same walk over different tables: what a
+/// character means depends only on where it is being written. `entity` is
+/// generic rather than a `fn` pointer so each caller's table inlines into its
+/// own copy of the loop.
+fn escape(text: &str, entity: impl Fn(char) -> Option<&'static str>, out: &mut String) {
     for ch in text.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            _ => out.push(ch),
+        match entity(ch) {
+            Some(escaped) => out.push_str(escaped),
+            None => out.push(ch),
         }
     }
 }
 
-fn escape_attribute(value: &str, out: &mut String) {
-    for ch in value.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '"' => out.push_str("&quot;"),
-            _ => out.push(ch),
-        }
+/// What a character means in a text node: `&` starts a reference and `<` starts
+/// a tag. `>` cannot begin anything, but is escaped anyway so that no run of
+/// text can close a construct it was never part of. `"` is left alone — quotes
+/// delimit nothing out here, and escaping them would change what the page reads
+/// like for no gain on the round trip.
+fn text_entity(ch: char) -> Option<&'static str> {
+    match ch {
+        '&' => Some("&amp;"),
+        '<' => Some("&lt;"),
+        '>' => Some("&gt;"),
+        _ => None,
     }
+}
+
+/// What a character means inside an attribute value. [`write_attributes`]
+/// always wraps values in double quotes, so `"` is the one character that could
+/// end one early. `<` and `>` are inert between quotes and stay readable.
+fn attribute_entity(ch: char) -> Option<&'static str> {
+    match ch {
+        '&' => Some("&amp;"),
+        '"' => Some("&quot;"),
+        _ => None,
+    }
+}
+
+fn escape_text(text: &str, out: &mut String) {
+    escape(text, text_entity, out);
+}
+
+fn escape_attribute(value: &str, out: &mut String) {
+    escape(value, attribute_entity, out);
 }
