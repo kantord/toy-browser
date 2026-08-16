@@ -1,9 +1,10 @@
 // Events: the listener table every target shares, and the event objects a
 // page can construct.
 //
-// There is no capture, no bubbling and no propagation path. A dispatch calls
-// the listeners registered on exactly one target, because the only events this
-// browser raises are ones it raises itself.
+// A dispatch travels: down from `window` to the target capturing, then back out
+// bubbling if the event is the kind that does. The walk itself is Rust — see
+// `realm/node/events.rs` — so an ancestor nobody registered on costs nothing.
+// What is left here is the shape of an event, and the flags the walk reads.
 
 (() => {
   const tb = globalThis.__tb;
@@ -25,12 +26,24 @@
       this.defaultPrevented = false;
       this.target = null;
       this.currentTarget = null;
+      this.eventPhase = 0;
+      // Read by the walk between targets and between listeners. Own properties
+      // rather than closure state, because Rust is what reads them.
+      this.__stopped = false;
+      this.__stoppedImmediate = false;
     }
     preventDefault() {
       this.defaultPrevented = true;
     }
-    stopPropagation() {}
-    stopImmediatePropagation() {}
+    stopPropagation() {
+      this.__stopped = true;
+    }
+    // Stops the rest of this target's listeners as well as the rest of the
+    // walk, so it sets both.
+    stopImmediatePropagation() {
+      this.__stopped = true;
+      this.__stoppedImmediate = true;
+    }
   }
 
   class CustomEvent extends Event {
@@ -49,17 +62,28 @@
   globalThis.InputEvent = Event;
   globalThis.PointerEvent = Event;
 
-  // The events the browser itself raises, which carry a target from the start
-  // and never travel.
-  tb.makeEvent = (type, target) => ({
+  // The events the browser itself raises. These carry a target from the start,
+  // and say whether they travel: most lifecycle events do not, which is why
+  // `bubbles` is off unless a caller asks for it.
+  tb.makeEvent = (type, target, bubbles = false) => ({
     type,
     target,
     currentTarget: target,
+    bubbles,
+    eventPhase: 0,
     defaultPrevented: false,
+    __stopped: false,
+    __stoppedImmediate: false,
     preventDefault() {
       this.defaultPrevented = true;
     },
-    stopPropagation() {},
+    stopPropagation() {
+      this.__stopped = true;
+    },
+    stopImmediatePropagation() {
+      this.__stopped = true;
+      this.__stoppedImmediate = true;
+    },
   });
 
   // An `on*` attribute is a function body, compiled on first use.

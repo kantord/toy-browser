@@ -54,8 +54,10 @@
   globals.devicePixelRatio = 1;
   globals.location = { href: "about:blank", protocol: "about:", toString: () => globals.location.href };
 
-  globals.addEventListener = (type, listener) => tb.addListener(tb.WINDOW, type, listener);
-  globals.removeEventListener = (type, listener) => tb.removeListener(tb.WINDOW, type, listener);
+  globals.addEventListener = (type, listener, options) =>
+    tb.addListener(tb.WINDOW, type, listener, options);
+  globals.removeEventListener = (type, listener, options) =>
+    tb.removeListener(tb.WINDOW, type, listener, options);
   globals.dispatchEvent = (event) => {
     tb.dispatch(tb.WINDOW, event);
     return !event.defaultPrevented;
@@ -71,7 +73,9 @@
     // Every script has run; the parser would now be done.
     domContentLoaded() {
       setReadyState("interactive");
-      tb.dispatch(document.__id, tb.makeEvent("DOMContentLoaded", document));
+      // The one lifecycle event that bubbles, which is how a listener on
+      // `window` hears about it — the usual place a page puts one.
+      tb.dispatch(document.__id, tb.makeEvent("DOMContentLoaded", document, true));
     },
 
     // Subresources have settled. Failures are reported as error events, which

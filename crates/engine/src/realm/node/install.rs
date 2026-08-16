@@ -3,7 +3,7 @@
 use std::rc::Rc;
 
 use anyhow::Result;
-use rquickjs::{Class, Coerced, Ctx, Function, Object, Persistent, Value};
+use rquickjs::{Class, Coerced, Ctx, Function, Object, Persistent, Value, function::Opt};
 
 use super::{Node, Sharing, support};
 use crate::dom::Dom;
@@ -61,8 +61,10 @@ fn listen<'js>(
     target: Coerced<String>,
     kind: String,
     listener: Function<'js>,
+    options: Opt<Value<'js>>,
 ) -> rquickjs::Result<()> {
-    super::events::add_listener(&ctx, target.0, kind, listener)
+    let capture = super::events::capture_of(options.0.as_ref());
+    super::events::add_listener(&ctx, target.0, kind, listener, capture)
 }
 
 fn unlisten<'js>(
@@ -70,8 +72,10 @@ fn unlisten<'js>(
     target: Coerced<String>,
     kind: String,
     listener: Function<'js>,
+    options: Opt<Value<'js>>,
 ) -> rquickjs::Result<()> {
-    super::events::remove_listener(&ctx, target.0, kind, listener)
+    let capture = super::events::capture_of(options.0.as_ref());
+    super::events::remove_listener(&ctx, target.0, kind, listener, capture)
 }
 
 fn fire<'js>(ctx: Ctx<'js>, target: Coerced<String>, event: Value<'js>) -> rquickjs::Result<()> {

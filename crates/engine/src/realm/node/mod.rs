@@ -13,6 +13,7 @@ use std::rc::Rc;
 use rquickjs::{
     Class, Coerced, Ctx, Function, Object, Value,
     class::{Trace, Tracer},
+    function::Opt,
 };
 
 mod binder;
@@ -24,14 +25,17 @@ mod support;
 mod tasks;
 
 use binder::dom_members;
-pub use support::Sharing;
-use events::{add_listener, dispatch, remove_listener};
-use support::{
-    descendants_matching, descends_from, dom_of, or_null, step, wrap, wrap_all, wrap_maybe,
-};
 pub(super) use events::{
-    add_listener as listen_on, dispatch as dispatch_on, remove_listener as unlisten_on,
+    add_listener as listen_on, capture_of as capture_from, dispatch as dispatch_on,
+    remove_listener as unlisten_on,
 };
+use events::{add_listener, dispatch, remove_listener};
+pub use support::Sharing;
+use support::{
+    descendants_matching, descends_from, dom_of, nearest_matching, or_null, step, wrap, wrap_all,
+    wrap_maybe,
+};
+
 pub(super) use support::{wrap as wrap_id, wrap_all as wrap_all_ids, wrap_maybe as wrap_maybe_id};
 
 use crate::dom::Dom;
@@ -302,15 +306,7 @@ dom_members! {
             ctx: Ctx<'js>,
             selector: Coerced<String>,
         ) -> rquickjs::Result<Value<'js>> {
-            let matching = self.dom.query_all(&selector.0);
-            let mut at = Some(self.id);
-            while let Some(current) = at {
-                if matching.contains(&current) {
-                    return wrap(&ctx, current);
-                }
-                at = self.dom.parent(current);
-            }
-            Ok(Value::new_null(ctx))
+            wrap_maybe(&ctx, nearest_matching(&self.dom, self.id, &selector.0))
         }
     }
 }

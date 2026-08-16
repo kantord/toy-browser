@@ -28,24 +28,6 @@ fn a_listener_hears_an_event_dispatched_at_its_own_target() {
 }
 
 #[test]
-fn events_do_not_travel_to_ancestors() {
-    let (mut engine, session) = page(TREE);
-
-    // No capture, no bubbling, no propagation path — a dispatch reaches exactly
-    // one target. `bubbles: true` is stored and then ignored.
-    let result = js(
-        &mut engine,
-        &session,
-        "globalThis.heard = [];
-         document.getElementById('outer').addEventListener('click', () => heard.push('outer'));
-         document.getElementById('tap').addEventListener('click', () => heard.push('tap'));
-         document.getElementById('tap').dispatchEvent(new Event('click', { bubbles: true }));
-         return heard;",
-    );
-    assert_eq!(result, json!(["tap"]));
-}
-
-#[test]
 fn a_removed_listener_stops_hearing() {
     let (mut engine, session) = page(TREE);
 

@@ -103,17 +103,19 @@ macro_rules! dom_members {
             )*)?
 
             $(
-                /// Registering, unregistering and firing. There is no capture
-                /// and no bubbling: a dispatch reaches exactly one target.
+                /// Registering, unregistering and firing. The third argument
+                /// is the capture flag, however the page chose to spell it.
                 #[qjs(rename = "addEventListener")]
                 pub fn add_event_listener<'js>(
                     &self,
                     ctx: Ctx<'js>,
                     kind: String,
                     listener: Function<'js>,
+                    options: Opt<Value<'js>>,
                 ) -> rquickjs::Result<()> {
                     let $er = self;
-                    add_listener(&ctx, $ekey, kind, listener)
+                    let capture = capture_from(options.0.as_ref());
+                    add_listener(&ctx, $ekey, kind, listener, capture)
                 }
 
                 #[qjs(rename = "removeEventListener")]
@@ -122,9 +124,11 @@ macro_rules! dom_members {
                     ctx: Ctx<'js>,
                     kind: String,
                     listener: Function<'js>,
+                    options: Opt<Value<'js>>,
                 ) -> rquickjs::Result<()> {
                     let $er = self;
-                    remove_listener(&ctx, $ekey, kind, listener)
+                    let capture = capture_from(options.0.as_ref());
+                    remove_listener(&ctx, $ekey, kind, listener, capture)
                 }
 
                 #[qjs(rename = "dispatchEvent")]

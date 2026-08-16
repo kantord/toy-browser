@@ -12,6 +12,7 @@ use anyhow::Result;
 use rquickjs::{
     Class, Coerced, Ctx, Function, Object, Value,
     class::{Trace, Tracer},
+    function::Opt,
 };
 
 use super::node::{dispatch_on, wrap_all_ids, wrap_id, wrap_maybe_id};
@@ -114,8 +115,10 @@ impl Document {
         ctx: Ctx<'js>,
         kind: String,
         listener: Function<'js>,
+        options: Opt<Value<'js>>,
     ) -> rquickjs::Result<()> {
-        super::node::listen_on(&ctx, self.dom.root().to_string(), kind, listener)
+        let capture = super::node::capture_from(options.0.as_ref());
+        super::node::listen_on(&ctx, self.dom.root().to_string(), kind, listener, capture)
     }
 
     #[qjs(rename = "removeEventListener")]
@@ -124,8 +127,10 @@ impl Document {
         ctx: Ctx<'js>,
         kind: String,
         listener: Function<'js>,
+        options: Opt<Value<'js>>,
     ) -> rquickjs::Result<()> {
-        super::node::unlisten_on(&ctx, self.dom.root().to_string(), kind, listener)
+        let capture = super::node::capture_from(options.0.as_ref());
+        super::node::unlisten_on(&ctx, self.dom.root().to_string(), kind, listener, capture)
     }
 
     #[qjs(rename = "dispatchEvent")]

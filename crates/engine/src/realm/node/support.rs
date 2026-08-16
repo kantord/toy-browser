@@ -8,7 +8,7 @@
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use rquickjs::{Class, Ctx, Function, JsLifetime, Object, Persistent, Value};
+use rquickjs::{Class, Ctx, JsLifetime, Object, Persistent, Value};
 
 use super::Node;
 use crate::{Boxes, ElementBox, Point, dom::Dom};
@@ -29,8 +29,8 @@ pub struct Sharing {
     prototypes: RefCell<HashMap<String, Persistent<Object<'static>>>>,
     /// Listeners, keyed by the target they were registered on and the event
     /// type. A page's own functions, so retaining them pins them exactly as the
-    /// wrappers are pinned.
-    pub(super) listeners: RefCell<HashMap<String, Vec<Persistent<Function<'static>>>>>,
+    /// wrappers are pinned. What travels through them lives in `events`.
+    pub(super) listeners: RefCell<HashMap<String, Vec<super::events::Registered>>>,
     /// Timers and animation frames waiting for the lifecycle to drain them.
     pub(super) tasks: super::tasks::Queue,
     /// Where layout put each element and which is in front, published from
@@ -212,6 +212,20 @@ pub(super) fn descendants_matching(dom: &Dom, id: usize, selector: &str) -> Vec<
         .into_iter()
         .filter(|&found| descends_from(dom, found, id))
         .collect()
+}
+
+/// `id` itself, or the nearest ancestor the selector matches. The other
+/// direction from [`descendants_matching`], and narrowed the same way.
+pub(super) fn nearest_matching(dom: &Dom, id: usize, selector: &str) -> Option<usize> {
+    let matching = dom.query_all(selector);
+    let mut at = Some(id);
+    while let Some(current) = at {
+        if matching.contains(&current) {
+            return Some(current);
+        }
+        at = dom.parent(current);
+    }
+    None
 }
 
 /// Where layout put `id`.
