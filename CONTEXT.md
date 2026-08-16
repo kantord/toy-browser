@@ -150,6 +150,44 @@ id, or a JavaScript object the engine is holding. One type, because an element
 can be reached either way and callers should not have to care which.
 _Avoid_: object id, ref, node handle
 
+### States and transitions
+
+**Transition**:
+One outside-driven change from one Document to the next — a load, a click, an
+evaluation. Runs to completion, and nothing observes the page part-way through.
+There is no browser running between two of them.
+_Avoid_: update, step, tick, frame, event loop
+
+**Settled**:
+A page with no queued work left. Every answer this browser gives describes a
+Settled page, because a page still in motion has no state anything could be
+told about. Bounded by the Budget, so a page that never stops scheduling is
+reported as it stood at the cutoff.
+_Avoid_: idle, quiet, ready, stable
+
+### Input
+
+**Point**:
+A position in the page, in CSS pixels. What a click actually happens at.
+Elements are not clicked; Points are, and whatever is topmost there receives it.
+_Avoid_: coordinate, position, location, offset
+
+**Hit test**:
+Asking which element is topmost at a Point. Answered from the last Measure, so
+it runs no JavaScript and can be asked before deciding to click at all.
+_Avoid_: pick, probe, elementFromPoint, target lookup
+
+**Pointer**:
+Where the mouse is and whether it is pressed. A Page has one, and it persists
+between calls — which is what makes entering and leaving an element observable.
+_Avoid_: mouse, cursor, input device
+
+**Activation**:
+What an element does when clicked, once its listeners have run and none of them
+prevented it: a link navigates, a checkbox toggles, a field takes focus. Runs
+after the dispatch finishes, never inside it.
+_Avoid_: default action, side effect, trigger
+
 ### Speaking a protocol
 
 **Front end**:

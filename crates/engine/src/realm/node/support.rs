@@ -8,10 +8,10 @@
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use rquickjs::{Class, Ctx, Function, JsLifetime, Object, Persistent, Value, function::This};
+use rquickjs::{Class, Ctx, Function, JsLifetime, Object, Persistent, Value};
 
 use super::Node;
-use crate::dom::Dom;
+use crate::{Boxes, ElementBox, Point, dom::Dom};
 
 /// The document every `Node` in a Realm belongs to, plus the wrappers already
 /// handed out for it.
@@ -30,13 +30,14 @@ pub struct Sharing {
     /// Listeners, keyed by the target they were registered on and the event
     /// type. A page's own functions, so retaining them pins them exactly as the
     /// wrappers are pinned.
-    listeners: RefCell<HashMap<String, Vec<Persistent<Function<'static>>>>>,
+    pub(super) listeners: RefCell<HashMap<String, Vec<Persistent<Function<'static>>>>>,
     /// Timers and animation frames waiting for the lifecycle to drain them.
     pub(super) tasks: super::tasks::Queue,
-    /// Where layout put each element, published from outside after a measure.
-    /// Nothing in here can work it out, so until someone measures, every box is
-    /// empty — the same answer a browser gives for a `display: none` element.
-    boxes: RefCell<HashMap<usize, [f64; 4]>>,
+    /// Where layout put each element and which is in front, published from
+    /// outside after a measure. Nothing in here can work it out, so until
+    /// someone measures, every box is empty — the same answer a browser gives
+    /// for a `display: none` element, and nothing is anywhere to be hit.
+    boxes: RefCell<Boxes>,
 }
 
 unsafe impl<'js> JsLifetime<'js> for Sharing {
@@ -51,18 +52,23 @@ impl Sharing {
             prototypes: RefCell::new(HashMap::new()),
             listeners: RefCell::new(HashMap::new()),
             tasks: super::tasks::Queue::default(),
-            boxes: RefCell::new(HashMap::new()),
+            boxes: RefCell::new(Boxes::default()),
         }
     }
 
     /// Publishes where layout put things, replacing whatever was known before.
-    pub fn set_boxes(&self, boxes: HashMap<usize, [f64; 4]>) {
+    pub fn set_boxes(&self, boxes: Boxes) {
         *self.boxes.borrow_mut() = boxes;
     }
 
     /// The box measured for `id`, or an empty one.
-    pub(super) fn box_of(&self, id: usize) -> [f64; 4] {
-        self.boxes.borrow().get(&id).copied().unwrap_or_default()
+    pub(super) fn box_of(&self, id: usize) -> ElementBox {
+        self.boxes.borrow().of(id)
+    }
+
+    /// The topmost element at `point`. Reads the last measure and runs nothing.
+    pub(crate) fn hit(&self, point: Point) -> Option<usize> {
+        self.boxes.borrow().hit(point)
     }
 
     /// Records the prototype to give wrappers for `tag`.
@@ -208,107 +214,25 @@ pub(super) fn descendants_matching(dom: &Dom, id: usize, selector: &str) -> Vec<
         .collect()
 }
 
-fn slot(target: &str, kind: &str) -> String {
-    format!("{target}:{kind}")
-}
-
-pub(in crate::realm) fn add_listener<'js>(
-    ctx: &Ctx<'js>,
-    target: String,
-    kind: String,
-    listener: Function<'js>,
-) -> rquickjs::Result<()> {
-    let shared = ctx
-        .userdata::<Sharing>()
-        .ok_or_else(|| rquickjs::Error::new_from_js("Realm", "a document to belong to"))?;
-    shared
-        .listeners
-        .borrow_mut()
-        .entry(slot(&target, &kind))
-        .or_default()
-        .push(Persistent::save(ctx, listener));
-    Ok(())
-}
-
-pub(in crate::realm) fn remove_listener<'js>(
-    ctx: &Ctx<'js>,
-    target: String,
-    kind: String,
-    listener: Function<'js>,
-) -> rquickjs::Result<()> {
-    let shared = ctx
-        .userdata::<Sharing>()
-        .ok_or_else(|| rquickjs::Error::new_from_js("Realm", "a document to belong to"))?;
-    let mut listeners = shared.listeners.borrow_mut();
-    let Some(registered) = listeners.get_mut(&slot(&target, &kind)) else {
-        return Ok(());
-    };
-    let mut kept = Vec::with_capacity(registered.len());
-    for candidate in registered.drain(..) {
-        if candidate.clone().restore(ctx)? == listener {
-            continue;
-        }
-        kept.push(candidate);
-    }
-    *registered = kept;
-    Ok(())
-}
-
-/// Calls every listener registered on `target` for this event's type.
-///
-/// There is no capture, no bubbling and no propagation path: a dispatch reaches
-/// exactly one target, because the only events this browser raises are ones it
-/// raises itself. A listener that throws does not stop the ones after it.
-pub(in crate::realm) fn dispatch<'js>(
-    ctx: &Ctx<'js>,
-    target: String,
-    event: Value<'js>,
-) -> rquickjs::Result<()> {
-    let kind: String = match event.as_object().and_then(|event| event.get("type").ok()) {
-        Some(kind) => kind,
-        None => return Ok(()),
-    };
-
-    let registered = {
-        let shared = ctx
-            .userdata::<Sharing>()
-            .ok_or_else(|| rquickjs::Error::new_from_js("Realm", "a document to belong to"))?;
-        let listeners = shared.listeners.borrow();
-        listeners
-            .get(&slot(&target, &kind))
-            .cloned()
-            .unwrap_or_default()
-    };
-
-    let current = event
-        .as_object()
-        .and_then(|event| event.get::<_, Value>("currentTarget").ok())
-        .unwrap_or_else(|| Value::new_null(ctx.clone()));
-
-    for listener in registered {
-        let listener = listener.restore(ctx)?;
-        if let Err(error) = listener.call::<_, Value>((This(current.clone()), event.clone())) {
-            report_listener_error(ctx, &kind, &error);
-        }
-    }
-    Ok(())
-}
-
-/// A listener that threw is reported the way the page would see it, and the
-/// dispatch carries on.
-fn report_listener_error(ctx: &Ctx<'_>, kind: &str, error: &rquickjs::Error) {
-    let console: rquickjs::Result<Object> = ctx.globals().get("__console");
-    if let Ok(console) = console
-        && let Ok(report) = console.get::<_, Function>("error")
-    {
-        let _ = report.call::<_, Value>((format!("listener for \"{kind}\" threw: {error}"),));
-    }
-}
-
-/// Where layout put `id`, as `[x, y, width, height]`.
-pub(super) fn measured(ctx: &Ctx<'_>, id: usize) -> rquickjs::Result<[f64; 4]> {
+/// Where layout put `id`.
+pub(super) fn measured(ctx: &Ctx<'_>, id: usize) -> rquickjs::Result<ElementBox> {
     let shared = ctx
         .userdata::<Sharing>()
         .ok_or_else(|| rquickjs::Error::new_from_js("Realm", "a document to belong to"))?;
     Ok(shared.box_of(id))
+}
+
+/// What `document.elementFromPoint` answers: the topmost element at a Point.
+///
+/// A page asks this the same way a front end does, and both are served from the
+/// measure already published — which is why hit testing lives in the engine at
+/// all, rather than beside the boxes in the layer that produced them.
+pub(super) fn element_from_point(ctx: &Ctx<'_>, x: f64, y: f64) -> rquickjs::Result<Option<usize>> {
+    let shared = ctx
+        .userdata::<Sharing>()
+        .ok_or_else(|| rquickjs::Error::new_from_js("Realm", "a document to belong to"))?;
+    Ok(shared.hit(Point {
+        x: x as f32,
+        y: y as f32,
+    }))
 }

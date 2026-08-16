@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use toy_browser::{Browser, NavigationError, Remote, Resources, Url, Viewport};
+use toy_browser::{Browser, ElementBox, NavigationError, Point, Remote, Resources, Url, Viewport};
 
 fn fixture(name: &str) -> Url {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -170,5 +170,103 @@ fn evaluating_sees_geometry() {
     assert!(
         matches!(&width, Remote::Value(value) if value.as_f64() == Some(720.0)),
         "got {width:?}"
+    );
+}
+
+/// A page laid out at a known size, so a Point can be named in it.
+fn nested_page(browser: &mut Browser) -> toy_browser::PageId {
+    let page = browser.new_page().unwrap();
+    browser.set_viewport(
+        &page,
+        Viewport {
+            width: 800,
+            height: Some(600),
+        },
+    );
+    browser
+        .navigate(&page, fixture("nested.html").as_str())
+        .unwrap();
+    page
+}
+
+fn box_of(browser: &mut Browser, page: &toy_browser::PageId, selector: &str) -> ElementBox {
+    let element = browser.query(page, selector).unwrap()[0].clone();
+    browser
+        .bounding_box(page, &element)
+        .unwrap()
+        .expect("a box")
+}
+
+#[test]
+fn a_hit_test_answers_with_what_is_on_top() {
+    let mut browser = browser();
+    let page = nested_page(&mut browser);
+
+    let outer = box_of(&mut browser, &page, ".outer");
+    let inner = box_of(&mut browser, &page, ".inner");
+
+    // Inside `.outer`'s own border and padding, before any child begins.
+    let edge = Point {
+        x: outer.x + 4.0,
+        y: outer.y + 4.0,
+    };
+    let hit = browser.hit_test(&page, edge).unwrap().expect("something");
+    assert_eq!(
+        browser.bounding_box(&page, &Remote::Element(hit)).unwrap(),
+        Some(outer),
+        "a point only `.outer` covers should reach `.outer`"
+    );
+
+    // Everything `.inner` covers, `.outer` covers too. Paint order is the only
+    // thing that separates them, so this is the assertion that would fail if
+    // the boxes were walked in any other order.
+    let within = Point {
+        x: inner.x + 4.0,
+        y: inner.y + 4.0,
+    };
+    let hit = browser.hit_test(&page, within).unwrap().expect("something");
+    let area = browser
+        .bounding_box(&page, &Remote::Element(hit))
+        .unwrap()
+        .expect("a box");
+    assert!(
+        area.width <= inner.width && area.height <= inner.height,
+        "expected something no larger than `.inner`, got {area:?}"
+    );
+}
+
+#[test]
+fn nothing_is_hit_outside_the_document() {
+    let mut browser = browser();
+    let page = nested_page(&mut browser);
+
+    let far = Point {
+        x: 10_000.0,
+        y: 10_000.0,
+    };
+    assert_eq!(browser.hit_test(&page, far).unwrap(), None);
+}
+
+#[test]
+fn a_page_can_ask_what_is_at_a_point() {
+    let mut browser = browser();
+    let page = nested_page(&mut browser);
+    let outer = box_of(&mut browser, &page, ".outer");
+
+    let class = browser
+        .evaluate(
+            &page,
+            &format!(
+                "document.elementFromPoint({}, {}).className",
+                outer.x + 4.0,
+                outer.y + 4.0
+            ),
+            true,
+        )
+        .unwrap();
+
+    assert!(
+        matches!(&class, Remote::Value(value) if value.as_str() == Some("outer")),
+        "got {class:?}"
     );
 }

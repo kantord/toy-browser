@@ -6,11 +6,11 @@
 //! the network. See `docs/js-entry-points.md` for what that leaves out.
 
 mod bindings;
-mod document;
-mod node;
 mod convert;
+mod document;
 mod eval;
 mod load;
+mod node;
 
 use std::{
     cell::{Cell, RefCell},
@@ -24,7 +24,7 @@ use rquickjs::{Context, Persistent, Runtime, Value};
 use toy_browser_fetch::{Resources, Url};
 
 use crate::{
-    Budget, Environment, Keyed, NodeId, Outcome,
+    Budget, Environment, Keyed, NodeId, Outcome, Point,
     dom::Dom,
     loader::{DocumentResolver, ImportMap, ResourceLoader},
     scripts::ScriptSurvey,
@@ -198,21 +198,6 @@ impl Realm {
 
     /// Publishes what the page cannot work out for itself.
     pub fn set_environment(&self, environment: &Environment) {
-        let boxes: std::collections::HashMap<usize, [f64; 4]> = environment
-            .boxes
-            .iter()
-            .map(|(id, area)| {
-                (
-                    *id,
-                    [
-                        area.x as f64,
-                        area.y as f64,
-                        area.width as f64,
-                        area.height as f64,
-                    ],
-                )
-            })
-            .collect();
         let (width, height) = environment.viewport;
         // The viewport and the URL are plain globals a page reads directly; the
         // boxes are not, because every element asks for its own.
@@ -223,10 +208,19 @@ impl Realm {
         );
         self.context.with(|ctx| {
             if let Some(shared) = ctx.userdata::<node::Sharing>() {
-                shared.set_boxes(boxes);
+                shared.set_boxes(environment.boxes.clone());
             }
             let _ = ctx.eval::<Value, _>(script);
         });
+    }
+
+    /// The topmost element at `point`.
+    ///
+    /// Answers from the last measure published here, so it runs no JavaScript —
+    /// entering the context takes the userdata and nothing else.
+    pub fn hit_test(&self, point: Point) -> Option<NodeId> {
+        self.context
+            .with(|ctx| ctx.userdata::<node::Sharing>().and_then(|s| s.hit(point)))
     }
 
     /// Turns the task queue until nothing new is scheduled or `budget` is spent.

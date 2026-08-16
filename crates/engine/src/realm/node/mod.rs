@@ -16,6 +16,7 @@ use rquickjs::{
 };
 
 mod binder;
+mod events;
 mod install;
 mod objects;
 mod style;
@@ -24,14 +25,14 @@ mod tasks;
 
 use binder::dom_members;
 pub use support::Sharing;
+use events::{add_listener, dispatch, remove_listener};
 use support::{
-    add_listener, descendants_matching, descends_from, dispatch, dom_of, or_null, remove_listener,
-    step, wrap, wrap_all, wrap_maybe,
+    descendants_matching, descends_from, dom_of, or_null, step, wrap, wrap_all, wrap_maybe,
 };
-pub(super) use support::{
+pub(super) use events::{
     add_listener as listen_on, dispatch as dispatch_on, remove_listener as unlisten_on,
-    wrap as wrap_id, wrap_all as wrap_all_ids, wrap_maybe as wrap_maybe_id,
 };
+pub(super) use support::{wrap as wrap_id, wrap_all as wrap_all_ids, wrap_maybe as wrap_maybe_id};
 
 use crate::dom::Dom;
 
@@ -106,12 +107,12 @@ dom_members! {
     }
 
     number {
-        offset_width "offsetWidth" => |ctx, n| Ok(support::measured(&ctx, n.id)?[2]),
-        offset_height "offsetHeight" => |ctx, n| Ok(support::measured(&ctx, n.id)?[3]),
+        offset_width "offsetWidth" => |ctx, n| Ok(support::measured(&ctx, n.id)?.width.into()),
+        offset_height "offsetHeight" => |ctx, n| Ok(support::measured(&ctx, n.id)?.height.into()),
         // The border box, which is all we measure: padding and border are not
         // subtracted because nothing here knows them.
-        client_width "clientWidth" => |ctx, n| Ok(support::measured(&ctx, n.id)?[2]),
-        client_height "clientHeight" => |ctx, n| Ok(support::measured(&ctx, n.id)?[3]),
+        client_width "clientWidth" => |ctx, n| Ok(support::measured(&ctx, n.id)?.width.into()),
+        client_height "clientHeight" => |ctx, n| Ok(support::measured(&ctx, n.id)?.height.into()),
     }
 
     event_target { |n| n.id.to_string() }

@@ -8,7 +8,7 @@
 use anyhow::Result;
 use toy_browser_engine::Keyed;
 
-use crate::{Browser, Measured, PageId, Remote, Viewport, measure, pipeline};
+use crate::{Browser, Measured, NodeId, PageId, Point, Remote, Viewport, measure, pipeline};
 
 impl Browser {
     /// Where an element sits, measured at the page's current viewport.
@@ -25,7 +25,18 @@ impl Browser {
             .pages
             .get(page)
             .and_then(|page| page.measured.as_ref())
-            .and_then(|measured| measured.boxes.get(node).copied()))
+            .and_then(|measured| measured.boxes.get(*node)))
+    }
+
+    /// What is topmost at `point`, measured at the page's current viewport.
+    ///
+    /// Nothing is refused on the strength of this. A caller comparing the
+    /// answer to the element it meant has learned that element is covered, and
+    /// what to do about that is the caller's protocol to decide.
+    pub fn hit_test(&mut self, page: &PageId, point: Point) -> Result<Option<NodeId>> {
+        self.sync(page)?;
+        let session = self.session(page)?;
+        self.engine.hit_test(&session, point)
     }
 
     /// Renders the page at `viewport`, or at its own if none is given.

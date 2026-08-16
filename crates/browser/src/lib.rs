@@ -25,7 +25,7 @@ use toy_browser_engine::{Engine, Handle, SessionId};
 
 pub use navigate::{Loaded, NavigationError};
 pub use pipeline::{Raster, Viewport};
-pub use toy_browser_engine::{Budget, ElementBox, NodeId, ScriptSurvey};
+pub use toy_browser_engine::{Budget, ElementBox, NodeId, Point, ScriptSurvey};
 pub use toy_browser_fetch::{Resources, Url};
 
 /// A reference handed to a caller.

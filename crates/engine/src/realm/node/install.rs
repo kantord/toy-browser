@@ -46,9 +46,14 @@ pub(in crate::realm) fn install(ctx: &Ctx<'_>, dom: &Rc<Dom>) -> Result<()> {
     api.set("addListener", Function::new(ctx.clone(), listen)?)?;
     api.set("removeListener", Function::new(ctx.clone(), unlisten)?)?;
     api.set("dispatch", Function::new(ctx.clone(), fire)?)?;
+    api.set("elementFromPoint", Function::new(ctx.clone(), at_point)?)?;
 
     super::tasks::install(ctx, &api)?;
     Ok(())
+}
+
+fn at_point(ctx: Ctx<'_>, x: f64, y: f64) -> rquickjs::Result<Option<usize>> {
+    support::element_from_point(&ctx, x, y)
 }
 
 fn listen<'js>(
@@ -57,7 +62,7 @@ fn listen<'js>(
     kind: String,
     listener: Function<'js>,
 ) -> rquickjs::Result<()> {
-    support::add_listener(&ctx, target.0, kind, listener)
+    super::events::add_listener(&ctx, target.0, kind, listener)
 }
 
 fn unlisten<'js>(
@@ -66,11 +71,11 @@ fn unlisten<'js>(
     kind: String,
     listener: Function<'js>,
 ) -> rquickjs::Result<()> {
-    support::remove_listener(&ctx, target.0, kind, listener)
+    super::events::remove_listener(&ctx, target.0, kind, listener)
 }
 
 fn fire<'js>(ctx: Ctx<'js>, target: Coerced<String>, event: Value<'js>) -> rquickjs::Result<()> {
-    support::dispatch(&ctx, target.0, event)
+    super::events::dispatch(&ctx, target.0, event)
 }
 
 fn mint<'js>(ctx: Ctx<'js>, id: Option<usize>) -> rquickjs::Result<Value<'js>> {

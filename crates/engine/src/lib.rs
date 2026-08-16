@@ -62,17 +62,76 @@ pub struct LoadPage<'a> {
 pub struct Environment {
     pub viewport: (u32, u32),
     pub url: String,
-    /// Where each element sits, from whoever did the measuring.
-    pub boxes: HashMap<NodeId, ElementBox>,
+    /// Where each element sits and which is in front, from whoever measured.
+    pub boxes: Boxes,
 }
 
 /// One element's border box, in CSS pixels from the top-left of the document.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ElementBox {
     pub x: f32,
     pub y: f32,
     pub width: f32,
     pub height: f32,
+}
+
+impl ElementBox {
+    /// Half-open, the way a pixel grid is: a box owns its top and left edges
+    /// but not its bottom and right ones, so two boxes that merely touch never
+    /// both answer for the same Point.
+    pub fn contains(&self, point: Point) -> bool {
+        point.x >= self.x
+            && point.y >= self.y
+            && point.x < self.x + self.width
+            && point.y < self.y + self.height
+    }
+}
+
+/// A position in the page, in CSS pixels. What a click happens at.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Point {
+    pub x: f32,
+    pub y: f32,
+}
+
+/// Where every element sits, and which is in front of which.
+///
+/// Held in paint order, back to front, because that is the only thing that
+/// answers a Hit test: the last box covering a Point is the one a click would
+/// reach. The map beside it answers the other question — where is this one
+/// element — which every element asks about itself and nothing else.
+#[derive(Clone, Debug, Default)]
+pub struct Boxes {
+    painted: Vec<(NodeId, ElementBox)>,
+    by_node: HashMap<NodeId, ElementBox>,
+}
+
+impl Boxes {
+    /// Records `area` as painted over everything recorded before it.
+    pub fn insert(&mut self, node: NodeId, area: ElementBox) {
+        self.painted.push((node, area));
+        self.by_node.insert(node, area);
+    }
+
+    /// Where `node` was measured, if layout produced a box for it at all.
+    pub fn get(&self, node: NodeId) -> Option<ElementBox> {
+        self.by_node.get(&node).copied()
+    }
+
+    /// The same, but empty rather than absent — which is the answer the DOM
+    /// promises a page for an element that was never laid out.
+    pub fn of(&self, node: NodeId) -> ElementBox {
+        self.get(node).unwrap_or_default()
+    }
+
+    /// The topmost element covering `point`, if anything does.
+    pub fn hit(&self, point: Point) -> Option<NodeId> {
+        self.painted
+            .iter()
+            .rev()
+            .find(|(_, area)| area.contains(point))
+            .map(|(node, _)| *node)
+    }
 }
 
 /// How much of the page's queued work to let run.

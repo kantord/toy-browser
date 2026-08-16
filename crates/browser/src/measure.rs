@@ -26,11 +26,7 @@ use toy_browser_engine::{ElementBox, key_of};
 
 use crate::pipeline::Viewport;
 
-/// Every element's border box, keyed by DOM node id.
-///
-/// Boxes are cloned into pages and into the engine, so the map is small on
-/// purpose: one entry per element, four floats each.
-pub type Boxes = HashMap<toy_browser_engine::NodeId, ElementBox>;
+pub use toy_browser_engine::Boxes;
 
 /// Lays out `keyed_html` and reports where each keyed element ended up.
 ///
@@ -74,29 +70,36 @@ pub fn boxes(
         (Some(width), Some(height)),
     )?;
 
-    let mut boxes = Boxes::new();
-    for context in &contexts {
-        if let Some(paint) = context.root() {
-            record(&root, &results, paint, &mut boxes);
-        }
-        collect(&root, context, &results, &mut boxes);
-    }
+    let mut boxes = Boxes::default();
+    // Index 0 is the root context; every other one is reached from inside it.
+    collect(&root, &contexts, 0, &results, &mut boxes);
     Ok(boxes)
 }
 
-/// Walks one stacking context's paint items. Nested contexts are reached from
-/// the top-level list instead, so only nodes are followed here.
+/// Walks one stacking context and everything painted within it, in the order it
+/// was painted.
+///
+/// The order is the whole point. A Hit test takes the last box covering a
+/// Point, so following the nested contexts where they are reached — rather than
+/// walking the flat list they happen to be stored in — is what makes "on top"
+/// mean what it says.
 fn collect(
     root: &RenderNode,
-    context: &StackingContextNode,
+    contexts: &[StackingContextNode],
+    index: usize,
     results: &LayoutResults,
     boxes: &mut Boxes,
 ) {
-    for bucket in context.in_paint_order() {
-        for item in bucket {
-            if let PaintItemKind::Node(paint) = &item.kind {
-                record(root, results, paint, boxes);
-            }
+    let Some(context) = contexts.get(index) else {
+        return;
+    };
+    if let Some(paint) = context.root() {
+        record(root, results, paint, boxes);
+    }
+    for item in context.in_paint_order().into_iter().flatten() {
+        match &item.kind {
+            PaintItemKind::Node(paint) => record(root, results, paint, boxes),
+            PaintItemKind::Context(nested) => collect(root, contexts, *nested, results, boxes),
         }
     }
 }

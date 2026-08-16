@@ -31,6 +31,14 @@
   // element without JavaScript and now needs to pass it into some.
   globals.__node = (id) => tb.wrap(id);
 
+  // Answered from the last measure, so it costs no layout and no round trip.
+  // Null where nothing was painted, which is also what a real browser says for
+  // a point outside the document.
+  document.elementFromPoint = (x, y) => {
+    const id = __dom.elementFromPoint(x, y);
+    return id === null || id === undefined ? null : tb.wrap(id);
+  };
+
   globals.window = globals;
   globals.self = globals;
   globals.console = __console;

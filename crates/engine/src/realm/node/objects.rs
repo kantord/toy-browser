@@ -109,7 +109,9 @@ pub(super) fn attributes<'js>(
 /// The box layout measured for an element, in the shape `getBoundingClientRect`
 /// promises. An element layout never produced a box for reports an empty rect.
 pub(super) fn rect<'js>(ctx: Ctx<'js>, id: usize) -> rquickjs::Result<Object<'js>> {
-    let [x, y, width, height] = super::support::measured(&ctx, id)?;
+    let area = super::support::measured(&ctx, id)?;
+    let (x, y) = (f64::from(area.x), f64::from(area.y));
+    let (width, height) = (f64::from(area.width), f64::from(area.height));
     let rect = Object::new(ctx.clone())?;
     for (name, value) in [
         ("x", x),
@@ -134,8 +136,8 @@ pub(super) fn rect<'js>(ctx: Ctx<'js>, id: usize) -> rquickjs::Result<Object<'js
 /// The rects an element occupies: one, or none when it has no box at all.
 pub(super) fn client_rects<'js>(ctx: Ctx<'js>, id: usize) -> rquickjs::Result<Array<'js>> {
     let rects = Array::new(ctx.clone())?;
-    let [_, _, width, height] = super::support::measured(&ctx, id)?;
-    if width != 0.0 || height != 0.0 {
+    let area = super::support::measured(&ctx, id)?;
+    if area.width != 0.0 || area.height != 0.0 {
         rects.set(0, rect(ctx, id)?)?;
     }
     Ok(rects)

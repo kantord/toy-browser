@@ -11,7 +11,7 @@ use toy_browser_fetch::Resources;
 
 use crate::{
     Argument, Budget, Environment, Evaluated, Handle, Keyed, LoadPage, LoadReport, Mode, NodeId,
-    Outcome, SessionId, realm::Realm,
+    Outcome, Point, SessionId, realm::Realm,
 };
 
 /// A place a page can be loaded, and the unit of isolation between callers.
@@ -188,6 +188,16 @@ impl Engine {
     /// JavaScript: this is the DOM's own selector engine.
     pub fn query(&mut self, session: &SessionId, selector: &str) -> Result<Vec<NodeId>> {
         Ok(self.realm(session)?.query(selector))
+    }
+
+    /// The topmost element at `point`, from the measure last published through
+    /// [`Self::set_environment`]. Runs no JavaScript.
+    ///
+    /// A caller that dislikes the answer has learned the element it meant is
+    /// covered; nothing here refuses to be clicked on that account, because a
+    /// real click is not refused either.
+    pub fn hit_test(&mut self, session: &SessionId, point: Point) -> Result<Option<NodeId>> {
+        Ok(self.realm(session)?.hit_test(point))
     }
 
     /// An element's text content, descendants included. Runs no JavaScript.
