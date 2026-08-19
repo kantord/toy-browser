@@ -277,8 +277,8 @@ script, which comes back as `{}` because `Runtime.evaluate` ignores
 `awaitPromise`. Also missing: `innerText()`, `waitForSelector()`, and anything
 that moves a caret. `docs/cdp-surface.md` records the full list.
 
-Navigation handles `about:` and `file://` only; anything else comes back as
-`net::ERR_UNKNOWN_URL_SCHEME`.
+Navigation handles `about:`, `file://`, `http` and `https`; anything else comes
+back as `net::ERR_UNKNOWN_URL_SCHEME`.
 
 `pnpm test:smoke` runs a lower-level script that drives the same protocol
 without the test runner.

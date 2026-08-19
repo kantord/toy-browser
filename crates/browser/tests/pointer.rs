@@ -162,6 +162,34 @@ fn nothing_is_built_for_an_event_nobody_is_waiting_for() {
     assert_eq!(made(&mut browser, &page), 3, "only the ones with a listener");
 }
 
+/// The gate has to close again. A page that added a listener and took it away
+/// is a page nothing is waiting on, and the table has to say so — an emptied
+/// slot that still answers "yes" costs an event object on every click forever.
+#[test]
+fn removing_the_last_listener_shuts_the_gate_again() {
+    let mut browser = browser();
+    let page = clickable(&mut browser);
+    browser
+        .evaluate(
+            &page,
+            "globalThis.made = 0;
+             const original = __tb.makeMouseEvent;
+             __tb.makeMouseEvent = (...args) => { made += 1; return original(...args); };
+             const log = document.getElementById('log');
+             const listener = () => {};
+             log.addEventListener('mousedown', listener);
+             log.removeEventListener('mousedown', listener);",
+            true,
+        )
+        .unwrap();
+
+    // `#log` sits outside the panel every other listener is registered on, so
+    // once its own is taken away nothing on that path is waiting at all.
+    let log = centre(&mut browser, &page, "#log");
+    browser.pointer_down(&page, log).unwrap();
+    assert_eq!(made(&mut browser, &page), 0);
+}
+
 fn made(browser: &mut Browser, page: &PageId) -> u64 {
     match browser.evaluate(page, "made", true).unwrap() {
         Remote::Value(value) => value.as_u64().expect("a count"),

@@ -4,6 +4,8 @@ import { dirname, resolve } from "node:path";
 import { test, expect } from "@playwright/test";
 import { chromium } from "playwright-core";
 
+import { centre } from "../export.mjs";
+
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const fixture = (name) => `file://${resolve(REPO, "tests/fixtures", name)}`;
 
@@ -106,16 +108,10 @@ test("locators find and read elements", async () => {
   await expect(page.locator("p.muted")).toHaveAttribute("class", "muted");
 });
 
-/** The middle of an element, which is where a click aimed at it would land. */
-const centre = (selector) =>
-  page.evaluate((css) => {
-    const box = document.querySelector(css).getBoundingClientRect();
-    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-  }, selector);
 
 test("clicking runs the page's handlers", async () => {
   await page.goto(fixture("click.html"));
-  const { x, y } = await centre("#tap");
+  const { x, y } = await centre(page, "#tap");
   await page.mouse.click(x, y);
 
   // The inline `onclick` wrote this, so the whole path ran: hit test, the
@@ -125,7 +121,7 @@ test("clicking runs the page's handlers", async () => {
 
 test("clicking a link navigates", async () => {
   await page.goto(fixture("activate.html"));
-  const { x, y } = await centre("#label");
+  const { x, y } = await centre(page, "#label");
   await page.mouse.click(x, y);
 
   // The client learns about a document it never asked for from the events the

@@ -79,7 +79,13 @@ pub(in crate::realm) fn remove_listener<'js>(
         }
         kept.push(entry);
     }
-    *registered = kept;
+    // The slot goes when the last listener does. Leaving an empty one behind
+    // would keep answering "yes, something listens here" to every question
+    // asked of the table, which is the one thing it exists to answer.
+    match kept.is_empty() {
+        true => drop(listeners.remove(&slot(&target, &kind))),
+        false => *registered = kept,
+    }
     Ok(())
 }
 
@@ -125,7 +131,7 @@ pub(super) fn anyone_listening(ctx: &Ctx<'_>, path: &[String], kind: &str) -> rq
         let shared = sharing(ctx)?;
         let listeners = shared.listeners.borrow();
         path.iter()
-            .any(|target| listeners.contains_key(&slot(target, kind)))
+            .any(|target| listeners.get(&slot(target, kind)).is_some_and(|at| !at.is_empty()))
     };
     if registered {
         return Ok(true);

@@ -53,10 +53,10 @@ impl Node {
     }
 }
 
-/// An element both browsers have, in a different place.
+/// An element both browsers have, in a different place. Our own box lives on
+/// `node`; storing it again beside `theirs` would only let the two disagree.
 pub struct Moved {
     pub node: Node,
-    pub ours: [f64; 4],
     pub theirs: [f64; 4],
     pub apart: f64,
 }
@@ -139,7 +139,6 @@ impl Sorted {
         }
         let difference = Moved {
             node: node.clone(),
-            ours: node.rect,
             theirs: other.rect,
             apart,
         };

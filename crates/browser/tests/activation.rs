@@ -116,6 +116,31 @@ fn pressing_moves_focus_and_pressing_elsewhere_takes_it_away() {
     );
 }
 
+/// A control that must not take focus says so by preventing the press. Focus
+/// moves on `mousedown`, so that is the event a page has to prevent — and it
+/// has to be honoured, or the toolbar button steals the caret anyway.
+#[test]
+fn preventing_the_press_stops_it_taking_focus() {
+    let mut browser = browser();
+    let page = activatable(&mut browser);
+    browser
+        .evaluate(
+            &page,
+            "document.getElementById('field')
+                 .addEventListener('mousedown', (event) => event.preventDefault());",
+            true,
+        )
+        .unwrap();
+
+    let field = centre(&mut browser, &page, "#field");
+    browser.pointer_down(&page, field).unwrap();
+
+    assert_eq!(
+        text_of(&mut browser, &page, "document.activeElement.tagName"),
+        "BODY"
+    );
+}
+
 #[test]
 fn a_page_can_move_focus_itself() {
     let mut browser = browser();

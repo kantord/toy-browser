@@ -18,16 +18,28 @@ pub struct Linked<'a> {
     pub resources: &'a Resources,
 }
 
+/// What every document is styled with before its own rules are read.
+///
+/// A browser has one of these; takumi does not, and its defaults are its own
+/// rather than CSS's. `box-sizing` is the one that matters so far: CSS says a
+/// width is the content box unless told otherwise, takumi treats it as the
+/// border box, and a bordered element therefore came out 8px short in both
+/// directions. Takumi honours either value when asked — it is only the default
+/// that disagrees.
+const USER_AGENT: &str = "* { box-sizing: content-box }";
+
 /// Every stylesheet the document carries, in source order.
 ///
 /// A `<link>` that cannot be read is skipped rather than raised: a page with a
 /// broken stylesheet still renders, and it renders visibly wrong, which is a
 /// better report than an error nobody sees.
 pub fn sheets(html: &str, linked: Linked<'_>) -> Vec<String> {
+    let mut sheets = vec![USER_AGENT.to_owned()];
     let mut found = written_in(html);
     found.extend(linked_from(html, linked));
     found.sort_by_key(|(at, _)| *at);
-    found.into_iter().map(|(_, css)| css).collect()
+    sheets.extend(found.into_iter().map(|(_, css)| css));
+    sheets
 }
 
 /// The `<style>` blocks, with where each one began.

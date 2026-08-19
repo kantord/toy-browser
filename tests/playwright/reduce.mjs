@@ -9,8 +9,7 @@
 // is made in it, and it serializes the result back out. That is one less HTML
 // parser to disagree with the two already here.
 
-import { execFileSync, spawn } from "node:child_process";
-import { connect } from "node:net";
+import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -18,6 +17,20 @@ import { dirname, resolve } from "node:path";
 import { chromium } from "playwright-core";
 
 import { EXPORT, FREEZE } from "./export.mjs";
+import { serve } from "./serve.mjs";
+
+/**
+ * The document as text, doctype included.
+ *
+ * `documentElement.outerHTML` leaves the doctype out, and a document without
+ * one parses in quirks mode — where these two browsers disagree about things
+ * they agree about in standards mode. Serializing without it makes the reducer
+ * manufacture a difference and then dutifully isolate it.
+ */
+const SERIALIZE = () => {
+  const doctype = document.doctype ? `<!DOCTYPE ${document.doctype.name}>` : "";
+  return doctype + document.documentElement.outerHTML;
+};
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const BINARY = resolve(REPO, "target/debug/toy-browser");
@@ -31,28 +44,6 @@ const VIEWPORT = { width: 1000, height: 800 };
 const KEEPS = 0.6;
 
 const target = process.argv[2] ?? "https://news.ycombinator.com/";
-
-/// Its own browser on its own port, so a reduction never fights whatever else
-/// is listening and always dies with the run.
-const PORT = 9223;
-
-function serve() {
-  const server = spawn(BINARY, ["serve", "--port", String(PORT)], {
-    stdio: "ignore",
-  });
-  process.on("exit", () => server.kill());
-  return server;
-}
-
-const listening = () =>
-  new Promise((ok) => {
-    const attempt = () => {
-      const socket = connect(PORT, "127.0.0.1")
-        .on("connect", () => socket.end(ok))
-        .on("error", () => setTimeout(attempt, 100));
-    };
-    attempt();
-  });
 
 /** Renders one candidate in both browsers and asks how far apart they are. */
 async function score(pages, html) {
@@ -79,7 +70,8 @@ const CUT = (path) => {
   }
   if (node === document.documentElement || node === document.body) return null;
   node.remove();
-  return document.documentElement.outerHTML;
+  const doctype = document.doctype ? `<!DOCTYPE ${document.doctype.name}>` : "";
+  return doctype + document.documentElement.outerHTML;
 };
 
 /** One CSS rule dropped, and the document serialized back out. */
@@ -89,7 +81,8 @@ const CUT_RULE = (index) => {
   if (!sheet || index >= sheet.cssRules.length) return null;
   sheet.deleteRule(index);
   style.textContent = [...sheet.cssRules].map((rule) => rule.cssText).join("\n");
-  return document.documentElement.outerHTML;
+  const doctype = document.doctype ? `<!DOCTYPE ${document.doctype.name}>` : "";
+  return doctype + document.documentElement.outerHTML;
 };
 
 const RULE_COUNT = () => document.querySelector("style")?.sheet?.cssRules.length ?? 0;
@@ -158,9 +151,8 @@ async function reduce(pages, html, keep) {
   return { html: current, cuts };
 }
 
-const server = serve();
-await listening();
-const toy = await chromium.connectOverCDP(`ws://127.0.0.1:${PORT}/`);
+const ours = await serve(9223);
+const toy = await chromium.connectOverCDP(ours.url);
 const real = await chromium.launch();
 const pages = {
   toy: await toy.contexts()[0].newPage(),
@@ -175,9 +167,7 @@ await pages.chromium.goto(target);
 // serialization is what every candidate will be compared against, and a
 // hand-built string is never byte-identical to it.
 await pages.chromium.setContent(await pages.chromium.evaluate(FREEZE));
-const frozen = await pages.chromium.evaluate(
-  () => document.documentElement.outerHTML,
-);
+const frozen = await pages.chromium.evaluate(SERIALIZE);
 const whole = await score(pages, frozen);
 console.log(
   `frozen: score ${whole.score.toFixed(4)}, ${frozen.length} bytes, blamed on "${whole.cause}"`,
@@ -197,4 +187,4 @@ console.log(`\nminimal repro: ${resolve(INTO, "minimal.html")}`);
 
 await toy.close();
 await real.close();
-server.kill();
+ours.stop();

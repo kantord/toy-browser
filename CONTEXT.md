@@ -168,9 +168,9 @@ _Avoid_: idle, quiet, ready, stable
 ### Input
 
 **Point**:
-A position in the page, in CSS pixels. What a click actually happens at.
+Somewhere in the page, in CSS pixels. What a click actually happens at.
 Elements are not clicked; Points are, and whatever is topmost there receives it.
-_Avoid_: coordinate, position, location, offset
+_Avoid_: coordinate, offset, pixel
 
 **Hit test**:
 Asking which element is topmost at a Point. Answered from the last Measure, so
@@ -178,9 +178,10 @@ it runs no JavaScript and can be asked before deciding to click at all.
 _Avoid_: pick, probe, elementFromPoint, target lookup
 
 **Pointer**:
-Where the mouse is and whether it is pressed. A Page has one, and it persists
-between calls — which is what makes entering and leaving an element observable.
-_Avoid_: mouse, cursor, input device
+What a Page is being touched with: which element it is over, and whether it is
+pressed. A Page has one and it persists between calls, which is what makes
+entering and leaving an element observable.
+_Avoid_: cursor, input device
 
 **Activation**:
 What an element does when clicked, once its listeners have run and none of them

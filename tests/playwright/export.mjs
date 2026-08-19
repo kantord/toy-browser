@@ -57,3 +57,28 @@ export const FREEZE = () => {
 <style>${css}</style></head>
 <body>${document.body.innerHTML}</body></html>`;
 };
+
+/**
+ * The middle of an element, which is where a click aimed at it would land.
+ *
+ * Takes the page rather than closing over one, so the same helper serves every
+ * spec instead of each growing its own copy.
+ */
+export const centre = (page, selector) =>
+  page.evaluate((css) => {
+    const found = document.querySelector(css);
+    if (!found) return null;
+    const box = found.getBoundingClientRect();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  }, selector);
+
+/** The same, by the words a link shows rather than by a selector. */
+export const centreOfLink = (page, label) =>
+  page.evaluate((text) => {
+    const found = [...document.querySelectorAll("a")].find(
+      (link) => link.textContent.trim() === text,
+    );
+    if (!found) return null;
+    const box = found.getBoundingClientRect();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  }, label);

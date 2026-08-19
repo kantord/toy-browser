@@ -124,8 +124,8 @@ fn main() -> Result<()> {
             &args.dir,
             args.top,
             match args.json {
-                true => compare::Shape::Json,
-                false => compare::Shape::Report,
+                true => compare::Audience::Loop,
+                false => compare::Audience::Person,
             },
             args.max_score,
         ),

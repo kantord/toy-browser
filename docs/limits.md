@@ -19,11 +19,20 @@ and so a limit is not mistaken for a bug.
   those contains an image** — the logo and the thirty upvote arrows.
 - **Table layout is not honoured.** A `<table>` page reads correctly but arrives
   as one centred column, because takumi stacks the cells.
-- **The root element does not fill the viewport.** On an empty page at
-  1000x800, Chromium reports `html` as 1000x**800** and `body` as 984x**784**;
-  this browser reports 1000x**314** and 984x**298**, sizing them to content.
-  Everything below the content is therefore unpainted, which is why a page with
-  a body background renders as a band of colour over transparency. `just reduce`
-  cut a styled page down to `<html><body></body></html>` — 36 bytes — to say so.
+- **The body's background does not fill the canvas.** CSS propagates the body's
+  background to the whole canvas; here it is painted only as far as the body's
+  own box, so a short page renders as a band of colour over transparency.
+  `just reduce` cuts a styled page down to 134 bytes to say so: a `<style>`
+  setting `body { background: … }` and an empty body.
+
+  An earlier version of this entry blamed the root element's height, on the
+  strength of a 36-byte repro the reducer produced. That repro had lost its
+  doctype and was in quirks mode, where Chromium stretches `html` to the
+  viewport and this browser does not. **In standards mode the two agree
+  exactly** — `html` 1000x8, `body` 984x0 on an empty page — so the height was
+  never the cause. The reducer now keeps the doctype.
+- **`el.onclick = fn` does nothing.** An `on*` *attribute* in the markup is run,
+  and `addEventListener` works, but assigning the property is neither stored nor
+  called — a page that registers a handler that way is silently ignored.
 - Blitz's own style resolution and layout are not used at all yet — only its
   parser and tree. Everything visual comes from takumi.

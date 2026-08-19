@@ -12,6 +12,8 @@
 import { test, expect } from "@playwright/test";
 import { chromium } from "playwright-core";
 
+import { centre, centreOfLink } from "../export.mjs";
+
 const HN = "https://news.ycombinator.com/";
 
 /** The logo, which is the one link on the page a click can be aimed at. */
@@ -41,25 +43,6 @@ test.afterEach(async () => {
   await page?.close();
 });
 
-/** The middle of an element, which is where a click aimed at it would land. */
-const centre = (selector) =>
-  page.evaluate((css) => {
-    const found = document.querySelector(css);
-    if (!found) return null;
-    const box = found.getBoundingClientRect();
-    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-  }, selector);
-
-/** The same, by the words a link shows rather than by a selector. */
-const centreOfLink = (label) =>
-  page.evaluate((text) => {
-    const found = [...document.querySelectorAll("a")].find(
-      (link) => link.textContent.trim() === text,
-    );
-    if (!found) return null;
-    const box = found.getBoundingClientRect();
-    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-  }, label);
 
 test("renders the front page", async () => {
   await page.goto(HN);
@@ -76,7 +59,7 @@ test("clicking the logo goes back to the front page", async () => {
   await page.goto(`${HN}newest`);
   expect(page.url()).toContain("newest");
 
-  const at = await centre(LOGO);
+  const at = await centre(page, LOGO);
   expect(at, "no logo to click").not.toBeNull();
   await page.mouse.click(at.x, at.y);
 
@@ -94,6 +77,6 @@ test("clicking the logo goes back to the front page", async () => {
 // docs/adr/0010 and the README's notes.
 test.fixme("clicking a nav link", async () => {
   await page.goto(HN);
-  const at = await centreOfLink("ask");
+  const at = await centreOfLink(page, "ask");
   await page.mouse.click(at.x, at.y);
 });

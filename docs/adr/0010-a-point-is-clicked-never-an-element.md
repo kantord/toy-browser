@@ -39,6 +39,11 @@ in between, which is the inversion this whole layering exists to prevent.
 The cost is that a Page now has a Pointer that persists between calls. That is
 also what buys `mouseover` and `mouseout`, which have no meaning without it.
 
+Each press raises `pointerdown` before `mousedown`, and `pointerup` before
+`mouseup`. Pages written this decade listen for the pointer events and never see
+the mouse ones, so raising only half the pair would leave them deaf for no
+saving — the events are built from the same state and cost nothing extra.
+
 ## Events travel, reversing an earlier decision
 
 `40-events.js` said, on purpose, that there is no capture, no bubbling and no

@@ -5,14 +5,19 @@ crates/cli       CLI, CDP and WebDriver           deps: browser
 crates/browser   pages, elements, measuring,     deps: engine, fetch
                  rendering
 crates/engine    the door                        deps: fetch
-crates/fetch     shared cached bytes             deps: none
+crates/fetch     shared remembered bytes         deps: ureq
 ```
 
 Each crate can only name what its dependency list allows. `cli` cannot say
 `Engine`, `Realm` or `Resources`; `engine` cannot say `takumi`. That is what
 enforces the layering — not convention, and not module boundaries.
 
-## fetch — one cache, every byte
+## fetch — one remembered place, every byte
+
+Reads `file:`, `http` and `https`. A local file is checked against its own
+timestamp on every read, because a page edited between two runs must not answer
+with what it used to say; nothing over the network is revalidated. See
+`docs/adr/0011`.
 
 Everything read anywhere goes through `Resources`: documents, scripts, modules,
 images. It is keyed by URL, thread-safe, and cheap to clone — every clone is the

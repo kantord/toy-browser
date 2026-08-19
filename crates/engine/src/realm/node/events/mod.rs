@@ -217,8 +217,10 @@ pub(in crate::realm) fn raise_mouse(
     let prevented = tell_the_page(ctx, node, mouse)?;
     let dom = dom_of(ctx)?;
     // Focus moves on the press, not on the click. A page that focuses a field
-    // and then reads it back in the same gesture depends on that order.
-    if mouse.kind == "mousedown" {
+    // and then reads it back in the same gesture depends on that order — and a
+    // page that prevented the press has said not to, which is how a control
+    // that must not steal focus is written.
+    if mouse.kind == "mousedown" && !prevented {
         activation::focus_on_press(&dom, node);
     }
     if mouse.kind != "click" || prevented {

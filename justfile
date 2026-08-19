@@ -76,6 +76,13 @@ runs:
 
 # --- measuring against a real browser ---
 
+# The corpus: small pages, each isolating one thing, against real Chromium.
+# UPDATE_CORPUS=1 rewrites what each case is allowed to disagree about.
+corpus *ARGS:
+    cargo build
+    cd tests/playwright && pnpm exec playwright test corpus {{ ARGS }}
+
+
 # Capture a page from both browsers and say how far apart they are.
 compare url="https://news.ycombinator.com/":
     cd tests/playwright && COMPARE_URL={{ url }} pnpm exec playwright test compare

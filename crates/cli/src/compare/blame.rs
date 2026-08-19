@@ -13,9 +13,6 @@ use std::collections::HashMap;
 
 use crate::compare::tree::{Export, Node};
 
-/// Charged to nothing: outside every element the reference laid out.
-const CANVAS: usize = usize::MAX;
-
 /// What one element is answerable for, and the shape of its disagreement.
 pub struct Blamed {
     pub what: String,
@@ -62,10 +59,10 @@ impl Reason {
 
     pub fn describe(&self) -> String {
         match self {
-            Reason::Canvas => "outside every element — the page's backdrop".to_owned(),
-            Reason::SameBoxDifferentPaint => "same box, so this is paint not layout".to_owned(),
-            Reason::BoxOff(apart) => format!("box off by {apart:.0}px — layout"),
-            Reason::NoBox => "no box here at all".to_owned(),
+            Reason::Canvas => "outside every element".to_owned(),
+            Reason::SameBoxDifferentPaint => "same box, same words".to_owned(),
+            Reason::BoxOff(apart) => format!("off by {apart:.0}px"),
+            Reason::NoBox => "nothing laid out here".to_owned(),
             Reason::TextDiffers { ours, theirs } => {
                 format!("text differs: {ours:?} against {theirs:?}")
             }
@@ -77,7 +74,7 @@ impl Reason {
 pub fn blame(weights: &[f32], width: u32, ours: &Export, reference: &Export) -> Vec<Blamed> {
     let ours: HashMap<&str, &Node> = ours.nodes.iter().map(|n| (n.path.as_str(), n)).collect();
     let owners = owners(reference, width, weights.len());
-    let mut charged: HashMap<usize, f64> = HashMap::new();
+    let mut charged: HashMap<Option<usize>, f64> = HashMap::new();
     for (index, weight) in weights.iter().enumerate() {
         *charged.entry(owners[index]).or_default() += f64::from(*weight);
     }
@@ -104,7 +101,7 @@ pub fn blame(weights: &[f32], width: u32, ours: &Export, reference: &Export) -> 
 /// Every element's own charge is added to each of its ancestors, which are
 /// found by walking its path back a segment at a time — the tree is in the
 /// keys, so nothing has to be threaded through the export to rebuild it.
-fn subtrees(reference: &Export, charged: &HashMap<usize, f64>) -> HashMap<usize, f64> {
+fn subtrees(reference: &Export, charged: &HashMap<Option<usize>, f64>) -> HashMap<Option<usize>, f64> {
     let by_path: HashMap<&str, usize> = reference
         .nodes
         .iter()
@@ -112,16 +109,16 @@ fn subtrees(reference: &Export, charged: &HashMap<usize, f64>) -> HashMap<usize,
         .map(|(index, node)| (node.path.as_str(), index))
         .collect();
 
-    let mut totals: HashMap<usize, f64> = HashMap::new();
+    let mut totals: HashMap<Option<usize>, f64> = HashMap::new();
     for (index, node) in reference.nodes.iter().enumerate() {
-        let own = charged.get(&index).copied().unwrap_or_default();
+        let own = charged.get(&Some(index)).copied().unwrap_or_default();
         if own == 0.0 {
             continue;
         }
         let mut at = node.path.as_str();
         loop {
             if let Some(ancestor) = by_path.get(at) {
-                *totals.entry(*ancestor).or_default() += own;
+                *totals.entry(Some(*ancestor)).or_default() += own;
             }
             match at.rfind('/') {
                 Some(cut) => at = &at[..cut],
@@ -134,8 +131,8 @@ fn subtrees(reference: &Export, charged: &HashMap<usize, f64>) -> HashMap<usize,
 
 /// One index per pixel, saying which element covers it. Tree order, so a child
 /// paints over the parent that contains it.
-fn owners(reference: &Export, width: u32, pixels: usize) -> Vec<usize> {
-    let mut owners = vec![CANVAS; pixels];
+fn owners(reference: &Export, width: u32, pixels: usize) -> Vec<Option<usize>> {
+    let mut owners = vec![None; pixels];
     let width = width as usize;
     let height = pixels / width.max(1);
 
@@ -146,14 +143,14 @@ fn owners(reference: &Export, width: u32, pixels: usize) -> Vec<usize> {
         let right = ((x + w) as usize).min(width);
         let bottom = ((y + h) as usize).min(height);
         for row in top..bottom {
-            owners[row * width + left..row * width + right.max(left)].fill(index);
+            owners[row * width + left..row * width + right.max(left)].fill(Some(index));
         }
     }
     owners
 }
 
-fn name(owner: usize, reference: &Export) -> String {
-    match reference.nodes.get(owner) {
+fn name(owner: Option<usize>, reference: &Export) -> String {
+    match owner.and_then(|at| reference.nodes.get(at)) {
         Some(node) => node.describe(),
         None => "canvas".to_owned(),
     }
@@ -162,8 +159,8 @@ fn name(owner: usize, reference: &Export) -> String {
 /// What the two accounts of one element disagree about, in the order that
 /// makes a report useful: a missing box explains everything after it, a moved
 /// box explains everything after that, and what is left is paint.
-fn reason(owner: usize, reference: &Export, ours: &HashMap<&str, &Node>) -> Reason {
-    let Some(theirs) = reference.nodes.get(owner) else {
+fn reason(owner: Option<usize>, reference: &Export, ours: &HashMap<&str, &Node>) -> Reason {
+    let Some(theirs) = owner.and_then(|at| reference.nodes.get(at)) else {
         return Reason::Canvas;
     };
     let Some(mine) = ours.get(theirs.path.as_str()) else {

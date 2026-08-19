@@ -22,15 +22,15 @@ const THEIRS: &str = "chromium";
 /// Nothing enforces it; it is the number the report reads against.
 const CLOSE_ENOUGH: f32 = 0.01;
 
-/// What a caller wants back: a report to read, or a verdict to act on.
+/// Who the answer is for: someone reading it, or a loop parsing it.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Shape {
-    Report,
-    /// One line of JSON, for a loop that is comparing many candidates.
-    Json,
+pub enum Audience {
+    Person,
+    /// One line of JSON, for a loop comparing many candidates.
+    Loop,
 }
 
-pub fn run(dir: &Path, top: usize, shape: Shape, max_score: Option<f32>) -> Result<()> {
+pub fn run(dir: &Path, top: usize, audience: Audience, max_score: Option<f32>) -> Result<()> {
     let renders = pixels::compare(&read(dir, OURS, "png")?, &read(dir, THEIRS, "png")?)?;
     let ours = tree::parse(&read(dir, OURS, "json")?)?;
     let theirs = tree::parse(&read(dir, THEIRS, "json")?)?;
@@ -41,9 +41,9 @@ pub fn run(dir: &Path, top: usize, shape: Shape, max_score: Option<f32>) -> Resu
         .with_context(|| format!("writing {}", heatmap.display()))?;
 
     let blamed = blame::blame(&renders.weights, renders.width, &ours, &theirs);
-    match shape {
-        Shape::Json => print_json(&renders, &blamed),
-        Shape::Report => {
+    match audience {
+        Audience::Loop => print_json(&renders, &blamed),
+        Audience::Person => {
             report_render(&renders, &heatmap);
             report_document(&documents, top);
             report_blame(&blamed, top);
@@ -145,7 +145,7 @@ fn list(what: &str, differences: &[tree::Moved], top: usize) {
         println!(
             "    {:<26} {OURS} {:?} {THEIRS} {:?}  off by {:.0}px",
             moved.node.describe(),
-            round(moved.ours),
+            round(moved.node.rect),
             round(moved.theirs),
             moved.apart,
         );

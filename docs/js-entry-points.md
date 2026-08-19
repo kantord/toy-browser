@@ -27,8 +27,8 @@ These sit in the document and are discoverable by walking the DOM.
 | `<script type="importmap">` | never executed; must be read before the first module resolves | read, and applied to module resolution |
 | `<script type="application/json">` and other inert types | never executed | found |
 | `on*` attributes (`onload`, `onerror`) | compiled as a function body when the event fires | runs |
-| `on*` attributes needing a gesture (`onclick`, …) | on interaction | found; a headless load never fires them |
-| `javascript:` URLs in `href`/`src`/`action`/`formaction` | on activation | found; never activated |
+| `on*` attributes needing a gesture (`onclick`, …) | on interaction | found, and **run** when a click reaches them |
+| `javascript:` URLs in `href`/`src`/`action`/`formaction` | on activation | found; clicking one asks to navigate to it, which then fails as an unsupported scheme |
 | `<link rel="preload" as="script">`, `rel="modulepreload">` | fetch only; execution happens elsewhere | found and fetched |
 | `document.write()` | re-enters the parser at the insertion point | runs, but appends to `<body>` |
 | `<script>` inside inline SVG | same rules as HTML `<script>` | missing |
@@ -77,7 +77,8 @@ navigation to fire against. Uncaught errors are collected by the host rather
 than dispatched as `error` events, and rejected promises are not reported.
 
 Subresource loading is one narrow slice of reality: an `<img src>` that does
-not resolve to a file on disk gets an `error` event. Nothing else is fetched,
+not resolve to a file on disk gets an `error` event. Stylesheets are fetched too;
+nothing else is,
 and nothing succeeds loudly enough to fire a `load` event of its own.
 
 ## 4. Engine-driven, after the first script runs

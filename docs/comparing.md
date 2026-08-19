@@ -102,6 +102,12 @@ different bug from the one it started with.
 
 Two details that are correctness, not taste:
 
+- **The doctype is kept when a candidate is serialized.**
+  `documentElement.outerHTML` leaves it out, and a document without one parses
+  in quirks mode — where these two browsers disagree about things they agree
+  about in standards mode. Before this was fixed the reducer manufactured a
+  difference and then dutifully isolated it, producing a 36-byte "empty page"
+  repro for a bug that does not exist in standards mode.
 - **The frozen page goes through the reference's parser once before anything is
   measured.** A hand-built string is never byte-identical to what the browser
   serializes, so without this the "is this candidate smaller" guard rejects
@@ -116,17 +122,11 @@ to disagree with the two already here.
 
 ### What it found
 
-`boxes.html`, 703 bytes, reduced to 119:
+`boxes.html`, 718 bytes, reduced to 134 — still blamed on the canvas:
 
 ```html
-<html><head><style>body { background: rgb(15, 23, 42); }</style></head><body></body></html>
+<!DOCTYPE html><html><head><style>body { background: rgb(15, 23, 42); padding: 24px; }
+</style></head><body></body></html>
 ```
 
-`nested.html`, 975 bytes, reduced to 36 — an empty page:
-
-```html
-<html><body></body></html>
-```
-
-Both are the same bug, which the numbers then name outright: the root element
-is sized to its content instead of the viewport. See `docs/limits.md`.
+A body with a background and nothing in it. See `docs/limits.md`.
