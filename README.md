@@ -115,6 +115,21 @@ own node.
 
 ## Usage
 
+`just` lists everything there is to do; the targets are thin wrappers so there
+is one place to look for which incantation it was.
+
+```sh
+just render          # every fixture to out/
+just serve           # speak CDP
+just test click      # the Rust suite, filtered by test name
+just accept          # the Playwright suite, browser and all
+just report          # the HTML report: screenshots and traces per test
+just trace clicking  # one trace, DOM before and after each action
+just check           # clippy, then the code-style checks
+```
+
+Underneath:
+
 ```sh
 cargo run -- render tests/fixtures/*.html tests/fixtures/js/*.html
 ```

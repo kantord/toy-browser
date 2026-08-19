@@ -16,5 +16,8 @@ export default defineConfig({
     // when everything passed. The action timeline is complete; the film strip
     // and DOM snapshot panes stay empty — see docs/cdp-surface.md.
     trace: "on",
+    // Screenshots are `page.screenshot()`, which this browser does implement —
+    // unlike the trace's film strip, which needs a screencast it does not.
+    screenshot: "on",
   },
 });

@@ -147,33 +147,28 @@ HTTP GET and the port only speaks WebSocket, so readiness never registers. A
 | Mode | Status |
 | --- | --- |
 | `--headed` | meaningless — `connectOverCDP` launches nothing, and this browser has no window |
-| Trace recording | works, partially: the action timeline is complete |
+| Trace recording | works: action timeline and DOM snapshots |
+| HTML report with screenshots | works — `screenshot: "on"` attaches a real PNG per test |
 | Trace viewer, UI Mode, Inspector | the shells open — they are separate browsers Playwright launches, nothing to do with this one |
-| Film strip, DOM snapshots, element highlighting | empty |
+| Film strip | empty |
 
-Measured: with `trace: "on"`, every test writes a `trace.zip` containing
-`before`/`after`/`event`/`log` entries — the full action log — and **zero**
-`.jpeg` resources and zero DOM snapshots.
+Measured over one full run of the suite: 209 action entries, **41 DOM
+snapshots**, 2 input events, 12 screenshots — and **zero** `.jpeg` resources.
 
-The two missing halves have very different costs, and neither is the injected
-script.
+The snapshots are real trees, not placeholders, and they record mutations: the
+`after` snapshot of a click on `click.html` contains
+`["DIV", {"id": "log"}, "inline ran"]`, which the page's own handler wrote. So
+the trace viewer's DOM pane shows the document before and after each action.
+
+An earlier version of this file said DOM snapshots were empty and predicted the
+snapshotter needed `document.adoptedStyleSheets` to finish defining itself.
+Neither held: `adoptedStyleSheets` still does not exist, and the snapshots
+arrive anyway. The prediction was wrong about what the blocker was, which is
+the reason to measure rather than reason about a bundle nobody reads.
 
 **Film-strip frames** come from `Page.startScreencast`, which we answer `{}` to
 and never follow with `Page.screencastFrame` events. We already render PNGs, so
-emitting frames is small and self-contained.
-
-**DOM snapshots** come from a separate bundle Playwright registers with
-`Page.addScriptToEvaluateOnNewDocument` — not from the injected script at all.
-Those init scripts now run (which also makes `page.addInitScript()` work), and
-the snapshot streamer gets part-way through defining itself before failing, so
-`window[streamer].captureSnapshot` is still undefined. It needs a fuller DOM to
-finish: `element.attributes` as an enumerable list, `childNodes` including text
-nodes with `nodeValue`, and `document.adoptedStyleSheets`. All reachable, and
-none of it needs layout or the injected script.
-
-Getting there is a loop, not a leap: the server logs every load-time script
-error and every failed evaluation with its stack, so each run names the next
-missing thing.
+emitting frames is small and self-contained — the one piece still missing.
 
 ## What is still missing
 
