@@ -29,7 +29,7 @@ pub struct Linked<'a> {
 const USER_AGENT: &str = "\
 * { box-sizing: content-box }\
 table { display: block; padding: 2px }\
-tbody { display: block }\
+tbody { display: flex; flex-direction: column; gap: 2px }\
 tr { display: flex; gap: 2px }\
 td { display: block; padding: 1px }\
 th { display: block; padding: 1px }";

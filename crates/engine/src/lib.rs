@@ -25,7 +25,7 @@ use toy_browser_fetch::Url;
 pub use engine::Engine;
 pub use realm::{Argument, Evaluated, Handle};
 pub use scripts::{EntryKind, EntryPoint, Fetch, Payload, ScriptSurvey, Timing};
-pub use serialize::key_of;
+pub use serialize::{KEY_CLASS_PREFIX, key_of};
 
 /// A node's identity within a Session's DOM. Stable while the Realm lives, and
 /// meaningless once it is replaced.

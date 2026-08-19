@@ -51,13 +51,20 @@ pub fn render(
     fonts: &Fonts,
     viewport: Viewport,
     linked: Linked<'_>,
+    worked_out: &str,
 ) -> Result<Raster> {
-    let svg = to_svg(html, fonts, viewport, linked)?;
+    let svg = to_svg(html, fonts, viewport, linked, worked_out)?;
     to_png(svg)
 }
 
 /// Converts serialized HTML into a takumi node tree and renders it to SVG.
-fn to_svg(html: &str, fonts: &Fonts, viewport: Viewport, linked: Linked<'_>) -> Result<String> {
+fn to_svg(
+    html: &str,
+    fonts: &Fonts,
+    viewport: Viewport,
+    linked: Linked<'_>,
+    worked_out: &str,
+) -> Result<String> {
     let node = from_html(html, FromHtmlOptions::default()).context("building takumi node tree")?;
 
     takumi_svg::render(
@@ -65,15 +72,18 @@ fn to_svg(html: &str, fonts: &Fonts, viewport: Viewport, linked: Linked<'_>) -> 
             .viewport(TakumiViewport::new((viewport.width, viewport.height)))
             .fonts(fonts)
             .node(node)
-            .stylesheet(Arc::new(stylesheet(html, linked)))
+            .stylesheet(Arc::new(stylesheet(html, linked, worked_out)))
             .build(),
     )
     .context("rendering SVG")
 }
 
-/// Every sheet the document carries, parsed as one.
-pub fn stylesheet(html: &str, linked: Linked<'_>) -> StyleSheet {
-    StyleSheet::parse_list_loosy(css::sheets(html, linked))
+/// Every sheet the document carries, plus whatever measuring worked out, parsed
+/// as one.
+pub fn stylesheet(html: &str, linked: Linked<'_>, worked_out: &str) -> StyleSheet {
+    let mut sheets = css::sheets(html, linked);
+    sheets.push(worked_out.to_owned());
+    StyleSheet::parse_list_loosy(sheets)
 }
 
 /// Rasterizes an SVG document at its intrinsic size.

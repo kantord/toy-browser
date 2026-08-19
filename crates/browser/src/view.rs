@@ -10,6 +10,7 @@ use toy_browser_engine::Keyed;
 
 use crate::{
     Browser, Measured, NodeId, PageId, Point, Remote, Viewport, css::Linked, measure, pipeline,
+    tables,
 };
 
 impl Browser {
@@ -46,35 +47,89 @@ impl Browser {
         if let Some(viewport) = viewport {
             self.set_viewport(page, viewport);
         }
+        self.sync(page)?;
         let viewport = self.viewport(page);
         let html = self.html(page)?;
-        let base = self.base_url(page);
-        Ok(pipeline::render(
-            &html,
-            &self.fonts,
-            viewport,
-            Linked {
-                base: base.as_ref(),
-                resources: &self.resources,
-            },
-        )?
-        .png)
+        Ok(self.draw(page, &html, viewport)?.png)
     }
 
     /// Renders the page and keeps every intermediate artifact.
     pub fn render(&mut self, page: &PageId) -> Result<pipeline::Raster> {
+        self.sync(page)?;
         let viewport = self.viewport(page);
         let html = self.html(page)?;
+        self.draw(page, &html, viewport)
+    }
+
+    /// Renders with the rules the last Measure worked out, so the picture is
+    /// laid out the way the geometry says it is.
+    fn draw(&self, page: &PageId, html: &str, viewport: Viewport) -> Result<pipeline::Raster> {
         let base = self.base_url(page);
+        let tables = self
+            .pages
+            .get(page)
+            .and_then(|page| page.measured.as_ref())
+            .map(|measured| measured.tables.clone())
+            .unwrap_or_default();
         pipeline::render(
-            &html,
+            html,
             &self.fonts,
             viewport,
             Linked {
                 base: base.as_ref(),
                 resources: &self.resources,
             },
+            &tables,
         )
+    }
+
+    /// How many columns each cell reaches across.
+    ///
+    /// Read here rather than off the laid-out tree, because takumi keeps a
+    /// node's attributes to itself — and a table cannot be given its columns
+    /// without knowing which cells span several of them.
+    fn table_attributes(
+        &mut self,
+        session: &toy_browser_engine::SessionId,
+    ) -> Result<tables::Attributes> {
+        let mut said = tables::Attributes::default();
+        for cell in self.engine.query(session, "td, th")? {
+            if let Some(across) = self.number(session, cell, "colspan")?.filter(|n| *n > 1.0) {
+                said.spans.insert(cell, across as usize);
+            }
+        }
+        self.table_spacing(session, &mut said)?;
+        Ok(said)
+    }
+
+    /// `cellspacing` and `cellpadding`, which a page still uses to say a table
+    /// has no gaps — and which a browser keeping its own defaults would ignore.
+    fn table_spacing(
+        &mut self,
+        session: &toy_browser_engine::SessionId,
+        said: &mut tables::Attributes,
+    ) -> Result<()> {
+        for table in self.engine.query(session, "table")? {
+            if let Some(spacing) = self.number(session, table, "cellspacing")? {
+                said.spacing.insert(table, spacing);
+            }
+            if let Some(padding) = self.number(session, table, "cellpadding")? {
+                said.padding.insert(table, padding);
+            }
+        }
+        Ok(())
+    }
+
+    fn number(
+        &mut self,
+        session: &toy_browser_engine::SessionId,
+        node: NodeId,
+        name: &str,
+    ) -> Result<Option<f32>> {
+        Ok(self
+            .engine
+            .attribute(session, node, name)?
+            .and_then(|value| value.trim().parse().ok()))
     }
 
     /// What the page's own relative references resolve against.
@@ -141,20 +196,22 @@ impl Browser {
 
         let keyed = self.engine.html(session, Keyed::Yes)?;
         let base = self.base_url(page);
-        let stylesheet = pipeline::stylesheet(
+        let sheets = crate::css::sheets(
             &keyed,
             Linked {
                 base: base.as_ref(),
                 resources: &self.resources,
             },
         );
-        let boxes = measure::boxes(&keyed, stylesheet, &self.fonts, viewport)?;
+        let said = self.table_attributes(session)?;
+        let measured = measure::boxes(&keyed, &sheets, &self.fonts, viewport, &said)?;
         if let Some(page) = self.pages.get_mut(page) {
             page.measured = Some(Measured {
                 revision,
                 width: viewport.width,
                 height: viewport.height,
-                boxes,
+                boxes: measured.boxes,
+                tables: measured.tables,
             });
         }
         Ok(())

@@ -24,20 +24,55 @@ use takumi_html::{FromHtmlOptions, from_html};
 
 use toy_browser_engine::{ElementBox, key_of};
 
-use crate::pipeline::Viewport;
+use crate::{pipeline::Viewport, tables, tables::Attributes};
 
 pub use toy_browser_engine::Boxes;
+
+/// What a Measure produced.
+pub struct Measurement {
+    pub boxes: Boxes,
+    /// Rules that could only be worked out by measuring: the column tracks the
+    /// page's tables need. Handed back so the render can be given the same ones
+    /// — a picture laid out differently from what was measured describes
+    /// nothing.
+    pub tables: String,
+}
 
 /// Lays out `keyed_html` and reports where each keyed element ended up.
 ///
 /// `keyed_html` must come from the engine with keys attached; elements without
 /// a marker class simply do not appear in the result.
+///
+/// A page with a table is laid out twice: once to find out how wide its columns
+/// want to be, and once knowing. Nothing else pays for that — a page without
+/// one is measured once and the second pass never happens.
 pub fn boxes(
     keyed_html: &str,
-    stylesheet: StyleSheet,
+    sheets: &[String],
     fonts: &Fonts,
     viewport: Viewport,
-) -> Result<Boxes> {
+    said: &Attributes,
+) -> Result<Measurement> {
+    let (root, boxes) = lay_out(keyed_html, sheets, fonts, viewport)?;
+    let tables = tables::tracks(&root, &boxes, said);
+    if tables.is_empty() {
+        return Ok(Measurement { boxes, tables });
+    }
+
+    let mut told = sheets.to_vec();
+    told.push(tables.clone());
+    let (_, boxes) = lay_out(keyed_html, &told, fonts, viewport)?;
+    Ok(Measurement { boxes, tables })
+}
+
+/// One pass: build the tree, lay it out, and read the boxes back off it.
+fn lay_out(
+    keyed_html: &str,
+    sheets: &[String],
+    fonts: &Fonts,
+    viewport: Viewport,
+) -> Result<(RenderNode, Boxes)> {
+    let stylesheet = StyleSheet::parse_list_loosy(sheets.to_vec());
     let node = from_html(keyed_html, FromHtmlOptions::default())
         .context("building takumi node tree for measurement")?;
     let takumi_viewport = TakumiViewport::new((viewport.width, viewport.height));
@@ -73,7 +108,7 @@ pub fn boxes(
     let mut boxes = Boxes::default();
     // Index 0 is the root context; every other one is reached from inside it.
     collect(&root, &contexts, 0, &results, &mut boxes);
-    Ok(boxes)
+    Ok((root, boxes))
 }
 
 /// Walks one stacking context and everything painted within it, in the order it

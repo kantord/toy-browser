@@ -10,6 +10,7 @@
 //! document, [`view`] measures and renders it.
 
 mod css;
+mod tables;
 mod dom;
 mod fonts;
 mod measure;
@@ -89,6 +90,9 @@ struct Measured {
     width: u32,
     height: Option<u32>,
     boxes: measure::Boxes,
+    /// What measuring worked out that the markup did not say: the column tracks
+    /// the page's tables need. The render is given the same ones.
+    tables: String,
 }
 
 /// Pages, and everything needed to drive them.
