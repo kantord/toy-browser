@@ -26,7 +26,13 @@ pub struct Linked<'a> {
 /// border box, and a bordered element therefore came out 8px short in both
 /// directions. Takumi honours either value when asked — it is only the default
 /// that disagrees.
-const USER_AGENT: &str = "* { box-sizing: content-box }";
+const USER_AGENT: &str = "\
+* { box-sizing: content-box }\
+table { display: block; padding: 2px }\
+tbody { display: block }\
+tr { display: flex; gap: 2px }\
+td { display: block; padding: 1px }\
+th { display: block; padding: 1px }";
 
 /// Every stylesheet the document carries, in source order.
 ///

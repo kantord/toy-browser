@@ -13,12 +13,33 @@ and so a limit is not mistaken for a bug.
   serialized HTML and handed to takumi separately as a stylesheet.
 - **List markers are missing.** `<ul>`/`<li>` lay out with the right
   indentation but takumi draws no bullets.
-- **Inline elements cannot be clicked by name.** takumi's paint items are nodes
-  and nested contexts, with nothing for a text run, so a text link has no box to
-  aim at. Measured on Hacker News: 229 links, **31 with a box, and every one of
-  those contains an image** — the logo and the thirty upvote arrows.
-- **Table layout is not honoured.** A `<table>` page reads correctly but arrives
-  as one centred column, because takumi stacks the cells.
+- **Inline elements have no box, so they cannot be aimed at.** Measured on
+  Hacker News: 229 links, **31 with a box, and every one of those contains an
+  image** — the logo and the thirty upvote arrows.
+
+  Not a hard limit, and an earlier version of this entry was wrong to call it
+  one. takumi lays inline content out in full and `resolve_inline_runs` is
+  public — takumi-svg, another crate, enumerates it from outside. What is
+  reachable splits in two:
+
+  - **Inline boxes** — `inline-block`, `inline-flex`, images, floats —
+    are readable today: `InlineRunLayout::inline_boxes` gives public geometry
+    and `ProcessedInlineSpan::Box` carries a `pub render_node`, which is the
+    marker class this browser already reads. Work, not a wall.
+  - **`display: inline` spans** are walled off twice over:
+    `InlineOutlineRect`'s coordinates are `pub(crate)`, and neither
+    `ProcessedInlineSpan::Text` nor `RenderContext` keeps a link to the element
+    the text came from. The geometry could be computed from public glyph
+    positions, but nothing says which `<span>` a glyph belongs to.
+
+- **Tables are approximated with flexbox, not laid out.** takumi's `Display` has
+  no table variants at all — `None, Flex, InlineFlex, Grid, InlineGrid, Inline,
+  Block, InlineBlock, ListItem` — so `display: table` means nothing to it. The
+  user-agent stylesheet maps rows to flex containers instead, which puts cells
+  side by side and gets their heights exactly right. What it cannot do is
+  shrink-to-fit the table or size columns: a table fills its line, because the
+  `inline-block` that would shrink it is an inline box, and inline boxes have no
+  box. The two limits meet there.
 - **The body's background does not fill the canvas.** CSS propagates the body's
   background to the whole canvas; here it is painted only as far as the body's
   own box, so a short page renders as a band of colour over transparency.
