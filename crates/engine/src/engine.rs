@@ -214,6 +214,14 @@ impl Engine {
         Ok(realm.outcome(activated))
     }
 
+    /// Whether `node` sits anywhere under `ancestor`. Runs no JavaScript.
+    ///
+    /// What a caller comparing a Hit test against the element it aimed at
+    /// needs: a click landing on a child of that element still landed on it.
+    pub fn contains(&mut self, session: &SessionId, ancestor: NodeId, node: NodeId) -> Result<bool> {
+        Ok(self.realm(session)?.contains(ancestor, node))
+    }
+
     /// An element's text content, descendants included. Runs no JavaScript.
     pub fn text(&mut self, session: &SessionId, node: NodeId) -> Result<String> {
         Ok(self.realm(session)?.text(node))

@@ -104,9 +104,40 @@ test("locators find and read elements", async () => {
   await expect(page.locator("p.muted")).toHaveAttribute("class", "muted");
 });
 
-// Actions need a hit-testing and input model this browser does not have, and
-// innerText needs layout-aware text. See docs/cdp-surface.md.
-test.fixme("actions and innerText", async () => {
+/** The middle of an element, which is where a click aimed at it would land. */
+const centre = (selector) =>
+  page.evaluate((css) => {
+    const box = document.querySelector(css).getBoundingClientRect();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  }, selector);
+
+test("clicking runs the page's handlers", async () => {
+  await page.goto(fixture("click.html"));
+  const { x, y } = await centre("#tap");
+  await page.mouse.click(x, y);
+
+  // The inline `onclick` wrote this, so the whole path ran: hit test, the
+  // event travelling to a listener, then the element's own behaviour.
+  expect(await page.textContent("#log")).toBe("inline ran");
+});
+
+test("clicking a link navigates", async () => {
+  await page.goto(fixture("activate.html"));
+  const { x, y } = await centre("#label");
+  await page.mouse.click(x, y);
+
+  // The client learns about a document it never asked for from the events the
+  // press emitted afterwards.
+  expect(page.url()).toContain("hello.html");
+  expect(await page.textContent("h1")).toBe("Hello, toy browser");
+});
+
+// `page.mouse` works; `locator.click()` does not. Playwright checks a target is
+// actionable first, and that check awaits a promise from its injected script —
+// which comes back as `{}` because `Runtime.evaluate` ignores `awaitPromise`.
+// `innerText` needs layout-aware text this browser cannot compute at all.
+// See docs/cdp-surface.md.
+test.fixme("locator actions and innerText", async () => {
   await page.locator("h1").innerText();
   await page.locator("h1").click();
 });

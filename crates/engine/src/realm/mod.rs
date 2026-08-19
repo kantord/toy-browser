@@ -225,6 +225,18 @@ impl Realm {
             .context("raising a mouse event")
     }
 
+    /// Whether `node` sits anywhere under `ancestor`.
+    pub fn contains(&self, ancestor: NodeId, node: NodeId) -> bool {
+        let mut at = self.dom.parent(node);
+        while let Some(current) = at {
+            if current == ancestor {
+                return true;
+            }
+            at = self.dom.parent(current);
+        }
+        false
+    }
+
     /// The topmost element at `point`.
     ///
     /// Answers from the last measure published here, so it runs no JavaScript —

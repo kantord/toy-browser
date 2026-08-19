@@ -79,6 +79,7 @@ impl Sessions {
 
             ("POST", ["session", id, "element"]) => self.find(id, body, First::Yes),
             ("POST", ["session", id, "elements"]) => self.find(id, body, First::No),
+            ("POST", ["session", id, "element", element, "click"]) => self.click(id, element),
             ("GET", ["session", id, "element", element, "text"]) => self.text(id, element),
             ("GET", ["session", id, "element", element, "name"]) => self.tag_name(id, element),
             ("GET", ["session", id, "element", element, "rect"]) => self.rect(id, element),

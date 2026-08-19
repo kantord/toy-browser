@@ -33,6 +33,7 @@ at a time regardless.
 | GET | `/session/:id/element/:e/name` | `tag_name` |
 | GET | `/session/:id/element/:e/attribute/:name` | `attribute` |
 | GET | `/session/:id/element/:e/property/:name` | `call` |
+| POST | `/session/:id/element/:e/click` | `bounding_box`, `hit_test`, `pointer_*` |
 | GET | `/session/:id/element/:e/rect` | `bounding_box` |
 | GET | `/session/:id/element/:e/displayed` | `bounding_box` |
 | POST/GET | `/session/:id/timeouts` | accepted, ignored |
@@ -41,10 +42,19 @@ at a time regardless.
 DOM's own selector engine and tree. That is what the fast reads on the door were
 built for, and this is the front end that uses them.
 
+## What a click is here
+
+The browser has no opinion about whether an element can be clicked: it offers a
+Hit test, a Point and three pointer primitives, and a real click is not refused
+either. **`element click intercepted` is this front end's rule, not the
+browser's** — it measures the element, aims at its centre, asks what is actually
+topmost there, and refuses only if the answer is neither the element nor
+something inside it. `docs/adr/0010` says why the semantics live here.
+
 ## What it does not do
 
-- **Actions**: click, send keys, hover, drag. They need hit-testing and an input
-  model the browser layer does not have.
+- **Send keys, hover, drag, and the Actions API.** Clicking works; nothing else
+  that moves a pointer or a caret does.
 - **Selector strategies other than CSS and tag name.** XPath and the link-text
   strategies come back as `invalid selector` rather than silently finding
   nothing.

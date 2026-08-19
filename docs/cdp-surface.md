@@ -44,6 +44,7 @@ level of the envelope; the browser itself is addressed by omitting it.
 | page | `Runtime.evaluate` | runs an expression in the page |
 | page | `Runtime.callFunctionOn` | calls a function with `this` and arguments |
 | page | `Runtime.releaseObject` | forgets a retained value |
+| page | `Input.dispatchMouseEvent` | moves, presses or releases the pointer |
 
 ## Events
 
@@ -99,9 +100,10 @@ Everything below was measured, not guessed.
 
 | Works | Does not |
 | --- | --- |
-| `page.goto`, `page.screenshot` | `locator.click` and every other action |
-| `page.title()`, `page.content()`, `page.url()` | `locator.innerText()` |
-| `page.evaluate()`, `page.evaluateHandle()`, handles as arguments | `page.waitForSelector()` |
+| `page.goto`, `page.screenshot` | `locator.click` and every other locator action |
+| **`page.mouse.click/move/down/up`** | `locator.innerText()` |
+| `page.title()`, `page.content()`, `page.url()` | `page.waitForSelector()` |
+| `page.evaluate()`, `page.evaluateHandle()`, handles as arguments | |
 | **`expect(...).toHaveTitle / toHaveCount / toBeVisible / toHaveText / toContainText / toHaveAttribute`** | |
 | `page.textContent()`, `page.getByText()`, `locator.count()` | |
 | `getBoundingClientRect()` — real measured geometry | |
@@ -270,9 +272,35 @@ nothing.
 `window.innerWidth` honestly — but nothing knows the viewport until something
 sets it, so the explicit call is still the only way to say what it should be.
 
+## Why `page.mouse` works and `locator.click()` does not
+
+Both end in the same three protocol messages. The difference is everything
+Playwright does first: a locator action checks the target is *actionable* —
+visible, stable, receiving events — and that check awaits a promise returned by
+its injected script.
+
+**`Runtime.evaluate` ignores `awaitPromise`.** A promise comes back serialized
+as `{}` rather than as what it resolved to, so the check never gets an answer it
+recognises and the locator retries until the test times out. The call log shows
+it: `62 x locator resolved to visible <div …>` and then nothing, with no input
+message ever reaching the server.
+
+That is one gap, not a missing input model — `page.mouse.click()` drives the
+same browser through the same code and runs the page's handlers. Honouring
+`awaitPromise` means running the page until it settles and answering with the
+promise's value, which is the shape `Budget` already describes.
+
+`locator.boundingBox()` is blocked by the same thing, and behind it sits a
+second gap: the `DOM` domain, which is where Playwright reads geometry from
+rather than `getBoundingClientRect`.
+
 ## Not implemented at all
 
 No network domain: `page.goto()` returns `null` rather than a `Response`,
 because Playwright only builds one when it saw request events. No `DOM` domain,
-so no box geometry and therefore no clicking or typing. No iframes, workers,
-dialogs, downloads or tracing.
+so Playwright cannot read box geometry the way its locator actions want to. No
+keyboard input, iframes, workers, dialogs, downloads or tracing.
+
+A press that follows a link is announced afterwards, by `Page.frameNavigated`
+and the lifecycle events, because the URL having moved is all a real client sees
+too — nothing tells the browser in advance that a click will navigate.

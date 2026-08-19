@@ -5,7 +5,7 @@
 //! about it.
 
 use serde_json::{Value, json};
-use toy_browser::Remote;
+use toy_browser::{Point, Remote};
 
 use super::session::{Sessions, internal};
 use super::{Answer, Failure};
@@ -119,6 +119,60 @@ impl Sessions {
                 None => json!({ "x": 0, "y": 0, "width": 0, "height": 0 }),
             },
         )
+    }
+
+    /// Clicks the element's centre, the way W3C says to: move there, press,
+    /// release.
+    ///
+    /// The browser has no opinion about whether an element can be clicked — a
+    /// real click is not refused either. The refusal is this protocol's, built
+    /// out of a Hit test the caller could have run itself.
+    pub(super) fn click(&mut self, id: &str, element: &str) -> Answer {
+        let page = self.page(id)?;
+        let remote = self.element(id, element)?;
+        let area = self
+            .browser
+            .bounding_box(&page, &remote)
+            .map_err(internal)?
+            .ok_or_else(|| {
+                Failure::new("element not interactable", "the layout gave it no box")
+            })?;
+        let point = Point {
+            x: area.x + area.width / 2.0,
+            y: area.y + area.height / 2.0,
+        };
+
+        if let Remote::Element(node) = remote {
+            self.refuse_if_covered(&page, node, point)?;
+        }
+        self.browser.pointer_move(&page, point).map_err(internal)?;
+        self.browser.pointer_down(&page, point).map_err(internal)?;
+        self.browser.pointer_up(&page, point).map_err(internal)?;
+        Ok(Value::Null)
+    }
+
+    /// Something else being on top is what W3C calls an intercepted click.
+    ///
+    /// A click landing on a child of the element still landed on the element,
+    /// which is why this asks about descent rather than identity.
+    fn refuse_if_covered(
+        &mut self,
+        page: &toy_browser::PageId,
+        node: toy_browser::NodeId,
+        point: Point,
+    ) -> Result<(), Failure> {
+        let hit = self.browser.hit_test(page, point).map_err(internal)?;
+        let reaches = match hit {
+            Some(hit) => hit == node || self.browser.contains(page, node, hit).map_err(internal)?,
+            None => false,
+        };
+        if reaches {
+            return Ok(());
+        }
+        Err(Failure::new(
+            "element click intercepted",
+            "something else is on top of the point that would be clicked",
+        ))
     }
 
     /// Visible enough: it has a box. Nothing here computes style, so

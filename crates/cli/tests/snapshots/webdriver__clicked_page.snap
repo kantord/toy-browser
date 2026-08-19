@@ -1,0 +1,5 @@
+---
+source: crates/cli/tests/webdriver.rs
+expression: read_clicked_page(&driver).await
+---
+log: inline ran

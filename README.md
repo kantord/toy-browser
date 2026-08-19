@@ -86,6 +86,12 @@ exempt from**; anything that doesn't is reported as a freeloader and has to move
 out. That caught one on its first run. `docs/adr/0009` records the mechanism and
 why its first use was borderline.
 
+A click is a Point, never an element: the browser offers a Hit test and three
+pointer primitives, and each front end assembles its own semantics — WebDriver's
+`element click intercepted` is a rule the CDP side does not share.
+`docs/adr/0010` records why, including that JavaScript is entered only when
+something on the event's path is actually listening.
+
 Two more clippy budgets sit beside it. `too-many-lines` bounds one function's
 body at 40, counting neither comments nor blank lines, because the longest
 function here is 144 lines inside a 218-line file — under the file budget, and
@@ -214,18 +220,23 @@ pnpm install && pnpm test
 ✓ runs an init script before the page's own
 ✓ web-first assertions
 ✓ locators find and read elements
-- actions and innerText
+✓ clicking runs the page's handlers
+✓ clicking a link navigates
+- locator actions and innerText
 ```
 
-The dividing line is **reads versus actions**. Working: `goto`, `screenshot`,
-`evaluate()` and `evaluateHandle()`, `title()`, `content()`, `textContent()`,
-`getByText()`, `locator.count()`, `getBoundingClientRect()` backed by a real
-layout pass, and the web-first assertions — `toHaveTitle`, `toHaveCount`,
-`toBeVisible`, `toHaveText`, `toContainText`, `toHaveAttribute`.
+Working: `goto`, `screenshot`, `evaluate()` and `evaluateHandle()`, `title()`,
+`content()`, `textContent()`, `getByText()`, `locator.count()`,
+`getBoundingClientRect()` backed by a real layout pass, **`page.mouse`**, and
+the web-first assertions — `toHaveTitle`, `toHaveCount`, `toBeVisible`,
+`toHaveText`, `toContainText`, `toHaveAttribute`.
 
-Not working: anything that moves a mouse or a caret — `click`, `fill`, `hover`
-— plus `innerText()` and `waitForSelector()`. `docs/cdp-surface.md` records the
-full list and how the assertion blocker was found.
+`page.mouse.click()` works but `locator.click()` does not, and the reason is one
+gap rather than a missing input model: a locator action first checks its target
+is actionable, and that check awaits a promise from Playwright's injected
+script, which comes back as `{}` because `Runtime.evaluate` ignores
+`awaitPromise`. Also missing: `innerText()`, `waitForSelector()`, and anything
+that moves a caret. `docs/cdp-surface.md` records the full list.
 
 Navigation handles `about:` and `file://` only; anything else comes back as
 `net::ERR_UNKNOWN_URL_SCHEME`.
@@ -250,10 +261,11 @@ assert_eq!(heading.text().await?, "Hello, toy browser");
 
 `crates/cli/tests/webdriver.rs` proves it with [thirtyfour](https://github.com/stevepryde/thirtyfour),
 a real Selenium client with no knowledge of this project: session, navigate,
-find, text, attributes, element rect, execute script, screenshot.
+find, text, attributes, element rect, execute script, screenshot, **click** —
+including a click that follows a link into a different document.
 
 Finding elements and reading their text and attributes runs **no JavaScript** —
-it is the DOM's own selector engine. Actions, XPath and waiting are not
+it is the DOM's own selector engine. Sending keys, XPath and waiting are not
 implemented; `docs/webdriver-surface.md` has the full list.
 
 Two front ends now talk to the same browser layer, and neither can reach past
@@ -273,5 +285,8 @@ works, and the non-obvious things it requires.
   serialized HTML and handed to takumi separately as a stylesheet.
 - **List markers are missing.** `<ul>`/`<li>` lay out with the right
   indentation but takumi draws no bullets.
+- **Inline elements cannot be clicked by name.** takumi's paint items are nodes
+  and nested contexts, with nothing for a text run, so a `<span>` inside a
+  paragraph has no box to aim at. This is a limit rather than a gap.
 - Blitz's own style resolution and layout are not used at all yet — only its
   parser and tree. Everything visual comes from takumi.

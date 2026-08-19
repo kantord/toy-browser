@@ -96,7 +96,57 @@ async fn thirtyfour_can_drive_the_browser(#[future] session: Session) {
         .expect("goto");
     insta::assert_yaml_snapshot!("scripted_page", read_scripted_page(&driver).await);
 
+    driver.goto(fixture("click.html")).await.expect("goto");
+    click(&driver, "#tap").await;
+    insta::assert_yaml_snapshot!("clicked_page", read_clicked_page(&driver).await);
+
+    // A click on the block inside a link follows the link, so what comes back
+    // is a different document than the one that was clicked.
+    driver.goto(fixture("activate.html")).await.expect("goto");
+    click(&driver, "#label").await;
+    insta::assert_yaml_snapshot!("followed_link", read_followed_link(&driver).await);
+
     driver.quit().await.expect("quit");
+}
+
+/// Clicks the element's centre, which is all a Selenium client asks for.
+async fn click(driver: &WebDriver, selector: &str) {
+    driver
+        .find(By::Css(selector))
+        .await
+        .expect("the element to click")
+        .click()
+        .await
+        .expect("click");
+}
+
+/// What the page shows once its handlers have run.
+#[derive(serde::Serialize)]
+struct Clicked {
+    log: String,
+}
+
+async fn read_clicked_page(driver: &WebDriver) -> Clicked {
+    let log = driver.find(By::Css("#log")).await.expect("the log");
+    Clicked {
+        log: log.text().await.expect("text"),
+    }
+}
+
+/// Where a followed link left the session.
+#[derive(serde::Serialize)]
+struct Followed {
+    url_names_the_target: bool,
+    heading: String,
+}
+
+async fn read_followed_link(driver: &WebDriver) -> Followed {
+    let url = driver.current_url().await.expect("url");
+    let heading = driver.find(By::Css("h1")).await.expect("a heading");
+    Followed {
+        url_names_the_target: url.as_str().ends_with("hello.html"),
+        heading: heading.text().await.expect("text"),
+    }
 }
 
 /// What exists only because the page's scripts ran, and what a client can do

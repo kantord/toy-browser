@@ -1,0 +1,6 @@
+---
+source: crates/cli/tests/webdriver.rs
+expression: read_followed_link(&driver).await
+---
+url_names_the_target: true
+heading: "Hello, toy browser"

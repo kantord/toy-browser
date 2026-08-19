@@ -7,7 +7,7 @@
 use anyhow::Result;
 use toy_browser_engine::{Evaluated, Keyed, Mode};
 
-use crate::{Browser, PageId, Remote};
+use crate::{Browser, NodeId, PageId, Remote};
 
 impl Browser {
     /// Every element matching `selector`. Runs no JavaScript.
@@ -65,6 +65,16 @@ impl Browser {
             Remote::Element(node) => Ok(self.engine.attribute(&session, *node, name)?),
             _ => Ok(None),
         }
+    }
+
+    /// Whether `node` sits anywhere under `ancestor`. Runs no JavaScript.
+    ///
+    /// A front end deciding whether a click landed where it aimed needs this:
+    /// the Hit test answers with the topmost element, which is often a child of
+    /// the one the caller meant.
+    pub fn contains(&mut self, page: &PageId, ancestor: NodeId, node: NodeId) -> Result<bool> {
+        let session = self.session(page)?;
+        self.engine.contains(&session, ancestor, node)
     }
 
     /// The page's current markup.

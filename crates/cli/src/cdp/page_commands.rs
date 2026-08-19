@@ -9,7 +9,7 @@ use anyhow::Result;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use serde_json::{Value, json};
 
-use toy_browser::{Browser, Remote, Viewport};
+use toy_browser::{Browser, Point, Remote, Viewport};
 
 use super::Outcome;
 use super::dispatch::Session;
@@ -51,6 +51,7 @@ impl Session<'_> {
             "Runtime.evaluate" => evaluate(page, browser, params)?,
             "Runtime.callFunctionOn" => call_function_on(page, browser, params)?,
             "Runtime.releaseObject" => release_object(page, browser, params),
+            "Input.dispatchMouseEvent" => dispatch_mouse(page, browser, params),
             // Handles are opaque here, so a client inspecting one finds nothing
             // rather than an error it would have to handle.
             "Runtime.getProperties" => Outcome::ok(json!({ "result": [] })),
@@ -94,6 +95,55 @@ fn navigate(page: &mut Page, browser: &mut Browser, params: &Value) -> Outcome {
     Outcome {
         before: Vec::new(),
         result,
+        after: navigation_events(page, &url),
+    }
+}
+
+/// One of the three messages a client sends instead of a click.
+///
+/// Assembling them back into a click is the browser's job, not this one's — so
+/// nothing here knows what a click is. A press that followed a link is noticed
+/// afterwards, by the URL having moved, because that is all a real client sees
+/// too.
+fn dispatch_mouse(page: &mut Page, browser: &mut Browser, params: &Value) -> Outcome {
+    let point = Point {
+        x: params["x"].as_f64().unwrap_or_default() as f32,
+        y: params["y"].as_f64().unwrap_or_default() as f32,
+    };
+    let before = browser.url(&page.page).unwrap_or_default().to_owned();
+
+    let kind = params["type"].as_str().unwrap_or_default();
+    let emitted = match kind {
+        "mousePressed" => browser.pointer_down(&page.page, point),
+        "mouseReleased" => browser.pointer_up(&page.page, point),
+        "mouseMoved" => browser.pointer_move(&page.page, point),
+        other => return Outcome::ok(unhandled(other)),
+    };
+    match emitted {
+        Ok(emitted) => {
+            for error in &emitted.errors {
+                eprintln!("cdp: {kind}: {error}");
+            }
+        }
+        Err(error) => eprintln!("cdp: {kind}: {error}"),
+    }
+
+    announce_navigation(page, browser, &before)
+}
+
+/// Reports a document the client never asked for, when something the page did
+/// replaced it. Without this a client waiting on a click that follows a link
+/// waits forever.
+fn announce_navigation(page: &mut Page, browser: &mut Browser, before: &str) -> Outcome {
+    let url = browser.url(&page.page).unwrap_or_default().to_owned();
+    if url == before {
+        return Outcome::ok(json!({}));
+    }
+    page.begin_navigation();
+    page.renew_contexts();
+    Outcome {
+        before: Vec::new(),
+        result: json!({}),
         after: navigation_events(page, &url),
     }
 }
