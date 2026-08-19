@@ -5,6 +5,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+ureq = { version = "3.4.0", default-features = false, features = ["rustls"] }
 url = "2.5.8"
 
 [lints]

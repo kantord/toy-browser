@@ -102,11 +102,11 @@ fn an_unsupported_scheme_is_refused_by_reason() {
     let mut browser = browser();
     let page = browser.new_page().unwrap();
 
-    let error = browser
-        .navigate(&page, "https://example.invalid/")
-        .unwrap_err();
+    // `ftp` rather than `https`, which this browser now speaks. Deliberately a
+    // scheme nothing will ever look up, so the test cannot reach a network.
+    let error = browser.navigate(&page, "ftp://example.invalid/").unwrap_err();
     assert!(
-        matches!(error, NavigationError::UnsupportedScheme(ref scheme) if scheme == "https"),
+        matches!(error, NavigationError::UnsupportedScheme(ref scheme) if scheme == "ftp"),
         "got {error:?}"
     );
 

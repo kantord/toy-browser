@@ -75,7 +75,9 @@ test("web-first assertions poll via the injected script", async () => {
 });
 
 test("rejects a scheme it cannot load", async () => {
-  await expect(page.goto("https://example.invalid/")).rejects.toThrow(
+  // `ftp`, not `https`: this browser speaks http now. Deliberately a scheme
+  // nothing will ever look up, so the test cannot reach a network.
+  await expect(page.goto("ftp://example.invalid/")).rejects.toThrow(
     /ERR_UNKNOWN_URL_SCHEME/,
   );
 });

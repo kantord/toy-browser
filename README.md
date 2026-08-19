@@ -27,7 +27,7 @@ browser, split in two; the pnpm half is the Playwright acceptance suite that
 drives it.
 
 ```
-crates/fetch/      one shared, thread-safe, cached place bytes are read
+crates/fetch/      one shared, thread-safe, cached place bytes are read (file and http)
 crates/engine/     the door — sessions, DOM, JavaScript, HTML
 crates/browser/    pages, elements, measuring, rendering
 crates/cli/        the command line, and the CDP and WebDriver front ends
@@ -146,6 +146,23 @@ Flags:
   auto-detected system sans-serif, because takumi does not load system fonts.
 - `--no-scripts` — render the markup as parsed, without running any JavaScript
 
+## Real websites
+
+`crates/fetch` speaks `http` and `https` as well as `file`, so an input can be a
+URL:
+
+```sh
+cargo run -- render https://news.ycombinator.com/
+```
+
+Hacker News renders: the page, its linked stylesheet, and its script, which the
+engine runs. `tests/playwright/specs/hackernews.spec.mjs` drives the live site
+over CDP — thirty stories, and a click on the logo that navigates.
+
+Its nav bar cannot be clicked and its table layout is not honoured — both are
+limits rather than gaps, recorded below. Network tests are their own spec and
+skip under `TOY_BROWSER_OFFLINE=1`, so the rest of the suite never reaches one.
+
 ## Fixtures
 
 `tests/fixtures/` holds the sample pages: text, flex rows of colored boxes,
@@ -189,7 +206,7 @@ wrapper, listener and timer callback — which a Realm releases when it drops.
 
 Simplifications worth knowing: the whole document is parsed before anything
 runs, so `async` and `defer` do not reorder anything and `document.write()`
-appends to the body; nothing is fetched over the network; and there is no
+appends to the body; and there is no
 computed style, scrolling, `innerText` or `Intl`. `docs/js-entry-points.md` has
 the full list of what is missing and why each one is left out rather than
 approximated.
@@ -289,19 +306,7 @@ it. That is the claim `docs/layers.md` makes, and this is the evidence for it.
 `docs/cdp-surface.md` records the protocol surface, how much of Playwright
 works, and the non-obvious things it requires.
 
-## Notes from the first run
+## Known limits
 
-- **blitz's `Node::outer_html` cannot round-trip.** It writes every childless
-  element as `<div />`. HTML has no self-closing syntax for non-void elements,
-  so re-parsing that output swallowed the following siblings — four colored
-  boxes collapsed into one nested stack. `crates/engine/src/serialize.rs` walks
-  the DOM and emits `<div></div>` instead.
-- **takumi-html drops `<style>` elements**, so the CSS is extracted from the
-  serialized HTML and handed to takumi separately as a stylesheet.
-- **List markers are missing.** `<ul>`/`<li>` lay out with the right
-  indentation but takumi draws no bullets.
-- **Inline elements cannot be clicked by name.** takumi's paint items are nodes
-  and nested contexts, with nothing for a text run, so a `<span>` inside a
-  paragraph has no box to aim at. This is a limit rather than a gap.
-- Blitz's own style resolution and layout are not used at all yet — only its
-  parser and tree. Everything visual comes from takumi.
+What this browser cannot do and why, including the ones that are limits of the
+libraries under it rather than work left undone: `docs/limits.md`.

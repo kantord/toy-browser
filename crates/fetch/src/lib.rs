@@ -14,6 +14,8 @@ use std::{
 
 pub use url::Url;
 
+mod http;
+
 /// Why a Resource could not be produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FetchError {
@@ -122,6 +124,13 @@ impl Resources {
                 Ok(Resource {
                     url: url.clone(),
                     bytes,
+                })
+            }
+            "http" | "https" => {
+                let fetched = http::get(url)?;
+                Ok(Resource {
+                    url: fetched.url,
+                    bytes: fetched.bytes,
                 })
             }
             // `about:` URLs name documents rather than bytes, so whoever knows

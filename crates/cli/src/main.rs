@@ -114,7 +114,7 @@ fn render(args: RenderArgs) -> Result<()> {
     browser.set_run_scripts(&page, !args.no_scripts);
 
     for input in &args.inputs {
-        let url = file_url(input)?;
+        let url = input_url(input)?;
         let stem = input
             .file_stem()
             .and_then(|stem| stem.to_str())
@@ -213,10 +213,21 @@ fn report_raster(raster: &toy_browser::Raster) {
     }
 }
 
-/// A `file://` URL naming `path`.
-fn file_url(path: &std::path::Path) -> Result<Url> {
+/// What an input names: a URL if it already is one, otherwise a file on disk.
+///
+/// Checked by scheme rather than by trying the filesystem first, because a
+/// relative path is the common case and a URL is unambiguous when it appears.
+fn input_url(input: &std::path::Path) -> Result<Url> {
+    if let Some(url) = input.to_str().and_then(remote_url) {
+        return Ok(url);
+    }
     let absolute =
-        std::fs::canonicalize(path).with_context(|| format!("resolving {}", path.display()))?;
+        std::fs::canonicalize(input).with_context(|| format!("resolving {}", input.display()))?;
     Url::from_file_path(&absolute)
         .map_err(|()| anyhow::anyhow!("not a file path: {}", absolute.display()))
+}
+
+fn remote_url(input: &str) -> Option<Url> {
+    let url = Url::parse(input).ok()?;
+    matches!(url.scheme(), "http" | "https").then_some(url)
 }

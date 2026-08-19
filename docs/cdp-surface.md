@@ -291,8 +291,9 @@ rather than `getBoundingClientRect`.
 
 ## Not implemented at all
 
-No network domain: `page.goto()` returns `null` rather than a `Response`,
-because Playwright only builds one when it saw request events. No `DOM` domain,
+No `Network` **domain**: `page.goto()` returns `null` rather than a `Response`,
+because Playwright only builds one when it saw request events. The browser does
+fetch over HTTP — it just never tells a client that it did. No `DOM` domain,
 so Playwright cannot read box geometry the way its locator actions want to. No
 keyboard input, iframes, workers, dialogs, downloads or tracing.
 

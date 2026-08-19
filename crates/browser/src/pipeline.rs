@@ -11,6 +11,8 @@ use takumi_core::{Fonts, style::StyleSheet, viewport::Viewport as TakumiViewport
 use takumi_html::{FromHtmlOptions, from_html};
 use takumi_svg::SvgOptions;
 
+use crate::css::{self, Linked};
+
 /// The size a document is laid out and rendered at.
 #[derive(Clone, Copy)]
 pub struct Viewport {
@@ -44,13 +46,18 @@ pub struct Raster {
 }
 
 /// Lays out `html` at `viewport` and rasterizes it.
-pub fn render(html: &str, fonts: &Fonts, viewport: Viewport) -> Result<Raster> {
-    let svg = to_svg(html, fonts, viewport)?;
+pub fn render(
+    html: &str,
+    fonts: &Fonts,
+    viewport: Viewport,
+    linked: Linked<'_>,
+) -> Result<Raster> {
+    let svg = to_svg(html, fonts, viewport, linked)?;
     to_png(svg)
 }
 
 /// Converts serialized HTML into a takumi node tree and renders it to SVG.
-fn to_svg(html: &str, fonts: &Fonts, viewport: Viewport) -> Result<String> {
+fn to_svg(html: &str, fonts: &Fonts, viewport: Viewport, linked: Linked<'_>) -> Result<String> {
     let node = from_html(html, FromHtmlOptions::default()).context("building takumi node tree")?;
 
     takumi_svg::render(
@@ -58,16 +65,15 @@ fn to_svg(html: &str, fonts: &Fonts, viewport: Viewport) -> Result<String> {
             .viewport(TakumiViewport::new((viewport.width, viewport.height)))
             .fonts(fonts)
             .node(node)
-            .stylesheet(Arc::new(stylesheet(html)))
+            .stylesheet(Arc::new(stylesheet(html, linked)))
             .build(),
     )
     .context("rendering SVG")
 }
 
-/// takumi-html drops `<style>` elements, so the CSS is handed to the renderer
-/// separately.
-pub fn stylesheet(html: &str) -> StyleSheet {
-    StyleSheet::parse_list_loosy(style_blocks(html))
+/// Every sheet the document carries, parsed as one.
+pub fn stylesheet(html: &str, linked: Linked<'_>) -> StyleSheet {
+    StyleSheet::parse_list_loosy(css::sheets(html, linked))
 }
 
 /// Rasterizes an SVG document at its intrinsic size.
@@ -96,25 +102,4 @@ fn uniform_color(pixmap: &tiny_skia::Pixmap) -> Option<[u8; 4]> {
     pixels
         .all(|pixel| *pixel == first)
         .then(|| [first.red(), first.green(), first.blue(), first.alpha()])
-}
-
-/// Text content of every `<style>` element, in document order.
-fn style_blocks(html: &str) -> Vec<&str> {
-    let mut blocks = Vec::new();
-    let mut rest = html;
-
-    while let Some(open) = rest.find("<style") {
-        let after_tag = &rest[open + "<style".len()..];
-        let Some(content_start) = after_tag.find('>') else {
-            break;
-        };
-        let content = &after_tag[content_start + 1..];
-        let Some(close) = content.find("</style>") else {
-            break;
-        };
-        blocks.push(&content[..close]);
-        rest = &content[close + "</style>".len()..];
-    }
-
-    blocks
 }

@@ -8,7 +8,9 @@
 use anyhow::Result;
 use toy_browser_engine::Keyed;
 
-use crate::{Browser, Measured, NodeId, PageId, Point, Remote, Viewport, measure, pipeline};
+use crate::{
+    Browser, Measured, NodeId, PageId, Point, Remote, Viewport, css::Linked, measure, pipeline,
+};
 
 impl Browser {
     /// Where an element sits, measured at the page's current viewport.
@@ -46,14 +48,38 @@ impl Browser {
         }
         let viewport = self.viewport(page);
         let html = self.html(page)?;
-        Ok(pipeline::render(&html, &self.fonts, viewport)?.png)
+        let base = self.base_url(page);
+        Ok(pipeline::render(
+            &html,
+            &self.fonts,
+            viewport,
+            Linked {
+                base: base.as_ref(),
+                resources: &self.resources,
+            },
+        )?
+        .png)
     }
 
     /// Renders the page and keeps every intermediate artifact.
     pub fn render(&mut self, page: &PageId) -> Result<pipeline::Raster> {
         let viewport = self.viewport(page);
         let html = self.html(page)?;
-        pipeline::render(&html, &self.fonts, viewport)
+        let base = self.base_url(page);
+        pipeline::render(
+            &html,
+            &self.fonts,
+            viewport,
+            Linked {
+                base: base.as_ref(),
+                resources: &self.resources,
+            },
+        )
+    }
+
+    /// What the page's own relative references resolve against.
+    fn base_url(&self, page: &PageId) -> Option<toy_browser_fetch::Url> {
+        toy_browser_fetch::Url::parse(self.url(page)?).ok()
     }
 
     /// Measures the page if anything it depends on has changed, then tells it
@@ -114,7 +140,14 @@ impl Browser {
         }
 
         let keyed = self.engine.html(session, Keyed::Yes)?;
-        let stylesheet = pipeline::stylesheet(&keyed);
+        let base = self.base_url(page);
+        let stylesheet = pipeline::stylesheet(
+            &keyed,
+            Linked {
+                base: base.as_ref(),
+                resources: &self.resources,
+            },
+        );
         let boxes = measure::boxes(&keyed, stylesheet, &self.fonts, viewport)?;
         if let Some(page) = self.pages.get_mut(page) {
             page.measured = Some(Measured {

@@ -36,6 +36,14 @@ test *ARGS:
 accept *ARGS:
     cd tests/playwright && pnpm exec playwright test {{ ARGS }}
 
+# The same, without the specs that reach a real website.
+accept-offline *ARGS:
+    cd tests/playwright && TOY_BROWSER_OFFLINE=1 pnpm exec playwright test {{ ARGS }}
+
+# Render one URL or file to out/, which is the quickest look at a real page.
+open url:
+    cargo run -- render {{ url }}
+
 # The same protocol without a test runner in the way.
 smoke:
     pnpm test:smoke

@@ -9,7 +9,7 @@ executed. **missing** = neither.
 
 The load is deliberately flat: the whole document is parsed, then every script
 runs in document order, then the lifecycle is driven to a standstill. `async`
-and `defer` do not reorder anything, and nothing is fetched over the network.
+and `defer` do not reorder anything.
 
 ## 1. Parse-time, from markup
 
