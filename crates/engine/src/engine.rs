@@ -10,7 +10,8 @@ use anyhow::{Result, anyhow};
 use toy_browser_fetch::Resources;
 
 use crate::{
-    Argument, Budget, Environment, Evaluated, Handle, Keyed, LoadPage, LoadReport, Mode, NodeId,
+    Activated, Argument, Budget, Environment, Evaluated, Handle, Keyed, LoadPage, LoadReport,
+    Mode, NodeId,
     Mouse, Outcome, Point, SessionId, realm::Realm,
 };
 
@@ -207,10 +208,10 @@ impl Engine {
         session: &SessionId,
         node: NodeId,
         mouse: Mouse<'_>,
-    ) -> Result<Outcome<()>> {
+    ) -> Result<Outcome<Activated>> {
         let realm = self.realm(session)?;
-        realm.raise_mouse(node, mouse)?;
-        Ok(realm.outcome(()))
+        let activated = realm.raise_mouse(node, mouse)?;
+        Ok(realm.outcome(activated))
     }
 
     /// An element's text content, descendants included. Runs no JavaScript.

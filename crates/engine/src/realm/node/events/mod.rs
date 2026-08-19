@@ -8,6 +8,7 @@
 //! `window` is a dispatch target and is not a node, so a target is named by
 //! string: a node id, or the name of a global target.
 
+mod activation;
 mod listeners;
 
 use rquickjs::{Ctx, Function, IntoJs, Object, Value, function::This};
@@ -16,6 +17,7 @@ use listeners::{anyone_listening, attribute_for, has_inline, registered_for};
 pub(in crate::realm::node) use listeners::Registered;
 pub(in crate::realm) use listeners::{add_listener, capture_of, remove_listener};
 
+use crate::Activated;
 use super::support::{dom_of, wrap};
 
 /// The one target that is not a node. Matches `tb.WINDOW` in the Prelude.
@@ -211,11 +213,28 @@ pub(in crate::realm) fn raise_mouse(
     ctx: &Ctx<'_>,
     node: usize,
     mouse: crate::Mouse<'_>,
-) -> rquickjs::Result<()> {
+) -> rquickjs::Result<Activated> {
+    let prevented = tell_the_page(ctx, node, mouse)?;
+    let dom = dom_of(ctx)?;
+    // Focus moves on the press, not on the click. A page that focuses a field
+    // and then reads it back in the same gesture depends on that order.
+    if mouse.kind == "mousedown" {
+        activation::focus_on_press(&dom, node);
+    }
+    if mouse.kind != "click" || prevented {
+        return Ok(Activated::Nothing);
+    }
+    Ok(activation::activate(&dom, node))
+}
+
+/// Builds the event and walks it, reporting whether a listener called
+/// `preventDefault`. Builds nothing when nothing is waiting, in which case
+/// nothing was prevented either.
+fn tell_the_page(ctx: &Ctx<'_>, node: usize, mouse: crate::Mouse<'_>) -> rquickjs::Result<bool> {
     let target = node.to_string();
     let path = path_to(ctx, &target)?;
     if !anyone_listening(ctx, &path, mouse.kind)? {
-        return Ok(());
+        return Ok(false);
     }
     let helpers: Object = ctx.globals().get("__tb")?;
     let make: Function = helpers.get("makeMouseEvent")?;
@@ -226,6 +245,7 @@ pub(in crate::realm) fn raise_mouse(
         mouse.buttons,
         mouse.detail,
     ))?;
-    dispatch(ctx, target, event)
+    dispatch(ctx, target, event.clone())?;
+    Ok(flag(&event, "defaultPrevented"))
 }
 

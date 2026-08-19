@@ -22,6 +22,9 @@ pub struct Dom {
     /// Bumped by every mutation, so anything computed from an earlier state can
     /// tell whether it is still good.
     revision: Cell<u64>,
+    /// What has focus, if anything. Not a mutation: focus moves without the
+    /// markup changing, so it leaves the revision alone and costs no measure.
+    focused: Cell<Option<usize>>,
 }
 
 impl Dom {
@@ -31,6 +34,27 @@ impl Dom {
             base_url,
             resources,
             revision: Cell::new(1),
+            focused: Cell::new(None),
+        }
+    }
+
+    /// What has focus. `None` is a document nothing is focused in, which is
+    /// what `document.activeElement` reports as the body.
+    pub fn focused(&self) -> Option<usize> {
+        self.focused.get()
+    }
+
+    /// Moves focus, or takes it away. Nothing checks that the node can hold
+    /// focus: whoever calls this has already decided that.
+    pub fn focus(&self, node: Option<usize>) {
+        self.focused.set(node);
+    }
+
+    /// Gives up focus, but only if this node is the one holding it — blurring
+    /// something that never had it is not a way to unfocus something else.
+    pub fn blur(&self, node: usize) {
+        if self.focused.get() == Some(node) {
+            self.focused.set(None);
         }
     }
 

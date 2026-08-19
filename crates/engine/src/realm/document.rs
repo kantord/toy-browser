@@ -192,6 +192,13 @@ impl Document {
     pub fn head<'js>(&self, ctx: Ctx<'js>) -> rquickjs::Result<Value<'js>> {
         wrap_maybe_id(&ctx, self.dom.head())
     }
+
+    /// What has focus, or the body when nothing does — which is the answer a
+    /// browser gives rather than null.
+    #[qjs(get, rename = "activeElement")]
+    pub fn active_element<'js>(&self, ctx: Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        wrap_maybe_id(&ctx, self.dom.focused().or_else(|| self.dom.body()))
+    }
 }
 
 pub(super) fn install(ctx: &Ctx<'_>, dom: &Rc<Dom>) -> Result<()> {

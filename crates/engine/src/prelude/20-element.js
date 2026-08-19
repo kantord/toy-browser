@@ -26,9 +26,14 @@
       return null;
     }
 
-    // No element is ever focused: there is no input to give focus to.
-    focus() {}
-    blur() {}
+    // Focus is document state rather than anything visual: nothing here draws
+    // a focus ring, but `document.activeElement` answers honestly.
+    focus() {
+      __dom.focus(this.__id);
+    }
+    blur() {
+      __dom.blur(this.__id);
+    }
 
     // Reads and writes the `style` attribute itself, because that attribute is
     // what survives serialization into the renderer. Only inline style is

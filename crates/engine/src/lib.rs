@@ -103,6 +103,21 @@ pub struct Mouse<'a> {
     pub detail: u32,
 }
 
+/// What a click asked the browser to do, once the page had its say.
+///
+/// Focus moving and a checkbox flipping are changes to the document, and the
+/// engine makes them itself. A navigation is not one — so it comes back as a
+/// request and happens after the dispatch has unwound, which is also when a
+/// real browser does it.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Activated {
+    #[default]
+    Nothing,
+    /// A link was followed. The URL is as the markup spelled it; resolving it
+    /// against the page is the caller's business.
+    Navigate(String),
+}
+
 /// A position in the page, in CSS pixels. What a click happens at.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Point {

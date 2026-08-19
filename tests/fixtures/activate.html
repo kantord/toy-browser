@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body { margin: 0; padding: 0; font-size: 16px; }
+      #link, #box, #field, #shy { display: block; width: 200px; height: 40px; }
+      #link { background: #dbeafe; }
+      /* A block inside the link, so a click lands on the child and has to
+         walk out to find the thing with the behaviour. */
+      #label { display: block; width: 120px; height: 20px; background: #93c5fd; }
+      #box { background: #dcfce7; }
+      #field { background: #fef9c3; }
+      #shy { background: #f3f4f6; }
+    </style>
+  </head>
+  <body>
+    <a id="link" href="hello.html"><div id="label">go to hello</div></a>
+    <input id="box" type="checkbox" />
+    <input id="field" type="text" />
+    <div id="shy">not focusable</div>
+  </body>
+</html>

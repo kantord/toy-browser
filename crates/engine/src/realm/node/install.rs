@@ -47,6 +47,16 @@ pub(in crate::realm) fn install(ctx: &Ctx<'_>, dom: &Rc<Dom>) -> Result<()> {
     api.set("removeListener", Function::new(ctx.clone(), unlisten)?)?;
     api.set("dispatch", Function::new(ctx.clone(), fire)?)?;
     api.set("elementFromPoint", Function::new(ctx.clone(), at_point)?)?;
+    let dom_focus = Rc::clone(dom);
+    api.set(
+        "focus",
+        Function::new(ctx.clone(), move |id: usize| dom_focus.focus(Some(id)))?,
+    )?;
+    let dom_blur = Rc::clone(dom);
+    api.set(
+        "blur",
+        Function::new(ctx.clone(), move |id: usize| dom_blur.blur(id))?,
+    )?;
 
     super::tasks::install(ctx, &api)?;
     Ok(())

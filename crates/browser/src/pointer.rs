@@ -6,9 +6,9 @@
 //! `docs/adr/0010`.
 
 use anyhow::Result;
-use toy_browser_engine::{Budget, Mouse, NodeId, Point};
+use toy_browser_engine::{Activated, Budget, Mouse, NodeId, Point};
 
-use crate::{Browser, Emitted, PageId, Pointer};
+use crate::{Browser, Emitted, PageId, Pointer, Url};
 
 /// What the DOM's `buttons` reports while the primary button is held, and once
 /// it is not.
@@ -38,7 +38,8 @@ impl Browser {
 
         pointer.over = over;
         self.set_pointer(page, pointer);
-        self.settle(page, &mut emitted)
+        self.settle(page, &mut emitted)?;
+        Ok(emitted)
     }
 
     /// Presses the primary button wherever the pointer now is.
@@ -56,7 +57,8 @@ impl Browser {
                 pressed: over,
             },
         );
-        self.settle(page, &mut emitted)
+        self.settle(page, &mut emitted)?;
+        Ok(emitted)
     }
 
     /// Releases the primary button, and clicks if it comes up where it went
@@ -71,9 +73,10 @@ impl Browser {
 
         self.raise(page, over, at("pointerup", point, RELEASED), &mut emitted)?;
         self.raise(page, over, at("mouseup", point, RELEASED), &mut emitted)?;
-        if over.is_some() && over == pressed {
-            self.raise(page, over, at("click", point, RELEASED), &mut emitted)?;
-        }
+        let activated = match over.is_some() && over == pressed {
+            true => self.raise(page, over, at("click", point, RELEASED), &mut emitted)?,
+            false => Activated::Nothing,
+        };
 
         self.set_pointer(
             page,
@@ -82,7 +85,37 @@ impl Browser {
                 pressed: None,
             },
         );
-        self.settle(page, &mut emitted)
+        self.settle(page, &mut emitted)?;
+        self.follow(page, activated, &mut emitted);
+        Ok(emitted)
+    }
+
+    /// Carries out what the click activated, now that the dispatch has unwound.
+    ///
+    /// A navigation that fails is reported the way the page would have seen it
+    /// rather than returned: the caller asked to release a button, and that
+    /// happened.
+    fn follow(&mut self, page: &PageId, activated: Activated, emitted: &mut Emitted) {
+        let Activated::Navigate(href) = activated else {
+            return;
+        };
+        let Some(target) = self.resolve(page, &href) else {
+            emitted.errors.push(format!("not a url: {href}"));
+            return;
+        };
+        match self.navigate(page, target.as_str()) {
+            Ok(loaded) => {
+                emitted.console.extend(loaded.emitted.console);
+                emitted.errors.extend(loaded.emitted.errors);
+            }
+            Err(error) => emitted.errors.push(error.to_string()),
+        }
+    }
+
+    /// An `href` as the markup spelled it, against the page it was written on.
+    fn resolve(&self, page: &PageId, href: &str) -> Option<Url> {
+        let current = self.url(page)?;
+        Url::parse(current).ok()?.join(href).ok()
     }
 
     /// Raises one event, or nothing at all where the pointer is over nothing.
@@ -92,26 +125,26 @@ impl Browser {
         node: Option<NodeId>,
         mouse: Mouse<'_>,
         emitted: &mut Emitted,
-    ) -> Result<()> {
+    ) -> Result<Activated> {
         let Some(node) = node else {
-            return Ok(());
+            return Ok(Activated::Nothing);
         };
         let session = self.session(page)?;
         let outcome = self.engine.raise_mouse(&session, node, mouse)?;
         emitted.console.extend(outcome.console);
         emitted.errors.extend(outcome.errors);
-        Ok(())
+        Ok(outcome.value)
     }
 
     /// Lets whatever the page scheduled run before answering.
     ///
     /// A page still in motion has no state to report, so the Transition is not
     /// over until it settles or spends its Budget.
-    fn settle(&mut self, page: &PageId, emitted: &mut Emitted) -> Result<Emitted> {
+    fn settle(&mut self, page: &PageId, emitted: &mut Emitted) -> Result<()> {
         let ran = self.run_tasks(page, Budget::default())?;
         emitted.console.extend(ran.console);
         emitted.errors.extend(ran.errors);
-        Ok(std::mem::take(emitted))
+        Ok(())
     }
 
     fn pointer(&self, page: &PageId) -> Pointer {
