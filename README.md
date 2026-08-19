@@ -163,6 +163,13 @@ Its nav bar cannot be clicked and its table layout is not honoured — both are
 limits rather than gaps, recorded below. Network tests are their own spec and
 skip under `TOY_BROWSER_OFFLINE=1`, so the rest of the suite never reaches one.
 
+## Measuring against a real browser
+
+`just compare` drives this browser and a real headless Chromium over the same
+page, then says how far apart the renders and the documents are. The DOM parses
+identically today; everything else is the limits in `docs/limits.md`, measured
+rather than asserted. See `docs/comparing.md`.
+
 ## Fixtures
 
 `tests/fixtures/` holds the sample pages: text, flex rows of colored boxes,

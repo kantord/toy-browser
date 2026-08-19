@@ -2530,7 +2530,7 @@ dependencies = [
  "pico-args",
  "rgb",
  "svgtypes 0.16.1",
- "tiny-skia",
+ "tiny-skia 0.12.0",
  "usvg 0.48.1",
  "zune-jpeg 0.5.15",
 ]
@@ -3464,7 +3464,7 @@ dependencies = [
  "svgtypes 0.16.1",
  "taffy 0.11.0",
  "thiserror",
- "tiny-skia",
+ "tiny-skia 0.12.0",
  "tiny-skia-path 0.12.0",
  "typed-builder",
  "wuff",
@@ -3492,7 +3492,7 @@ checksum = "4e6469d20ab25e23d8305d35d6e66c83018ce2c356461e5b380f73d89843529b"
 dependencies = [
  "quick-xml",
  "takumi-core",
- "tiny-skia",
+ "tiny-skia 0.12.0",
  "typed-builder",
 ]
 
@@ -3581,6 +3581,21 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.3",
+]
+
+[[package]]
+name = "tiny-skia"
+version = "0.11.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83d13394d44dae3207b52a326c0c85a8bf87f1541f23b0d143811088497b09ab"
+dependencies = [
+ "arrayref",
+ "arrayvec",
+ "bytemuck",
+ "cfg-if",
+ "log",
+ "png 0.17.16",
+ "tiny-skia-path 0.11.4",
 ]
 
 [[package]]
@@ -3848,6 +3863,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thirtyfour",
+ "tiny-skia 0.11.4",
  "tiny_http",
  "tokio",
  "toy-browser",

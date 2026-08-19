@@ -74,6 +74,22 @@ trace pattern:
 runs:
     @ls tests/playwright/test-results 2>/dev/null || echo "no run yet — try: just accept"
 
+# --- measuring against a real browser ---
+
+# Capture a page from both browsers and say how far apart they are.
+compare url="https://news.ycombinator.com/":
+    cd tests/playwright && COMPARE_URL={{ url }} pnpm exec playwright test compare
+    cargo run -- compare
+
+# Shrink a page until only the difference is left, and write the minimal repro.
+reduce url="https://news.ycombinator.com/":
+    cargo build
+    cd tests/playwright && node reduce.mjs {{ url }}
+
+# The heatmap the last comparison wrote: the reference dimmed, differences red.
+difference:
+    @echo out/compare/difference.png
+
 # --- the gate a session has to pass ---
 
 # Clippy, then the code-style checks over what has changed.

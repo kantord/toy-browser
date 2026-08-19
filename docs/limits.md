@@ -19,5 +19,11 @@ and so a limit is not mistaken for a bug.
   those contains an image** — the logo and the thirty upvote arrows.
 - **Table layout is not honoured.** A `<table>` page reads correctly but arrives
   as one centred column, because takumi stacks the cells.
+- **The root element does not fill the viewport.** On an empty page at
+  1000x800, Chromium reports `html` as 1000x**800** and `body` as 984x**784**;
+  this browser reports 1000x**314** and 984x**298**, sizing them to content.
+  Everything below the content is therefore unpainted, which is why a page with
+  a body background renders as a band of colour over transparency. `just reduce`
+  cut a styled page down to `<html><body></body></html>` — 36 bytes — to say so.
 - Blitz's own style resolution and layout are not used at all yet — only its
   parser and tree. Everything visual comes from takumi.

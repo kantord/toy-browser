@@ -6,6 +6,7 @@
 //! of there being two.
 
 mod cdp;
+mod compare;
 mod webdriver;
 
 use std::path::PathBuf;
@@ -33,6 +34,28 @@ enum Command {
     Serve(ServeArgs),
     /// Serve W3C WebDriver so Selenium clients can drive this browser.
     Webdriver(WebdriverArgs),
+    /// Measure a render and a document against a real browser's.
+    Compare(CompareArgs),
+}
+
+#[derive(clap::Args)]
+struct CompareArgs {
+    /// Directory holding `toy.png`, `toy.json`, `chromium.png` and
+    /// `chromium.json`, as `just compare` writes them.
+    #[arg(long, default_value = "out/compare")]
+    dir: PathBuf,
+
+    /// How many differently-placed elements to list.
+    #[arg(long, default_value_t = 10)]
+    top: usize,
+
+    /// Print one line of JSON instead of a report, for a loop to read.
+    #[arg(long)]
+    json: bool,
+
+    /// Fail when the render score is worse than this.
+    #[arg(long)]
+    max_score: Option<f32>,
 }
 
 #[derive(clap::Args)]
@@ -97,6 +120,15 @@ fn main() -> Result<()> {
             let browser = Browser::new(Resources::new(), &args.fonts)?;
             webdriver::serve(args.port, browser)
         }
+        Command::Compare(args) => compare::run(
+            &args.dir,
+            args.top,
+            match args.json {
+                true => compare::Shape::Json,
+                false => compare::Shape::Report,
+            },
+            args.max_score,
+        ),
     }
 }
 
