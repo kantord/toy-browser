@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body { margin: 0; padding: 0; font-size: 16px; }
+      #panel { width: 400px; height: 120px; background: #e5e7eb; }
+      #tap { width: 200px; height: 60px; background: #2563eb; color: #ffffff; }
+      #aside { width: 200px; height: 60px; background: #fca5a5; }
+      #log { width: 400px; height: 40px; }
+    </style>
+  </head>
+  <body>
+    <div id="panel">
+      <div id="tap" onclick="document.getElementById('log').textContent = 'inline ran'">go</div>
+      <div id="aside">elsewhere</div>
+    </div>
+    <div id="log">nothing yet</div>
+    <script>
+      globalThis.heard = [];
+      document.getElementById("panel").addEventListener("click", (event) => {
+        heard.push(`${event.type} on ${event.target.id} at ${event.clientX},${event.clientY}`);
+      });
+      for (const kind of ["mouseover", "mouseout", "mousedown", "mouseup"]) {
+        document.getElementById("panel").addEventListener(kind, (event) => {
+          heard.push(`${event.type} on ${event.target.id}`);
+        });
+      }
+    </script>
+  </body>
+</html>

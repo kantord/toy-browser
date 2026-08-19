@@ -87,6 +87,22 @@ impl ElementBox {
     }
 }
 
+/// A mouse event about to be raised: which kind, where, and what the buttons
+/// were doing at the time.
+///
+/// The engine has no Pointer of its own. Whoever is driving remembers where the
+/// mouse is and decides which events one press produces; this is one of them.
+#[derive(Clone, Copy)]
+pub struct Mouse<'a> {
+    pub kind: &'a str,
+    pub at: Point,
+    /// The bitmask the DOM calls `buttons`: 1 while the primary button is held.
+    pub buttons: u8,
+    /// What the DOM calls `detail` — the click count, 1 for a plain click and
+    /// 0 for an event that is not a click at all.
+    pub detail: u32,
+}
+
 /// A position in the page, in CSS pixels. What a click happens at.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Point {

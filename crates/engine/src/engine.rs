@@ -11,7 +11,7 @@ use toy_browser_fetch::Resources;
 
 use crate::{
     Argument, Budget, Environment, Evaluated, Handle, Keyed, LoadPage, LoadReport, Mode, NodeId,
-    Outcome, Point, SessionId, realm::Realm,
+    Mouse, Outcome, Point, SessionId, realm::Realm,
 };
 
 /// A place a page can be loaded, and the unit of isolation between callers.
@@ -198,6 +198,19 @@ impl Engine {
     /// real click is not refused either.
     pub fn hit_test(&mut self, session: &SessionId, point: Point) -> Result<Option<NodeId>> {
         Ok(self.realm(session)?.hit_test(point))
+    }
+
+    /// Raises one mouse event at `node`, and reports what the page said while
+    /// it ran. Costs no JavaScript when nothing on the path is listening.
+    pub fn raise_mouse(
+        &mut self,
+        session: &SessionId,
+        node: NodeId,
+        mouse: Mouse<'_>,
+    ) -> Result<Outcome<()>> {
+        let realm = self.realm(session)?;
+        realm.raise_mouse(node, mouse)?;
+        Ok(realm.outcome(()))
     }
 
     /// An element's text content, descendants included. Runs no JavaScript.

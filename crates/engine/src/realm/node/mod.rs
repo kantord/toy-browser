@@ -27,7 +27,7 @@ mod tasks;
 use binder::dom_members;
 pub(super) use events::{
     add_listener as listen_on, capture_of as capture_from, dispatch as dispatch_on,
-    remove_listener as unlisten_on,
+    raise_mouse, remove_listener as unlisten_on,
 };
 use events::{add_listener, dispatch, remove_listener};
 pub use support::Sharing;

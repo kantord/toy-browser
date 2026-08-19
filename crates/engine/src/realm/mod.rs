@@ -24,7 +24,7 @@ use rquickjs::{Context, Persistent, Runtime, Value};
 use toy_browser_fetch::{Resources, Url};
 
 use crate::{
-    Budget, Environment, Keyed, NodeId, Outcome, Point,
+    Budget, Environment, Keyed, Mouse, NodeId, Outcome, Point,
     dom::Dom,
     loader::{DocumentResolver, ImportMap, ResourceLoader},
     scripts::ScriptSurvey,
@@ -212,6 +212,16 @@ impl Realm {
             }
             let _ = ctx.eval::<Value, _>(script);
         });
+    }
+
+    /// Raises one mouse event at `node`.
+    ///
+    /// Runs no JavaScript unless something on the path from `window` down to
+    /// the node is actually waiting for this kind of event.
+    pub fn raise_mouse(&self, node: NodeId, mouse: Mouse<'_>) -> Result<()> {
+        self.context
+            .with(|ctx| node::raise_mouse(&ctx, node, mouse))
+            .context("raising a mouse event")
     }
 
     /// The topmost element at `point`.

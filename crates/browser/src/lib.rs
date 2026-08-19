@@ -14,6 +14,7 @@ mod fonts;
 mod measure;
 mod navigate;
 mod pipeline;
+mod pointer;
 mod script;
 mod view;
 
@@ -65,6 +66,21 @@ struct Page {
     /// The last measurement, and the state it described. Re-measuring is a full
     /// layout pass, so it happens only when that state has moved on.
     measured: Option<Measured>,
+    /// Where the mouse is and whether it is pressed. A setting of the Page, so
+    /// it outlives each event the way a real pointer does.
+    pointer: Pointer,
+}
+
+/// Where the mouse is and whether it is pressed.
+///
+/// Held across calls because entering and leaving an element is a difference
+/// between two of them, which no single call could see.
+#[derive(Clone, Copy, Default)]
+struct Pointer {
+    /// The topmost element under the pointer as of the last move.
+    over: Option<NodeId>,
+    /// What the press landed on, while the button is still down.
+    pressed: Option<NodeId>,
 }
 
 struct Measured {
@@ -118,6 +134,7 @@ impl Browser {
                 viewport: Viewport::default(),
                 run_scripts: true,
                 measured: None,
+                pointer: Pointer::default(),
             },
         );
         self.navigate(&id, "about:blank")

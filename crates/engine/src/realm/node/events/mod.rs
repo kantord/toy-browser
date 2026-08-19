@@ -1,30 +1,25 @@
-//! The listener table, and walking an event through the document.
+//! Where an event goes, and what it does when it gets there.
 //!
-//! Registration outlives every call, so the table is Rust rather than a field
-//! on a JavaScript object — see [`Sharing`], which releases it with the Realm.
-//! Keeping it here is also what lets a dispatch ask *whether* anything listens
-//! without entering QuickJS to find out.
+//! A dispatch travels: down from `window` to the target capturing, then back
+//! out bubbling if the event is the kind that does. Which listeners exist is a
+//! different question, asked of `listeners` — and asked first, so an event
+//! nobody is waiting for is never built at all.
 //!
 //! `window` is a dispatch target and is not a node, so a target is named by
 //! string: a node id, or the name of a global target.
 
-use rquickjs::{Ctx, Function, IntoJs, Object, Persistent, Value, function::This};
+mod listeners;
 
-use super::support::{Sharing, dom_of, wrap};
+use rquickjs::{Ctx, Function, IntoJs, Object, Value, function::This};
+
+use listeners::{anyone_listening, attribute_for, has_inline, registered_for};
+pub(in crate::realm::node) use listeners::Registered;
+pub(in crate::realm) use listeners::{add_listener, capture_of, remove_listener};
+
+use super::support::{dom_of, wrap};
 
 /// The one target that is not a node. Matches `tb.WINDOW` in the Prelude.
 const WINDOW: &str = "window";
-
-/// One registration.
-///
-/// The capture flag rides with the function instead of splitting the table in
-/// two, so the listeners on a target keep the order they were added in — which
-/// is the order the DOM promises they run in, whichever phase they are for.
-#[derive(Clone)]
-pub(super) struct Registered {
-    listener: Persistent<Function<'static>>,
-    capture: bool,
-}
 
 /// Where an event is on its way through the document.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -45,68 +40,6 @@ impl Phase {
             Phase::AtTarget => true,
         }
     }
-}
-
-fn slot(target: &str, kind: &str) -> String {
-    format!("{target}:{kind}")
-}
-
-/// `true`, or `{ capture: true }`. Anything else — absent, `false`, an options
-/// object saying nothing about it — registers for the bubble phase.
-pub(in crate::realm) fn capture_of(options: Option<&Value<'_>>) -> bool {
-    match options {
-        Some(value) if value.is_bool() => value.as_bool().unwrap_or(false),
-        Some(value) => value
-            .as_object()
-            .and_then(|object| object.get("capture").ok())
-            .unwrap_or(false),
-        None => false,
-    }
-}
-
-pub(in crate::realm) fn add_listener<'js>(
-    ctx: &Ctx<'js>,
-    target: String,
-    kind: String,
-    listener: Function<'js>,
-    capture: bool,
-) -> rquickjs::Result<()> {
-    let shared = sharing(ctx)?;
-    shared
-        .listeners
-        .borrow_mut()
-        .entry(slot(&target, &kind))
-        .or_default()
-        .push(Registered {
-            listener: Persistent::save(ctx, listener),
-            capture,
-        });
-    Ok(())
-}
-
-/// Forgets a registration. Capture has to match, because registering the same
-/// function for both phases registers it twice.
-pub(in crate::realm) fn remove_listener<'js>(
-    ctx: &Ctx<'js>,
-    target: String,
-    kind: String,
-    listener: Function<'js>,
-    capture: bool,
-) -> rquickjs::Result<()> {
-    let shared = sharing(ctx)?;
-    let mut listeners = shared.listeners.borrow_mut();
-    let Some(registered) = listeners.get_mut(&slot(&target, &kind)) else {
-        return Ok(());
-    };
-    let mut kept = Vec::with_capacity(registered.len());
-    for entry in registered.drain(..) {
-        if entry.capture == capture && entry.listener.clone().restore(ctx)? == listener {
-            continue;
-        }
-        kept.push(entry);
-    }
-    *registered = kept;
-    Ok(())
 }
 
 /// Walks an event from `window` down to `target` and back out again.
@@ -178,7 +111,7 @@ fn stop_at<'js>(
     kind: &str,
 ) -> rquickjs::Result<()> {
     let registered = registered_for(ctx, target, kind, phase)?;
-    if registered.is_empty() {
+    if registered.is_empty() && !has_inline(ctx, target, kind, phase)? {
         return Ok(());
     }
 
@@ -186,6 +119,7 @@ fn stop_at<'js>(
     set(event, "currentTarget", current.clone());
     set(event, "eventPhase", phase as u8);
 
+    run_inline(ctx, target, kind, event, phase)?;
     for entry in registered {
         let listener = entry.restore(ctx)?;
         if let Err(error) = listener.call::<_, Value>((This(current.clone()), event.clone())) {
@@ -196,24 +130,6 @@ fn stop_at<'js>(
         }
     }
     Ok(())
-}
-
-/// The listeners on one target for this event, in the order they were added.
-fn registered_for(
-    ctx: &Ctx<'_>,
-    target: &str,
-    kind: &str,
-    phase: Phase,
-) -> rquickjs::Result<Vec<Persistent<Function<'static>>>> {
-    let shared = sharing(ctx)?;
-    let listeners = shared.listeners.borrow();
-    Ok(listeners
-        .get(&slot(target, kind))
-        .into_iter()
-        .flatten()
-        .filter(|entry| phase.wants(entry.capture))
-        .map(|entry| entry.listener.clone())
-        .collect())
 }
 
 /// What a listener is called with as `this`, and what `currentTarget` reports.
@@ -262,9 +178,54 @@ fn report_listener_error(ctx: &Ctx<'_>, kind: &str, error: &rquickjs::Error) {
     }
 }
 
-fn sharing<'a>(
-    ctx: &'a Ctx<'_>,
-) -> rquickjs::Result<rquickjs::runtime::UserDataGuard<'a, Sharing>> {
-    ctx.userdata::<Sharing>()
-        .ok_or_else(|| rquickjs::Error::new_from_js("Realm", "a document to belong to"))
+
+
+/// Runs the `on*` attribute, which the DOM treats as a listener registered
+/// where the attribute was written — before any the page added later.
+fn run_inline<'js>(
+    ctx: &Ctx<'js>,
+    target: &str,
+    kind: &str,
+    event: &Value<'js>,
+    phase: Phase,
+) -> rquickjs::Result<()> {
+    if !has_inline(ctx, target, kind, phase)? {
+        return Ok(());
+    }
+    let Ok(id) = target.parse::<usize>() else {
+        return Ok(());
+    };
+    let helpers: Object = ctx.globals().get("__tb")?;
+    let run: Function = helpers.get("runInlineHandler")?;
+    run.call::<_, Value>((id, attribute_for(kind), event.clone()))?;
+    Ok(())
 }
+
+/// Raises a mouse event at `node`, which is the whole of what a click is once
+/// the browser layer has decided where it landed.
+///
+/// **Nothing is built unless something is waiting for it.** The listener table
+/// is a map and an `on*` handler is an attribute, so a path nobody registered
+/// on is answered by Rust alone and QuickJS is never asked to make an object.
+pub(in crate::realm) fn raise_mouse(
+    ctx: &Ctx<'_>,
+    node: usize,
+    mouse: crate::Mouse<'_>,
+) -> rquickjs::Result<()> {
+    let target = node.to_string();
+    let path = path_to(ctx, &target)?;
+    if !anyone_listening(ctx, &path, mouse.kind)? {
+        return Ok(());
+    }
+    let helpers: Object = ctx.globals().get("__tb")?;
+    let make: Function = helpers.get("makeMouseEvent")?;
+    let event: Value = make.call((
+        mouse.kind,
+        f64::from(mouse.at.x),
+        f64::from(mouse.at.y),
+        mouse.buttons,
+        mouse.detail,
+    ))?;
+    dispatch(ctx, target, event)
+}
+

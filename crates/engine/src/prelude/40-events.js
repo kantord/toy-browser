@@ -86,6 +86,31 @@
     },
   });
 
+  // A mouse event, built here rather than in Rust so every field an event
+  // carries is written in one place. Rust supplies only what it knows: where
+  // the pointer was, what the buttons were doing, and which press this is.
+  tb.makeMouseEvent = (type, x, y, buttons, detail) => {
+    const event = tb.makeEvent(type, null, true);
+    event.cancelable = true;
+    event.detail = detail;
+    event.button = 0;
+    event.buttons = buttons;
+    // Nothing scrolls, so the viewport and the document are the same surface
+    // and every pair of coordinates is the same pair.
+    event.clientX = x;
+    event.clientY = y;
+    event.pageX = x;
+    event.pageY = y;
+    event.screenX = x;
+    event.screenY = y;
+    event.altKey = false;
+    event.ctrlKey = false;
+    event.metaKey = false;
+    event.shiftKey = false;
+    event.relatedTarget = null;
+    return event;
+  };
+
   // An `on*` attribute is a function body, compiled on first use.
   tb.runInlineHandler = (id, attribute, event) => {
     const source = __dom.getAttribute(id, attribute);

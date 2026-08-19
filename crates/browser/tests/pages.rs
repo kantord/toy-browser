@@ -1,19 +1,11 @@
 //! Driving a browser without any protocol in the way.
 
-use std::path::{Path, PathBuf};
+mod common;
 
-use toy_browser::{Browser, ElementBox, NavigationError, Point, Remote, Resources, Url, Viewport};
+use std::path::PathBuf;
 
-fn fixture(name: &str) -> Url {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures")
-        .join(name);
-    Url::from_file_path(std::fs::canonicalize(&path).expect("fixture exists")).unwrap()
-}
-
-fn browser() -> Browser {
-    Browser::new(Resources::new(), &[] as &[PathBuf]).expect("a browser")
-}
+use common::{browser, fixture};
+use toy_browser::{Browser, ElementBox, NavigationError, Point, Remote, Resources, Viewport};
 
 #[test]
 fn a_new_page_starts_blank() {
