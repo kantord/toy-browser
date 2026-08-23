@@ -3,3 +3,6 @@
 node_modules/
 test-results/
 playwright-report/
+
+# Findings to take upstream, not part of this repo's history.
+TAKUMI-ISSUES.md

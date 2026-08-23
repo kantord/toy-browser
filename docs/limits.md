@@ -1,5 +1,10 @@
 # Known limits
 
+Hacker News lays out identically to Chromium: with glyphs made invisible the two
+renders differ by 0.1% of pixels and score 0.0000. What is left with the text
+showing is Skia drawing letters heavier than resvg does — same face, same size,
+same place. `tests/corpus/901-hackernews-layout.frozen.html` pins it.
+
 What this browser cannot do, and whether each one is work left undone or a
 property of something underneath it. Written down so nobody re-discovers them,
 and so a limit is not mistaken for a bug.
@@ -36,8 +41,10 @@ and so a limit is not mistaken for a bug.
   no table variants at all — `None, Flex, InlineFlex, Grid, InlineGrid, Inline,
   Block, InlineBlock, ListItem` — so `display: table` means nothing to it. The
   user-agent stylesheet maps rows to flex containers, which puts cells side by
-  side. Columns do not line up with the columns above them, because each row
-  sizes its own.
+  side, and gives a row's last cell the slack. Columns do not line up with the
+  columns above them, because each row sizes its own — and a table with no width
+  cannot shrink to fit, so a page built of content-width tables comes out wider
+  than it should.
 
   Compiling the columns into `grid-template-columns` was built and removed. It
   works on a small table — a case whose columns only align because of it went
@@ -76,10 +83,14 @@ and so a limit is not mistaken for a bug.
   viewport and this browser does not. **In standards mode the two agree
   exactly** — `html` 1000x8, `body` 984x0 on an empty page — so the height was
   never the cause. The reducer now keeps the doctype.
-- **A CSS `background-image` is never fetched.** `<img src>` is, now that there
-  is a network — takumi is handed images rather than fetching them, and the map
-  it was handed used to be empty. `url()` in a stylesheet is not collected, so
-  Hacker News gets its logo and not its upvote arrows.
+- **`<center>` is approximated.** Chromium centres the blocks inside it and
+  leaves their text alone; there is no way to say that here, so it is done with
+  a flex column, which centres blocks but cannot centre an inline-level child
+  the way the real thing does.
+- **Images are fetched, `<img src>` and CSS `url()` alike** — takumi is handed
+  images rather than fetching them, and the map it was handed used to be empty.
+  A picture that will not load is absent, so the element keeps the room its
+  `width`/`height` claim.
 - **`el.onclick = fn` does nothing.** An `on*` *attribute* in the markup is run,
   and `addEventListener` works, but assigning the property is neither stored nor
   called — a page that registers a handler that way is silently ignored.

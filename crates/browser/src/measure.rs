@@ -53,11 +53,23 @@ pub fn boxes(
     said: &Attributes,
     pictures: &crate::images::Pictures,
 ) -> Result<Measurement> {
-    let tables = tables::rules(said);
+    let worked_out = tables::rules(said);
     let mut told = sheets.to_vec();
-    told.push(tables.clone());
-    let boxes = lay_out(keyed_html, &told, fonts, viewport, pictures)?;
-    Ok(Measurement { boxes, tables })
+    told.push(worked_out.clone());
+    let (root, boxes) = lay_out(keyed_html, &told, fonts, viewport, pictures)?;
+
+    // A cell reaching across columns can only be sized once the columns have
+    // been, so a table with one is laid out twice. Nothing else pays for that.
+    let spanned = tables::spanned(&root, &boxes, said);
+    if spanned.is_empty() {
+        return Ok(Measurement { boxes, tables: worked_out });
+    }
+    told.push(spanned.clone());
+    let (_, boxes) = lay_out(keyed_html, &told, fonts, viewport, pictures)?;
+    Ok(Measurement {
+        boxes,
+        tables: format!("{worked_out}{spanned}"),
+    })
 }
 
 /// Build the tree, lay it out, and read the boxes back off it.
@@ -67,7 +79,7 @@ fn lay_out(
     fonts: &Fonts,
     viewport: Viewport,
     pictures: &crate::images::Pictures,
-) -> Result<Boxes> {
+) -> Result<(RenderNode, Boxes)> {
     let stylesheet = StyleSheet::parse_list_loosy(sheets.to_vec());
     let node = from_html(keyed_html, FromHtmlOptions::default())
         .context("building takumi node tree for measurement")?;
@@ -104,7 +116,7 @@ fn lay_out(
     let mut boxes = Boxes::default();
     // Index 0 is the root context; every other one is reached from inside it.
     collect(&root, &contexts, 0, &results, &mut boxes);
-    Ok(boxes)
+    Ok((root, boxes))
 }
 
 /// Walks one stacking context and everything painted within it, in the order it

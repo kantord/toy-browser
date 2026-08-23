@@ -21,18 +21,37 @@ pub struct Linked<'a> {
 /// What every document is styled with before its own rules are read.
 ///
 /// A browser has one of these; takumi does not, and its defaults are its own
-/// rather than CSS's. `box-sizing` is the one that matters so far: CSS says a
-/// width is the content box unless told otherwise, takumi treats it as the
-/// border box, and a bordered element therefore came out 8px short in both
-/// directions. Takumi honours either value when asked — it is only the default
-/// that disagrees.
+/// rather than CSS's.
+///
+/// TODO: most of this is a workaround for takumi behaving unlike a browser, and
+/// should be a contribution to takumi rather than a patch out here. Each one is
+/// written up with its measurements in `TAKUMI-ISSUES.md`:
+///
+/// - `box-sizing` — takumi's initial value is `border-box` where CSS says
+///   `content-box`. It honours either when asked, so only the default is wrong.
+/// - `table`/`tbody`/`tr`/`td` — takumi has no table formatting context at all;
+///   `Display` has no table variants, so rows are mapped onto flexbox. Columns
+///   are sized per row and so do not line up with the row above, which is the
+///   part this cannot fix from outside.
+/// - `center` — Chromium centres the blocks inside it and leaves their text
+///   alone (`text-align: -webkit-center`). Plain `text-align: center` centres
+///   the text too, which centred every story title on Hacker News.
+/// - `line-height` — takumi rounds a line box **up** where a browser rounds it
+///   down, so `normal` comes out a pixel taller and a long page drifts further
+///   out of step the further down it goes. The ratio here is chosen so that
+///   rounding up lands where rounding down would for the face a page like
+///   Hacker News is laid out in. It is a compensation, not a value with any
+///   meaning: a page that sets its own `line-height` overrides it, and a page in
+///   a face with different metrics is worse off. The fix is for takumi to round
+///   the way a browser does — corpus `073` and `0820` are what it costs.
 const USER_AGENT: &str = "\
-* { box-sizing: content-box }\
+* { box-sizing: content-box; line-height: 1.07 }\
 table { display: block; padding: 2px }\
 tbody { display: flex; flex-direction: column; gap: 2px }\
 tr { display: flex; gap: 2px }\
-td { display: block; padding: 1px; flex-shrink: 0 }\
-th { display: block; padding: 1px; flex-shrink: 0 }";
+td { display: block; padding: 1px; flex-grow: 0 }\
+center { display: flex; flex-direction: column; align-items: center; text-align: left }\
+th { display: block; padding: 1px; flex-grow: 0 }";
 
 /// Every stylesheet the document carries, in source order.
 ///
@@ -127,4 +146,26 @@ fn attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
     }
     let rest = &rest[quote.len_utf8()..];
     rest.find(quote).map(|end| &rest[..end])
+}
+
+/// Every `url()` a stylesheet names, in the order they appear.
+///
+/// takumi is handed images rather than fetching them, and a background is as
+/// much an image as an `<img>` is — without this a page keeps its pictures and
+/// loses its icons.
+pub fn referenced(sheets: &[String]) -> Vec<String> {
+    let mut found = Vec::new();
+    for sheet in sheets {
+        let mut rest = sheet.as_str();
+        while let Some(open) = rest.find("url(") {
+            let after = &rest[open + "url(".len()..];
+            let Some(close) = after.find(')') else { break };
+            let src = after[..close].trim().trim_matches(['"', '\'']);
+            if !src.is_empty() && !src.starts_with("data:") {
+                found.push(src.to_owned());
+            }
+            rest = &after[close + 1..];
+        }
+    }
+    found
 }

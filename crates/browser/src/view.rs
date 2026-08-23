@@ -91,6 +91,7 @@ impl Browser {
         &mut self,
         session: &toy_browser_engine::SessionId,
         base: Option<&toy_browser_fetch::Url>,
+        sheets: &[String],
     ) -> Result<crate::images::Pictures> {
         let mut sources = Vec::new();
         for image in self.engine.query(session, "img[src]")? {
@@ -98,6 +99,7 @@ impl Browser {
                 sources.push(src);
             }
         }
+        sources.extend(crate::css::referenced(sheets));
         Ok(crate::images::load(&sources, base, &self.resources))
     }
 
@@ -113,7 +115,28 @@ impl Browser {
                 said.background.insert(element, colour);
             }
         }
+        self.table_widths(session, &mut said)?;
         Ok(said)
+    }
+
+    /// `width` and `colspan`, which are how a page of tables says how wide
+    /// things are.
+    fn table_widths(
+        &mut self,
+        session: &toy_browser_engine::SessionId,
+        said: &mut tables::Attributes,
+    ) -> Result<()> {
+        for element in self.engine.query(session, "table[width], td[width], th[width]")? {
+            if let Some(width) = self.engine.attribute(session, element, "width")? {
+                said.width.insert(element, width);
+            }
+        }
+        for cell in self.engine.query(session, "td[colspan], th[colspan]")? {
+            if let Some(across) = self.number(session, cell, "colspan")?.filter(|n| *n > 1.0) {
+                said.spans.insert(cell, across as usize);
+            }
+        }
+        Ok(())
     }
 
     /// `cellspacing` and `cellpadding`, which a page still uses to say a table
@@ -218,7 +241,7 @@ impl Browser {
             },
         );
         let said = self.table_attributes(session)?;
-        let pictures = self.pictures(session, base.as_ref())?;
+        let pictures = self.pictures(session, base.as_ref(), &sheets)?;
         let measured = measure::boxes(&keyed, &sheets, &self.fonts, viewport, &said, &pictures)?;
         if let Some(page) = self.pages.get_mut(page) {
             page.measured = Some(Measured {
