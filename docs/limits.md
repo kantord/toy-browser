@@ -1,9 +1,16 @@
 # Known limits
 
-Hacker News lays out identically to Chromium: with glyphs made invisible the two
-renders differ by 0.1% of pixels and score 0.0000. What is left with the text
-showing is Skia drawing letters heavier than resvg does — same face, same size,
-same place. `tests/corpus/901-hackernews-layout.frozen.html` pins it.
+On the frozen Hacker News page, of the 812 elements Chromium reports this
+browser places 368 — median 0.72px out, 78% within 2px, 96% within 10px — and
+gives no box at all to the other 444, which are the inline elements the next
+entries are about. With the text showing, 10.7% of pixels differ, nearly all of
+it over text, which is precisely where there is no box to attribute it to.
+
+An earlier version of this page claimed the two renders were pixel-identical
+once glyphs were made invisible. That measurement is withdrawn: both browsers
+load the same file, so the rule that hid the text hid it on the reference side
+too. Chromium's output is the reference and changing it to obtain a match
+measures nothing. See `TAKUMI-ISSUES.md` section 0.
 
 What this browser cannot do, and whether each one is work left undone or a
 property of something underneath it. Written down so nobody re-discovers them,

@@ -95,11 +95,23 @@ apart from drift.
 scripts have run, stylesheets inlined, scripts dropped. It becomes a corpus
 case like any other, and its score repeats to the digit.
 
-Images are **left exactly as written** and simply do not load. They carry
-`width` and `height`, so they take the same room either way — and a page that
-styles them by source, as `img[src="s.gif"]` does on a real site, goes on
-matching. Carrying them inline as data URIs breaks that rule and changes the
-layout, which is the opposite of freezing.
+Image references are **left exactly as written** and the files are saved beside
+the page, so `img[src="s.gif"]` still matches — a real site styles by source,
+and rewriting the reference or inlining the bytes as a data URI changes what the
+page's own CSS selects. Freezing must not edit the page it freezes.
+
+### The reference is not ours to change
+
+Both browsers load one file, so anything done to the page is done to Chromium's
+render too. That makes a whole class of tempting measurement worthless: hide the
+text on both sides and the scores agree, but what agreed was two mostly-empty
+pages. A score is only evidence when Chromium's output is exactly what Chromium
+would have produced unprompted.
+
+To measure one part of the difference, change the **comparison**, not the page:
+mask a region at scoring time, or compare the DOM export, which never involved a
+render at all. `TAKUMI-ISSUES.md` section 0 records a claim that was withdrawn
+for getting this wrong.
 
 ## Isolating one difference
 
