@@ -33,7 +33,7 @@
 //! belongs there is not there — which is how this reaches the inline elements a
 //! box comparison cannot see at all, having no box here to compare.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use tiny_skia::Pixmap;
 
 use crate::compare::{blame, pixels::distance, pixels::over_white, tree::Export, tree::Node};
@@ -84,9 +84,7 @@ fn rgb(colour: Colour) -> String {
 }
 
 /// Every element painted noticeably differently, worst first.
-pub fn compare(ours: &[u8], theirs: &[u8], reference: &Export) -> Result<Vec<Painted>> {
-    let ours = Pixmap::decode_png(ours).context("decoding our render")?;
-    let theirs = Pixmap::decode_png(theirs).context("decoding the reference render")?;
+pub fn compare(ours: &Pixmap, theirs: &Pixmap, reference: &Export) -> Result<Vec<Painted>> {
     let width = ours.width() as usize;
     let owners = inside(&blame::owners(reference, ours.width(), ours.pixels().len()), width);
 
@@ -95,7 +93,7 @@ pub fn compare(ours: &[u8], theirs: &[u8], reference: &Export) -> Result<Vec<Pai
         let Some(owner) = owner.and_then(|at| owned.get_mut(at)) else {
             continue;
         };
-        owner.add(sample(&ours, index), sample(&theirs, index));
+        owner.add(sample(ours, index), sample(theirs, index));
     }
 
     let mut painted: Vec<Painted> = owned
@@ -219,7 +217,7 @@ mod tests {
     /// A square of `ground` with a stripe of `ink` down the middle, `wide`
     /// columns across — so the two can be given the same colours in different
     /// amounts.
-    fn striped(ink: [u8; 3], ground: [u8; 3], wide: usize) -> Vec<u8> {
+    fn striped(ink: [u8; 3], ground: [u8; 3], wide: usize) -> Pixmap {
         const SIZE: u32 = 24;
         let mut pixmap = Pixmap::new(SIZE, SIZE).unwrap();
         let width = SIZE as usize;
@@ -232,7 +230,7 @@ mod tests {
             *pixel =
                 tiny_skia::PremultipliedColorU8::from_rgba(rgb[0], rgb[1], rgb[2], 255).unwrap();
         }
-        pixmap.encode_png().unwrap()
+        pixmap
     }
 
     /// One element covering the whole image, with a margin so eroding the map
@@ -247,6 +245,7 @@ mod tests {
                 id: Some("s".to_owned()),
                 text: "words".to_owned(),
                 rect: [0.0, 0.0, 24.0, 24.0],
+                style: Default::default(),
             }],
         }
     }

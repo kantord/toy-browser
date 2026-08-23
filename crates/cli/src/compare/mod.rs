@@ -8,14 +8,16 @@
 mod blame;
 mod ink;
 mod pixels;
+mod printed;
 mod report;
-mod subtree;
+mod scope;
 mod text;
 mod tree;
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use tiny_skia::Pixmap;
 use serde_json::json;
 
 /// What each side is called on disk, and in the report.
@@ -34,75 +36,160 @@ pub enum Audience {
     Loop,
 }
 
+/// Everything one comparison found, about the whole page or about one
+/// element's subtree.
+///
+/// Every field here is computed by a function that never knew which it was
+/// looking at, which is what makes a subtree report the same report.
+pub struct Report {
+    pub scope: scope::Scope,
+    pub ours: tree::Export,
+    pub renders: pixels::Difference,
+    pub documents: tree::TreeDiff,
+    pub blamed: Vec<blame::Blamed>,
+    pub split: text::Split,
+    pub painted: Vec<ink::Painted>,
+    pub restyled: Vec<tree::Restyled>,
+}
+
+/// How many subtrees get a report of their own. A page has hundreds of
+/// elements; a person reads a handful, and the toplist says what was left.
+const SUBREPORTS: usize = 12;
+
+/// The smallest subtree worth its own page. Below this a crop is mostly edge.
+const WORTH_A_PAGE: f64 = 2000.0;
+
 pub fn run(dir: &Path, top: usize, audience: Audience, max_score: Option<f32>) -> Result<()> {
-    let (ours_png, theirs_png) = (read(dir, OURS, "png")?, read(dir, THEIRS, "png")?);
-    let renders = pixels::compare(&ours_png, &theirs_png)?;
+    let ours_render = decoded(dir, OURS)?;
+    let theirs_render = decoded(dir, THEIRS)?;
     let ours = tree::parse(&read(dir, OURS, "json")?)?;
     let theirs = tree::parse(&read(dir, THEIRS, "json")?)?;
-    let documents = tree::compare(&ours, &theirs);
 
-    let heatmap = dir.join("difference.png");
-    std::fs::write(&heatmap, &renders.heatmap)
-        .with_context(|| format!("writing {}", heatmap.display()))?;
-    let beside = dir.join("side-by-side.png");
-    std::fs::write(&beside, &renders.side_by_side)
-        .with_context(|| format!("writing {}", beside.display()))?;
+    let whole = scope::Scope::page(ours_render.width(), ours_render.height());
+    let page = look(whole, &ours_render, &theirs_render, &ours, &theirs)?;
+    let mut subreports = subtrees(&page, &ours, &theirs)
+        .into_iter()
+        .map(|scope| look(scope, &ours_render, &theirs_render, &ours, &theirs))
+        .collect::<Result<Vec<_>>>()?;
+    // Chosen by what the page blames them for, listed by how different they
+    // turn out to be: the first says which are worth a page, the second says
+    // which to open.
+    subreports.sort_by(|a, b| b.renders.score.total_cmp(&a.renders.score));
 
-    let blamed = blame::blame(&renders.weights, renders.width, &ours, &theirs);
-    let split = text::split(&renders.weights, &renders.ink, renders.width, &theirs);
-    let painted = ink::compare(&ours_png, &theirs_png, &theirs)?;
-    let diverged = subtree::diverged(&ours_png, &theirs_png, &ours, &theirs)?;
-    let page = dir.join("report.html");
-    std::fs::write(&page, report::page(&ours, &renders, &blamed, &split, &painted, top))
-        .with_context(|| format!("writing {}", page.display()))?;
+    for one in &subreports {
+        write(dir, one, &[])?;
+    }
+    let written = write(dir, &page, &subreports)?;
     match audience {
-        Audience::Loop => print_json(&renders, &blamed, &split, &painted, &diverged),
+        Audience::Loop => print_json(&page),
         Audience::Person => {
-            report_render(&renders, &heatmap, &beside);
-            report_split(&split, renders.pixels);
-            report_painted(&painted, top);
-            report_document(&documents, top);
-            report_diverged(&diverged, top);
-            report_blame(&blamed, top);
-            println!("report: {}", page.display());
+            printed::everything(&page, top, dir);
+            printed::subtrees(&subreports, top);
+            println!("report: {}", written.display());
         }
     }
 
     // A verdict, not a report: something has to fail for a change to be caught
     // rather than merely noticed.
     if let Some(limit) = max_score
-        && renders.score > limit
+        && page.renders.score > limit
     {
-        anyhow::bail!("score {:.4} is over the {limit:.4} allowed", renders.score);
+        anyhow::bail!("score {:.4} is over the {limit:.4} allowed", page.renders.score);
     }
     Ok(())
 }
 
+/// One comparison, of whatever `scope` covers.
+///
+/// The whole of it: the same score, the same split, the same paint and style
+/// comparisons the page gets, over the part of each render and each document
+/// that scope names.
+fn look(
+    scope: scope::Scope,
+    ours_render: &Pixmap,
+    theirs_render: &Pixmap,
+    ours: &tree::Export,
+    theirs: &tree::Export,
+) -> Result<Report> {
+    let size = scope.padded();
+    let mine = scope::cropped(ours_render, scope.ours, size)?;
+    let reference = scope::cropped(theirs_render, scope.theirs, size)?;
+    let path = scope.path.as_deref();
+    let ours = scope::within(ours, path, (scope.ours[0], scope.ours[1]));
+    let theirs = scope::within(theirs, path, (scope.theirs[0], scope.theirs[1]));
+
+    let renders = pixels::compare(&mine, &reference)?;
+    Ok(Report {
+        documents: tree::compare(&ours, &theirs),
+        blamed: blame::blame(&renders.weights, renders.width, &ours, &theirs),
+        split: text::split(&renders.weights, &renders.ink, renders.width, &theirs),
+        painted: ink::compare(&mine, &reference, &theirs)?,
+        restyled: tree::restyled(&ours, &theirs),
+        renders,
+        ours,
+        scope,
+    })
+}
+
+/// Which subtrees get a report of their own: the ones the page blames most,
+/// large enough that a crop of them is a picture rather than an edge.
+fn subtrees(page: &Report, ours: &tree::Export, theirs: &tree::Export) -> Vec<scope::Scope> {
+    let mine: std::collections::HashMap<&str, &tree::Node> =
+        ours.nodes.iter().map(|n| (n.path.as_str(), n)).collect();
+    let by_path: std::collections::HashMap<&str, &tree::Node> =
+        theirs.nodes.iter().map(|n| (n.path.as_str(), n)).collect();
+    page.blamed
+        .iter()
+        .filter_map(|one| {
+            let theirs = by_path.get(one.path.as_str())?;
+            let ours = mine.get(one.path.as_str())?;
+            let big = theirs.rect[2] * theirs.rect[3] >= WORTH_A_PAGE;
+            (big && ours.placed() && theirs.placed()).then(|| scope::Scope::of(ours, theirs))
+        })
+        .take(SUBREPORTS)
+        .collect()
+}
+
+/// One report's page and the two pictures it shows.
+fn write(dir: &Path, report: &Report, subreports: &[Report]) -> Result<PathBuf> {
+    let slug = report.scope.slug();
+    for (suffix, bytes) in [
+        ("difference", &report.renders.heatmap),
+        ("side-by-side", &report.renders.side_by_side),
+    ] {
+        let path = dir.join(format!("{slug}-{suffix}.png"));
+        std::fs::write(&path, bytes).with_context(|| format!("writing {}", path.display()))?;
+    }
+    let page = dir.join(format!("{slug}.html"));
+    std::fs::write(&page, report::page(report, subreports, 10))
+        .with_context(|| format!("writing {}", page.display()))?;
+    Ok(page)
+}
+
+fn decoded(dir: &Path, engine: &str) -> Result<Pixmap> {
+    Pixmap::decode_png(&read(dir, engine, "png")?)
+        .with_context(|| format!("decoding the {engine} render"))
+}
+
 /// One line a loop can read: how far apart, and what is most to blame.
-fn print_json(
-    renders: &pixels::Difference,
-    blamed: &[blame::Blamed],
-    split: &text::Split,
-    painted: &[ink::Painted],
-    diverged: &[subtree::Divergence],
-) {
-    let causes: Vec<_> = by_cause(blamed)
+fn print_json(page: &Report) {
+    let causes: Vec<_> = printed::by_cause(&page.blamed)
         .into_iter()
         .map(|(kind, share, count)| json!({ "cause": kind, "share": share, "elements": count }))
         .collect();
     println!(
         "{}",
         json!({
-            "score": renders.score,
-            "badly": renders.badly_share(),
+            "score": page.renders.score,
+            "badly": page.renders.badly_share(),
             "cause": causes.first().and_then(|c| c["cause"].as_str()).unwrap_or("none"),
-            "painted_differently": painted.len(),
-            "diverged": diverged.len(),
-            "colour_apart": ink::total(painted),
-            "over_text": region(&split.over_text, renders.pixels),
-            "elsewhere": region(&split.elsewhere, renders.pixels),
             "causes": causes,
-            "worst": blamed.first().map(|one| json!({
+            "painted_differently": page.painted.len(),
+            "colour_apart": ink::total(&page.painted),
+            "restyled": page.restyled.len(),
+            "over_text": region(&page.split.over_text, page.renders.pixels),
+            "elsewhere": region(&page.split.elsewhere, page.renders.pixels),
+            "worst": page.blamed.first().map(|one| json!({
                 "what": one.what,
                 "own": one.share,
                 "subtree": one.subtree,
@@ -117,180 +204,9 @@ fn region(region: &text::Region, page: usize) -> serde_json::Value {
         "page": region.share_of(page),
         "score": region.score,
         "blame": region.blame,
-        "badly": share(region.badly, region.pixels) / 100.0,
-        "painted": share(region.painted, region.pixels) / 100.0,
+        "badly": printed::share(region.badly, region.pixels) / 100.0,
+        "painted": printed::share(region.painted, region.pixels) / 100.0,
     })
-}
-
-/// Where the difference falls, which is what tells a page laid out wrongly from
-/// a page whose letters are merely drawn differently.
-///
-/// Both renders are exactly as each browser drew them. What is split is the
-/// comparison: the reference's own text boxes say which pixels it put words
-/// into. The share of the page each side covers is printed beside its score,
-/// because a small score over a tiny region says nothing.
-fn report_split(split: &text::Split, pixels: usize) {
-    println!("  where it falls, by the reference's own text boxes:");
-    for (what, region) in [("over text", &split.over_text), ("elsewhere", &split.elsewhere)] {
-        println!(
-            "    {what:<10} {:>5.1}% of page, {:>5.1}% of it painted   {:>5.1}% of the difference   score {:.4}",
-            region.share_of(pixels) * 100.0,
-            share(region.painted, region.pixels),
-            region.blame * 100.0,
-            region.score,
-        );
-    }
-}
-
-/// Elements a colour turned up in on one side and not the other — the wrong
-/// paint, or the right paint missing. No comparison of boxes can see either.
-fn report_painted(painted: &[ink::Painted], top: usize) {
-    if painted.is_empty() {
-        return;
-    }
-    println!(
-        "painted differently: {} elements, {:.3} of them disagreed about in total",
-        painted.len(),
-        ink::total(painted),
-    );
-    for one in painted.iter().take(top) {
-        println!("  {:>5.0}%  {} ({} px)", one.apart * 100.0, one.describe(), one.pixels);
-    }
-}
-
-fn report_render(renders: &pixels::Difference, heatmap: &Path, beside: &Path) {
-    println!("render  {}x{}", renders.width, renders.height);
-    println!(
-        "  score {:.4}{}",
-        renders.score,
-        match renders.score <= CLOSE_ENOUGH {
-            true => "  (close)",
-            false => "",
-        }
-    );
-    println!(
-        "  {:.1}% of pixels differ at all, {:.1}% by more than a tenth",
-        share(renders.differing, renders.pixels),
-        renders.badly_share() * 100.0,
-    );
-    println!("  heatmap: {}", heatmap.display());
-    println!("  side by side ({OURS} left, {THEIRS} right): {}", beside.display());
-}
-
-fn report_document(documents: &tree::TreeDiff, top: usize) {
-    println!("document");
-    println!(
-        "  {} elements in both, {} only in {OURS}, {} only in {THEIRS}",
-        documents.matched,
-        documents.only_ours.len(),
-        documents.only_theirs.len(),
-    );
-    for (path, ours, theirs) in documents.diverged.iter().take(3) {
-        println!("  TREES DIVERGE at {path}: {OURS} says {ours}, {THEIRS} says {theirs}");
-    }
-    if !documents.diverged.is_empty() {
-        println!(
-            "  {} paths name different elements — everything below them is guesswork",
-            documents.diverged.len()
-        );
-    }
-    if !documents.same_title {
-        println!("  titles disagree");
-    }
-    if !documents.same_url {
-        println!("  urls disagree");
-    }
-    println!(
-        "  {} placed alike, {} placed differently, {} we gave no box at all",
-        documents.agreed,
-        documents.moved.len(),
-        documents.unplaced.len(),
-    );
-    list("placed differently", &documents.moved, top);
-    list("no box here", &documents.unplaced, top.min(3));
-}
-
-/// The worst of one kind, which is the only part of a list this long that
-/// anybody reads.
-fn list(what: &str, differences: &[tree::Moved], top: usize) {
-    if differences.is_empty() {
-        return;
-    }
-    println!("  worst {what}:");
-    for moved in differences.iter().take(top) {
-        println!(
-            "    {:<26} {OURS} {:?} {THEIRS} {:?}  off by {:.0}px",
-            moved.node.describe(),
-            round(moved.node.rect),
-            round(moved.theirs),
-            moved.apart,
-        );
-    }
-}
-
-/// Where the difference came from, which is the part anybody can act on.
-fn report_blame(blamed: &[blame::Blamed], top: usize) {
-    println!("why the difference is there");
-    for (kind, share, count) in by_cause(blamed) {
-        let elements = match count { 1 => "element", _ => "elements" };
-        println!("  {:>5.1}%  {kind}  ({count} {elements})", share * 100.0);
-    }
-
-    // Ranked by what each element is answerable for on its own. `subtree` says
-    // how much of the page under it differs, so the two being far apart points
-    // further down and the two matching says stop here.
-    println!("what differs most        own  subtree");
-    for one in blamed.iter().take(top) {
-        println!(
-            "  {:<22} {:>5.1}%  {:>5.1}%  {}",
-            one.what,
-            one.share * 100.0,
-            one.subtree * 100.0,
-            one.because.describe(),
-        );
-    }
-}
-
-/// The deepest elements the two renders disagree about, each compared against
-/// itself at its own box so the answer is about the element and not about where
-/// its container put it.
-fn report_diverged(diverged: &[subtree::Divergence], top: usize) {
-    println!("first divergence, walking up from the leaves");
-    if diverged.is_empty() {
-        println!("  nothing — every element we place looks like the reference's");
-        return;
-    }
-    println!("  {} elements, none of them holding another's problem", diverged.len());
-    for one in diverged.iter().take(top) {
-        println!("  {:>6.4}  depth {:<3} {}", one.score, one.depth, one.describe());
-    }
-}
-
-/// The same difference grouped by what kind of problem it is, worst first.
-fn by_cause(blamed: &[blame::Blamed]) -> Vec<(&'static str, f32, usize)> {
-    let mut causes: Vec<(&'static str, f32, usize)> = Vec::new();
-    for one in blamed {
-        match causes.iter_mut().find(|(kind, _, _)| *kind == one.because.kind()) {
-            Some(cause) => {
-                cause.1 += one.share;
-                cause.2 += 1;
-            }
-            None => causes.push((one.because.kind(), one.share, 1)),
-        }
-    }
-    causes.sort_by(|a, b| b.1.total_cmp(&a.1));
-    causes
-}
-
-fn round(rect: [f64; 4]) -> [i64; 4] {
-    rect.map(|value| value.round() as i64)
-}
-
-fn share(part: usize, whole: usize) -> f32 {
-    match whole {
-        0 => 0.0,
-        whole => part as f32 / whole as f32 * 100.0,
-    }
 }
 
 fn read(dir: &Path, engine: &str, extension: &str) -> Result<Vec<u8>> {

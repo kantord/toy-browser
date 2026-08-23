@@ -6,40 +6,94 @@
 
 use std::fmt::Write as _;
 
-use crate::compare::{blame::Blamed, ink::Painted, pixels::Difference, text::Split, tree::Export};
+use crate::compare::{Report, blame::Blamed, ink::Painted, text::Split, tree::Restyled};
 
 /// The report, as one file that sits beside the images it shows.
-pub fn page(
-    ours: &Export,
-    renders: &Difference,
-    blamed: &[Blamed],
-    split: &Split,
-    painted: &[Painted],
-    top: usize,
-) -> String {
+///
+/// `subreports` is what the page links out to: the same report, taken of one
+/// subtree at a time. Empty on a subreport's own page, which links nowhere.
+pub fn page(report: &Report, subreports: &[Report], top: usize) -> String {
+    let slug = report.scope.slug();
     let mut out = String::new();
     let _ = write!(
         out,
         "{HEAD}<h1>{}</h1>\n<p class=lede>{} &times; {} &middot; score \
          <strong>{:.4}</strong> &middot; {:.1}% of pixels differ by more than a tenth</p>\n",
-        escaped(&ours.url),
-        renders.width,
-        renders.height,
-        renders.score,
-        renders.badly_share() * 100.0,
+        escaped(&heading(report)),
+        report.renders.width,
+        report.renders.height,
+        report.renders.score,
+        report.renders.badly_share() * 100.0,
     );
+    out.push_str(&caveat(report));
+    out.push_str(&subtrees(subreports));
+    out.push_str(&what_was_told(&report.restyled, top));
+    out.push_str(&what_was_painted(&report.painted, top));
+    out.push_str(&where_it_falls(&report.split, report.renders.pixels));
 
-    out.push_str(&where_it_falls(split, renders.pixels));
-    out.push_str(&what_was_painted(painted, top));
+    let _ = write!(
+        out,
+        "<h2>Side by side</h2>\n<p class=key><span class=ours>ours</span> left, \
+         <span class=theirs>chromium</span> right</p>\n         <img src=\"{slug}-side-by-side.png\" alt=\"both renders\">\n         <h2>Where they differ</h2>\n<p class=key>the reference dimmed, the \
+         difference painted over it in red</p>\n         <img src=\"{slug}-difference.png\" alt=\"difference heatmap\">\n",
+    );
+    out.push_str(&why(&report.blamed, top));
+    out
+}
 
-    out.push_str("<h2>Side by side</h2>\n<p class=key><span class=ours>ours</span> left, \
-                  <span class=theirs>chromium</span> right</p>\n\
-                  <img src=\"side-by-side.png\" alt=\"both renders\">\n\
-                  <h2>Where they differ</h2>\n<p class=key>the reference dimmed, the \
-                  difference painted over it in red</p>\n\
-                  <img src=\"difference.png\" alt=\"difference heatmap\">\n");
+fn heading(report: &Report) -> String {
+    match &report.scope.path {
+        None => report.ours.url.clone(),
+        Some(path) => format!("{} — {path}", report.scope.what),
+    }
+}
 
-    out.push_str(&why(blamed, top));
+/// What to make of the rest, when a subtree is not the same size on both sides.
+///
+/// A size difference does not stop a subtree being worth comparing — but how
+/// big it is decides what a reading of the comparison is good for. A box a pixel
+/// out holds a comparison of what is inside it; a box half out holds one that
+/// mostly measures the gap.
+fn caveat(report: &Report) -> String {
+    let (wide, tall) = report.scope.resized();
+    if report.scope.path.is_none() || (wide == 0.0 && tall == 0.0) {
+        return String::new();
+    }
+    let judgement = match report.scope.comparable() {
+        true => "close enough that what follows is about what is inside the box",
+        false => "far enough apart that what follows is largely measuring the gap",
+    };
+    format!(
+        "<p class=key>this box is {wide:+.0}&times;{tall:+.0} against the          reference&rsquo;s &mdash; {judgement}</p>\n"
+    )
+}
+
+/// The subtrees looked at on their own, each linking to its own page.
+fn subtrees(reports: &[Report]) -> String {
+    if reports.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from(
+        "<h2>Subtrees</h2>\n<p class=key>the same comparison, of one element at a time, each \
+         cropped from its own render at its own box</p>\n         <table><tr><th>element<th>score<th>size against theirs<th>\n",
+    );
+    for report in reports {
+        let (wide, tall) = report.scope.resized();
+        let _ = writeln!(
+            out,
+            "<tr><td><a href=\"{}.html\">{}</a> <span class=key>{}</span><td class=n>{:.4}\
+             <td class=n>{wide:+.0}&times;{tall:+.0}<td>{}",
+            report.scope.slug(),
+            escaped(&report.scope.what),
+            escaped(report.scope.path.as_deref().unwrap_or_default()),
+            report.renders.score,
+            match report.scope.comparable() {
+                true => "",
+                false => "sizes too far apart to read the rest",
+            },
+        );
+    }
+    out.push_str("</table>\n");
     out
 }
 
@@ -63,6 +117,34 @@ fn why(blamed: &[Blamed], top: usize) -> String {
             one.share * 100.0,
             one.subtree * 100.0,
             escaped(&one.because.describe()),
+        );
+    }
+    out.push_str("</table>\n");
+    out
+}
+
+/// Properties the two browsers computed differently: what layout was told,
+/// rather than what it did with it. First, because a wrong instruction explains
+/// every pixel below it.
+fn what_was_told(restyled: &[Restyled], top: usize) -> String {
+    if restyled.is_empty() {
+        return String::from(
+            "<h2>What it was told</h2>\n<p class=key>computed styles agree</p>\n",
+        );
+    }
+    let mut out = format!(
+        "<h2>What it was told</h2>\n<p class=key>{} properties computed differently &mdash; \
+         the only account there is of an element laid out inline</p>\n         <table><tr><th>element<th>property<th>ours<th>chromium\n",
+        restyled.len(),
+    );
+    for one in restyled.iter().take(top) {
+        let _ = writeln!(
+            out,
+            "<tr><td>{}<td>{}<td>{}<td>{}",
+            escaped(&one.what),
+            escaped(&one.property),
+            escaped(&one.ours),
+            escaped(&one.theirs),
         );
     }
     out.push_str("</table>\n");

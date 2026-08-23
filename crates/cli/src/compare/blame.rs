@@ -16,6 +16,9 @@ use crate::compare::tree::{Export, Node};
 /// What one element is answerable for, and the shape of its disagreement.
 pub struct Blamed {
     pub what: String,
+    /// Where it sits in the tree, so a report about it can be taken on its own.
+    /// Empty for the canvas, which is not an element.
+    pub path: String,
     /// What this element is answerable for on its own: everything inside its
     /// box that none of its descendants covers. This is the number to rank by,
     /// because an element whose difference all belongs to a child is not the
@@ -88,6 +91,10 @@ pub fn blame(weights: &[f32], width: u32, ours: &Export, reference: &Export) -> 
         .filter(|(_, sum)| *sum > 0.0)
         .map(|(owner, sum)| Blamed {
             what: name(owner, reference),
+            path: owner
+                .and_then(|at| reference.nodes.get(at))
+                .map(|node| node.path.clone())
+                .unwrap_or_default(),
             share: (sum / total.max(f64::MIN_POSITIVE)) as f32,
             subtree: (subtrees.get(&owner).copied().unwrap_or(sum)
                 / total.max(f64::MIN_POSITIVE)) as f32,

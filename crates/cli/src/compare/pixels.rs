@@ -64,10 +64,8 @@ impl Difference {
     }
 }
 
-/// Compares two PNGs of the same size.
-pub fn compare(ours: &[u8], theirs: &[u8]) -> Result<Difference> {
-    let ours = Pixmap::decode_png(ours).context("decoding our render")?;
-    let theirs = Pixmap::decode_png(theirs).context("decoding the reference render")?;
+/// Compares two renders of the same size.
+pub fn compare(ours: &Pixmap, theirs: &Pixmap) -> Result<Difference> {
     anyhow::ensure!(
         ours.width() == theirs.width() && ours.height() == theirs.height(),
         "different sizes: {}x{} against {}x{}",
@@ -78,10 +76,10 @@ pub fn compare(ours: &[u8], theirs: &[u8]) -> Result<Difference> {
     );
 
     let mut heat = Pixmap::new(ours.width(), ours.height()).context("allocating the heatmap")?;
-    let scanned = scan(&ours, &theirs, &mut heat);
+    let scanned = scan(ours, theirs, &mut heat);
     let pixels = ours.pixels().len();
     Ok(Difference {
-        side_by_side: beside(&ours, &theirs)?,
+        side_by_side: beside(ours, theirs)?,
         width: ours.width(),
         height: ours.height(),
         score: (scanned.total / pixels.max(1) as f64) as f32,
@@ -200,13 +198,13 @@ mod tests {
 
     /// A solid image of one colour, so a test can say exactly how far apart two
     /// renders are.
-    fn solid(rgb: [u8; 3]) -> Vec<u8> {
+    fn solid(rgb: [u8; 3]) -> Pixmap {
         let mut pixmap = Pixmap::new(4, 4).unwrap();
         for pixel in pixmap.pixels_mut() {
             *pixel =
                 tiny_skia::PremultipliedColorU8::from_rgba(rgb[0], rgb[1], rgb[2], 255).unwrap();
         }
-        pixmap.encode_png().unwrap()
+        pixmap
     }
 
     #[test]
@@ -244,7 +242,7 @@ mod tests {
         let mut tall = Pixmap::new(4, 8).unwrap();
         tall.pixels_mut()[0] =
             tiny_skia::PremultipliedColorU8::from_rgba(0, 0, 0, 255).unwrap();
-        let refused = compare(&solid([0, 0, 0]), &tall.encode_png().unwrap());
+        let refused = compare(&solid([0, 0, 0]), &tall);
         let error = refused.err().expect("a refusal, not a guess").to_string();
         assert!(error.contains("different sizes"), "{error}");
     }

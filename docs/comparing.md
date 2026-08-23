@@ -201,6 +201,42 @@ Checked against the bug it was built for: with the `:link` rewrite removed it
 reports `a ink rgb(130, 130, 130) against rgb(0, 0, 0)` on every story title and
 totals 21.093; with it restored, 8.349.
 
+## The same report, of one subtree at a time
+
+Nothing in any of the above assumes it is looking at a whole page. Given two
+renders and two documents it produces a report — so given *one element's part*
+of each render and each document, it produces a report about that element.
+
+`just compare` writes one page for the document and one for each of the twelve
+subtrees it blames most, linked from a toplist on the front page:
+
+```
+subtrees, each compared against itself at its own box
+  0.0642  td 0/1/0/0/0/2/0/0/0/9/2    size +1x+0
+  0.0589  td 0/1/0/0/0/2/0/0/0/18/2   size +1x+0
+```
+
+Chosen by what the page blames them for; listed by how different they turn out
+to be. The first says which are worth a page, the second says which to open.
+
+**Each side is cropped to its own box.** A subtree placed 40px low would
+otherwise report every one of its descendants as different, when the only thing
+wrong is where its container put it. Every box inside is rebased onto the
+subtree's own corner, so the numbers name places the picture has.
+
+**A different size is not a reason to stop comparing** — but how different says
+what the rest is worth. Both crops are padded out to whichever is larger, so
+every pixel of both is looked at and the part only one side has counts as
+difference; the size delta is printed beside the score and on the page, and a
+subtree more than a fifth out is marked as measuring the gap rather than what is
+inside it. That judgement belongs to the reader, which is why it is shown rather
+than used to hide anything.
+
+An earlier attempt was one score per node with a first-divergence walk, and it
+was deleted: it re-derived what the box comparison already said. The difference
+is that this runs the *whole* report, so a subtree gets its own styles, its own
+paint findings and its own blame, which is what makes it worth opening.
+
 ## What the split settles
 
 What the split settles is *where* the difference is. What it cannot settle is

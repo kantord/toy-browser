@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 
 /// One browser's account of the document.
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Clone)]
 pub struct Export {
     pub url: String,
     pub title: String,
@@ -28,6 +28,11 @@ pub struct Node {
     pub text: String,
     /// `[x, y, width, height]` in CSS pixels.
     pub rect: [f64; 4],
+    /// What the element's style computed to, by property. Absent from an export
+    /// taken before this was recorded, which is why it defaults rather than
+    /// refusing to parse.
+    #[serde(default)]
+    pub style: HashMap<String, String>,
 }
 
 impl Node {
@@ -69,6 +74,45 @@ impl Node {
             None => self.tag.to_lowercase(),
         }
     }
+}
+
+/// One property two browsers computed differently for the same element.
+///
+/// Neither a position nor a pixel: this is what layout was *told* to do, which
+/// is where a wrong colour is a fact rather than an inference. It is also the
+/// only account of an element laid out inline, which has no box here at all.
+pub struct Restyled {
+    pub what: String,
+    pub property: String,
+    pub ours: String,
+    pub theirs: String,
+}
+
+/// Elements a browser never draws still compute a style, and a renderer that
+/// drops them does not. Comparing those reports nothing but their absence.
+const UNRENDERED: [&str; 7] = ["HEAD", "STYLE", "SCRIPT", "TITLE", "META", "LINK", "BASE"];
+
+/// Every property the two browsers computed differently.
+pub fn restyled(ours: &Export, theirs: &Export) -> Vec<Restyled> {
+    let mine: HashMap<&str, &Node> = ours.nodes.iter().map(|n| (n.path.as_str(), n)).collect();
+    let mut found = Vec::new();
+    for node in theirs.nodes.iter().filter(|n| !UNRENDERED.contains(&n.tag.as_str())) {
+        let Some(ours) = mine.get(node.path.as_str()) else {
+            continue;
+        };
+        for (property, theirs) in &node.style {
+            let mine = ours.style.get(property).map_or("", String::as_str);
+            if mine != theirs {
+                found.push(Restyled {
+                    what: node.describe(),
+                    property: property.clone(),
+                    ours: mine.to_owned(),
+                    theirs: theirs.clone(),
+                });
+            }
+        }
+    }
+    found
 }
 
 /// An element both browsers have, in a different place. Our own box lives on
