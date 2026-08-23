@@ -14,10 +14,7 @@
 
 use std::collections::HashMap;
 
-use takumi_core::layout::tree::RenderNode;
-use toy_browser_engine::{KEY_CLASS_PREFIX, key_of};
-
-use crate::measure::Boxes;
+use toy_browser_engine::KEY_CLASS_PREFIX;
 
 /// What the markup said, by node.
 #[derive(Default)]
@@ -32,6 +29,9 @@ pub struct Attributes {
     pub width: HashMap<usize, String>,
     /// `colspan`, by cell.
     pub spans: HashMap<usize, usize>,
+    /// Cells that asked for a width, however they asked. A column holding one
+    /// takes no share of the room left over: the page said how wide it goes.
+    pub fixed: std::collections::HashSet<usize>,
     /// A height a cell asked for, by cell — from the `height` attribute or from
     /// an inline style, as the markup wrote it.
     pub heights: HashMap<usize, String>,
@@ -156,132 +156,6 @@ fn ordered<T: Copy>(from: &HashMap<usize, T>) -> Vec<(usize, T)> {
     pairs
 }
 
-/// Widths for the cells that reach across more than one column.
-///
-/// Only those. Pinning every column to what it measured is what broke a page of
-/// prose — a column of text measures one word wide under flex, and a track that
-/// wide holds it there. A cell that spans columns has no width of its own to
-/// lose: it is a spacer, and without one the row under a story starts at the
-/// margin instead of under the story.
-///
-/// TODO: a workaround for takumi having no table formatting context, where the
-/// spanned width would simply be the sum of the columns. See `TAKUMI-ISSUES.md`.
-pub fn spanned(root: &RenderNode, boxes: &Boxes, said: &Attributes) -> String {
-    let mut rules = String::new();
-    for table in walk(root, false).filter(|node| tagged(node, "table")) {
-        let columns = columns_of(table, boxes, said);
-        rules.push_str(&shrunk(table, &columns, said));
-        let widest = columns
-            .iter()
-            .enumerate()
-            .max_by(|a, b| a.1.total_cmp(b.1))
-            .map(|(at, _)| at);
-        for (cell, at, across) in cells_of(table, said) {
-            rules.push_str(&sized_cell(cell, at, across, &columns, widest));
-        }
-    }
-    rules
-}
+pub use columns::spanned;
 
-/// A table the page gave no width shrinks to fit what is in it.
-///
-/// The first pass measures cells before anything is stretched, so the columns
-/// then add up to exactly the width the table wants — which is what a browser
-/// gives it and what `display: block` does not.
-///
-/// TODO: a workaround for takumi having no table formatting context and no
-/// `width: max-content`, either of which would do this without being told. See
-/// `TAKUMI-ISSUES.md`.
-fn shrunk(table: &RenderNode, columns: &[f32], said: &Attributes) -> String {
-    let Some(key) = key_of_node(table) else {
-        return String::new();
-    };
-    if said.width.contains_key(&key) {
-        return String::new();
-    }
-    let wanted: f32 = columns.iter().sum();
-    match wanted > 0.0 {
-        true => format!(":where(.{KEY_CLASS_PREFIX}{key}) {{ width: {wanted:.0}px }}\n"),
-        false => String::new(),
-    }
-}
-
-/// One cell's rule.
-///
-/// Every column but the widest is pinned to what that column measured **across
-/// the whole table**, and the widest takes whatever room is left. That is close
-/// to what an auto table does, and — more visibly — it is the only way the same
-/// column comes out the same width in every row. Letting each row share out its
-/// own slack indents each story by a different amount.
-fn sized_cell(cell: usize, at: usize, across: usize, columns: &[f32], widest: Option<usize>) -> String {
-    let width: f32 = columns.iter().skip(at).take(across).sum();
-    if width <= 0.0 {
-        return String::new();
-    }
-    match across == 1 && Some(at) == widest {
-        true => format!(".{KEY_CLASS_PREFIX}{cell} {{ flex-grow: 1 }}\n"),
-        false => format!(".{KEY_CLASS_PREFIX}{cell} {{ width: {width:.0}px; flex-grow: 0 }}\n"),
-    }
-}
-
-/// How wide each column is, judged only by the cells that occupy exactly one.
-fn columns_of(table: &RenderNode, boxes: &Boxes, said: &Attributes) -> Vec<f32> {
-    let mut widths: Vec<f32> = Vec::new();
-    for (cell, at, across) in cells_of(table, said) {
-        if widths.len() <= at {
-            widths.resize(at + 1, 0.0);
-        }
-        if across == 1 && let Some(area) = boxes.get(cell) {
-            widths[at] = widths[at].max(area.width);
-        }
-    }
-    widths
-}
-
-/// Every cell of this table: its node, the column it starts at, and how many it
-/// reaches across.
-fn cells_of(table: &RenderNode, said: &Attributes) -> Vec<(usize, usize, usize)> {
-    let mut found = Vec::new();
-    for row in walk(table, true).filter(|node| tagged(node, "tr")) {
-        let mut at = 0;
-        for cell in walk(row, true).filter(|node| tagged(node, "td") || tagged(node, "th")) {
-            let Some(key) = key_of_node(cell) else { continue };
-            let across = said.spans.get(&key).copied().unwrap_or(1);
-            found.push((key, at, across));
-            at += across;
-        }
-    }
-    found
-}
-
-/// Every node under `from`; `within` stops at a nested table, whose rows and
-/// cells belong to that table rather than this one.
-fn walk(from: &RenderNode, within: bool) -> impl Iterator<Item = &RenderNode> {
-    let mut found = Vec::new();
-    let mut stack: Vec<&RenderNode> = children(from).collect();
-    while let Some(node) = stack.pop() {
-        found.push(node);
-        if !(within && tagged(node, "table")) {
-            stack.extend(children(node));
-        }
-    }
-    found.into_iter()
-}
-
-fn children(node: &RenderNode) -> std::iter::Rev<std::slice::Iter<'_, RenderNode>> {
-    node.children.as_deref().unwrap_or_default().iter().rev()
-}
-
-fn tagged(node: &RenderNode, tag: &str) -> bool {
-    node.node
-        .as_ref()
-        .and_then(|source| source.tag_name())
-        .is_some_and(|found| found == tag)
-}
-
-fn key_of_node(node: &RenderNode) -> Option<usize> {
-    node.node
-        .as_ref()
-        .and_then(|source| source.class_name())
-        .and_then(key_of)
-}
+mod columns;

@@ -9,6 +9,7 @@
 //! [`navigate`] loads a document, [`script`] runs JavaScript, [`dom`] reads the
 //! document, [`view`] measures and renders it.
 
+mod asked;
 mod css;
 mod tables;
 mod dom;

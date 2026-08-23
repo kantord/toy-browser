@@ -1,9 +1,10 @@
-7 elements, 16.00px apart in total
+8 elements, 12.00px apart in total
 TABLE 0/1/0  off by 2.00px  ours [0,0,308,50]  theirs [0,0,310,50]
 TBODY 0/1/0/0  off by 2.00px  ours [2,2,304,46]  theirs [2,2,306,46]
 TR 0/1/0/0/0  off by 2.00px  ours [2,2,304,22]  theirs [2,2,306,22]
-TD 0/1/0/0/0/0  off by 2.00px  ours [2,2,154,22]  theirs [2,2,152,22]
-TD 0/1/0/0/0/1  off by 4.00px  ours [158,2,148,22]  theirs [156,2,152,22]
+TD 0/1/0/0/0/0  off by 1.00px  ours [2,2,151,22]  theirs [2,2,152,22]
+TD 0/1/0/0/0/1  off by 1.00px  ours [155,2,151,22]  theirs [156,2,152,22]
 TR 0/1/0/0/1  off by 2.00px  ours [2,26,304,22]  theirs [2,26,306,22]
-TD 0/1/0/0/1/1  off by 2.00px  ours [156,26,150,22]  theirs [156,26,152,22]
+TD 0/1/0/0/1/0  off by 1.00px  ours [2,26,151,22]  theirs [2,26,152,22]
+TD 0/1/0/0/1/1  off by 1.00px  ours [155,26,151,22]  theirs [156,26,152,22]
 painted differently: 2 elements, 0.267 apart in colour in total
