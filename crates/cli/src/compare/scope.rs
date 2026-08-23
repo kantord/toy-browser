@@ -32,6 +32,9 @@ pub struct Scope {
     /// Its box in each render.
     pub ours: [f64; 4],
     pub theirs: [f64; 4],
+    /// How many other elements on the page are the same kind of thing and were
+    /// left out because this one stands for them.
+    pub alike: usize,
 }
 
 impl Scope {
@@ -44,6 +47,7 @@ impl Scope {
             what: "the page".to_owned(),
             ours: whole,
             theirs: whole,
+            alike: 0,
         }
     }
 
@@ -53,6 +57,7 @@ impl Scope {
             what: theirs.describe(),
             ours: ours.rect,
             theirs: theirs.rect,
+            alike: 0,
         }
     }
 

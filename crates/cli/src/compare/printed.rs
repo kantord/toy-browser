@@ -219,8 +219,12 @@ pub(super) fn subtrees(reports: &[Report], top: usize) {
             report.scope.what,
             report.scope.path.as_deref().unwrap_or_default()
         );
+        let alike = match report.scope.alike {
+            0 => String::new(),
+            others => format!("  (+{others} like it)"),
+        };
         println!(
-            "  {:.4}  {named:<34} size {wide:+.0}x{tall:+.0}{trust}",
+            "  {:.4}  {named:<34} size {wide:+.0}x{tall:+.0}{alike}{trust}",
             report.renders.score,
         );
     }

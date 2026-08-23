@@ -14,6 +14,7 @@ mod scope;
 mod text;
 mod tree;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -132,22 +133,51 @@ fn look(
 }
 
 /// Which subtrees get a report of their own: the ones the page blames most,
-/// large enough that a crop of them is a picture rather than an edge.
+/// large enough that a crop of them is a picture rather than an edge, and no
+/// two of them the same kind of thing.
+///
+/// The last part is what makes the list worth reading. A page of stories blames
+/// thirty identical cells identically, and twelve reports of the same cell say
+/// once what one of them says, while twelve slots go unused on everything else
+/// wrong with the page.
 fn subtrees(page: &Report, ours: &tree::Export, theirs: &tree::Export) -> Vec<scope::Scope> {
-    let mine: std::collections::HashMap<&str, &tree::Node> =
+    let mine: HashMap<&str, &tree::Node> =
         ours.nodes.iter().map(|n| (n.path.as_str(), n)).collect();
-    let by_path: std::collections::HashMap<&str, &tree::Node> =
+    let by_path: HashMap<&str, &tree::Node> =
         theirs.nodes.iter().map(|n| (n.path.as_str(), n)).collect();
-    page.blamed
-        .iter()
-        .filter_map(|one| {
-            let theirs = by_path.get(one.path.as_str())?;
-            let ours = mine.get(one.path.as_str())?;
-            let big = theirs.rect[2] * theirs.rect[3] >= WORTH_A_PAGE;
-            (big && ours.placed() && theirs.placed()).then(|| scope::Scope::of(ours, theirs))
+
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    let mut chosen = Vec::new();
+    for one in &page.blamed {
+        let (Some(theirs), Some(ours)) = (by_path.get(one.path.as_str()), mine.get(one.path.as_str()))
+        else {
+            continue;
+        };
+        if theirs.rect[2] * theirs.rect[3] < WORTH_A_PAGE || !ours.placed() || !theirs.placed() {
+            continue;
+        }
+        let kind = kind_of(theirs);
+        let alike = seen.entry(kind).or_default();
+        *alike += 1;
+        if *alike == 1 && chosen.len() < SUBREPORTS {
+            chosen.push((scope::Scope::of(ours, theirs), theirs));
+        }
+    }
+    chosen
+        .into_iter()
+        .map(|(mut scope, node)| {
+            scope.alike = seen.get(&kind_of(node)).copied().unwrap_or(1) - 1;
+            scope
         })
-        .take(SUBREPORTS)
         .collect()
+}
+
+/// What makes two elements the same kind of thing for this purpose: the same
+/// tag, at the same size to the nearest ten pixels. Two story cells match; a
+/// story cell and the masthead do not.
+fn kind_of(node: &tree::Node) -> String {
+    let coarse = |value: f64| (value / 10.0).round() as i64;
+    format!("{} {}x{}", node.tag, coarse(node.rect[2]), coarse(node.rect[3]))
 }
 
 /// One report's page and the two pictures it shows.

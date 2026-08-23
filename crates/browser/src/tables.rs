@@ -32,6 +32,9 @@ pub struct Attributes {
     pub width: HashMap<usize, String>,
     /// `colspan`, by cell.
     pub spans: HashMap<usize, usize>,
+    /// A height a cell asked for, by cell — from the `height` attribute or from
+    /// an inline style, as the markup wrote it.
+    pub heights: HashMap<usize, String>,
 }
 
 /// Those attributes as CSS, or nothing when the page used none.
@@ -39,6 +42,7 @@ pub fn rules(said: &Attributes) -> String {
     let mut rules = String::new();
     rules.push_str(&painted(said));
     rules.push_str(&sized(said));
+    rules.push_str(&tall_enough(said));
     rules.push_str(&spaced(said));
     rules
 }
@@ -75,6 +79,43 @@ fn sized(said: &Attributes) -> String {
     }
 
     rules
+}
+
+/// A height a cell asked for, as the minimum it actually is.
+///
+/// TODO: a workaround for takumi, written up in `TAKUMI-ISSUES.md`. On a table
+/// cell `height` is a **minimum** — a browser grows the cell when its content
+/// does not fit, which is why Hacker News's masthead, written as
+/// `<td style="line-height:12pt; height:10px">`, is 20px tall in Chromium and
+/// was 10px here. takumi has no table formatting context, so the cell is laid
+/// out as a block, where `height` is exact and the line simply overflows.
+///
+/// `!important` because the page wrote its height inline and nothing weaker
+/// beats that. It is not overriding the author: a cell's height being a minimum
+/// is what the author's own stylesheet means.
+fn tall_enough(said: &Attributes) -> String {
+    let mut rules = String::new();
+    for (key, height) in &ordered_strings(&said.heights) {
+        let Some(css) = length(height) else { continue };
+        rules.push_str(&format!(
+            ".{KEY_CLASS_PREFIX}{key} {{ height: auto !important; min-height: {css} }}\n"
+        ));
+    }
+    rules
+}
+
+/// A length as CSS will take it, or nothing when the markup wrote something
+/// this cannot vouch for.
+fn length(value: &str) -> Option<String> {
+    let value = value.trim();
+    let digits = value.trim_end_matches(|at: char| at.is_ascii_alphabetic() || at == '%');
+    if digits.is_empty() || !digits.chars().all(|at| at.is_ascii_digit() || at == '.') {
+        return None;
+    }
+    match value == digits {
+        true => Some(format!("{digits}px")),
+        false => Some(value.to_owned()),
+    }
 }
 
 /// `cellspacing` and `cellpadding`.

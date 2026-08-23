@@ -87,9 +87,10 @@ fn subtrees(reports: &[Report]) -> String {
             escaped(&report.scope.what),
             escaped(report.scope.path.as_deref().unwrap_or_default()),
             report.renders.score,
-            match report.scope.comparable() {
-                true => "",
-                false => "sizes too far apart to read the rest",
+            match (report.scope.comparable(), report.scope.alike) {
+                (false, _) => "sizes too far apart to read the rest".to_owned(),
+                (true, 0) => String::new(),
+                (true, others) => format!("stands for {} more like it", others),
             },
         );
     }
