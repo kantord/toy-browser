@@ -1,0 +1,2 @@
+1 elements, 274.00px apart in total
+DIV 0/1/0/0/1  off by 274.00px  ours [137,20,26,18]  theirs [0,20,300,18]
