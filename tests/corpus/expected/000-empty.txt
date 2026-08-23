@@ -1,1 +1,2 @@
-BODY 0/1  ours [0,0,0,0]  theirs [0,0,800,0]
+1 elements, 800.00px apart in total
+BODY 0/1  off by 800.00px  ours [0,0,0,0]  theirs [0,0,800,0]

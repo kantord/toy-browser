@@ -76,9 +76,10 @@ and so a limit is not mistaken for a bug.
   viewport and this browser does not. **In standards mode the two agree
   exactly** — `html` 1000x8, `body` 984x0 on an empty page — so the height was
   never the cause. The reducer now keeps the doctype.
-- **Images referenced by a page are not fetched.** `<img>` reaches nothing, so
-  a logo or an icon leaves a gap where the markup's `width`/`height` say it
-  should be.
+- **A CSS `background-image` is never fetched.** `<img src>` is, now that there
+  is a network — takumi is handed images rather than fetching them, and the map
+  it was handed used to be empty. `url()` in a stylesheet is not collected, so
+  Hacker News gets its logo and not its upvote arrows.
 - **`el.onclick = fn` does nothing.** An `on*` *attribute* in the markup is run,
   and `addEventListener` works, but assigning the property is neither stored nor
   called — a page that registers a handler that way is silently ignored.

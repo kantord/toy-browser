@@ -8,7 +8,7 @@
 //! Nothing here paints; it is layout only, and the renderer runs its own pass
 //! when it comes to draw.
 
-use std::{collections::HashMap, rc::Rc};
+use std::rc::Rc;
 
 use anyhow::{Context as _, Result};
 use takumi_core::{
@@ -51,11 +51,12 @@ pub fn boxes(
     fonts: &Fonts,
     viewport: Viewport,
     said: &Attributes,
+    pictures: &crate::images::Pictures,
 ) -> Result<Measurement> {
     let tables = tables::rules(said);
     let mut told = sheets.to_vec();
     told.push(tables.clone());
-    let boxes = lay_out(keyed_html, &told, fonts, viewport)?;
+    let boxes = lay_out(keyed_html, &told, fonts, viewport, pictures)?;
     Ok(Measurement { boxes, tables })
 }
 
@@ -65,6 +66,7 @@ fn lay_out(
     sheets: &[String],
     fonts: &Fonts,
     viewport: Viewport,
+    pictures: &crate::images::Pictures,
 ) -> Result<Boxes> {
     let stylesheet = StyleSheet::parse_list_loosy(sheets.to_vec());
     let node = from_html(keyed_html, FromHtmlOptions::default())
@@ -74,7 +76,7 @@ fn lay_out(
     let context = RenderContext::builder()
         .fonts(fonts.snapshot_with_fallbacks(None))
         .sizing(SizingContext::builder().viewport(takumi_viewport).build())
-        .images(Rc::new(HashMap::new()))
+        .images(Rc::new(pictures.clone()))
         .stylesheet(std::sync::Arc::new(stylesheet))
         .time_ms(0)
         .style(Box::new(ComputedStyle::default()))

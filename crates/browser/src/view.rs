@@ -70,12 +70,9 @@ impl Browser {
         let session = self.session(page)?;
         let html = self.engine.html(&session, Keyed::Yes)?;
         let base = self.base_url(page);
-        let tables = self
-            .pages
-            .get(page)
-            .and_then(|page| page.measured.as_ref())
-            .map(|measured| measured.tables.clone())
-            .unwrap_or_default();
+        let measured = self.pages.get(page).and_then(|page| page.measured.as_ref());
+        let tables = measured.map(|it| it.tables.clone()).unwrap_or_default();
+        let pictures = measured.map(|it| it.pictures.clone()).unwrap_or_default();
         pipeline::render(
             &html,
             &self.fonts,
@@ -85,7 +82,23 @@ impl Browser {
                 resources: &self.resources,
             },
             &tables,
+            pictures,
         )
+    }
+
+    /// Every picture the page refers to, read once.
+    fn pictures(
+        &mut self,
+        session: &toy_browser_engine::SessionId,
+        base: Option<&toy_browser_fetch::Url>,
+    ) -> Result<crate::images::Pictures> {
+        let mut sources = Vec::new();
+        for image in self.engine.query(session, "img[src]")? {
+            if let Some(src) = self.engine.attribute(session, image, "src")? {
+                sources.push(src);
+            }
+        }
+        Ok(crate::images::load(&sources, base, &self.resources))
     }
 
     /// What the page said in attributes rather than in CSS.
@@ -205,7 +218,8 @@ impl Browser {
             },
         );
         let said = self.table_attributes(session)?;
-        let measured = measure::boxes(&keyed, &sheets, &self.fonts, viewport, &said)?;
+        let pictures = self.pictures(session, base.as_ref())?;
+        let measured = measure::boxes(&keyed, &sheets, &self.fonts, viewport, &said, &pictures)?;
         if let Some(page) = self.pages.get_mut(page) {
             page.measured = Some(Measured {
                 revision,
@@ -213,6 +227,7 @@ impl Browser {
                 height: viewport.height,
                 boxes: measured.boxes,
                 tables: measured.tables,
+                pictures,
             });
         }
         Ok(())

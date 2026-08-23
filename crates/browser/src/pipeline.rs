@@ -12,6 +12,7 @@ use takumi_html::{FromHtmlOptions, from_html};
 use takumi_svg::SvgOptions;
 
 use crate::css::{self, Linked};
+use crate::images::Pictures;
 
 /// The size a document is laid out and rendered at.
 #[derive(Clone, Copy)]
@@ -52,8 +53,9 @@ pub fn render(
     viewport: Viewport,
     linked: Linked<'_>,
     worked_out: &str,
+    pictures: Pictures,
 ) -> Result<Raster> {
-    let svg = to_svg(html, fonts, viewport, linked, worked_out)?;
+    let svg = to_svg(html, fonts, viewport, linked, worked_out, pictures)?;
     to_png(svg)
 }
 
@@ -64,6 +66,7 @@ fn to_svg(
     viewport: Viewport,
     linked: Linked<'_>,
     worked_out: &str,
+    pictures: Pictures,
 ) -> Result<String> {
     let node = from_html(html, FromHtmlOptions::default()).context("building takumi node tree")?;
 
@@ -73,6 +76,7 @@ fn to_svg(
             .fonts(fonts)
             .node(node)
             .stylesheet(Arc::new(stylesheet(html, linked, worked_out)))
+            .images(pictures)
             .build(),
     )
     .context("rendering SVG")

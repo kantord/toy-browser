@@ -13,6 +13,7 @@ mod css;
 mod tables;
 mod dom;
 mod fonts;
+mod images;
 mod measure;
 mod navigate;
 mod pipeline;
@@ -90,9 +91,12 @@ struct Measured {
     width: u32,
     height: Option<u32>,
     boxes: measure::Boxes,
-    /// What measuring worked out that the markup did not say: the column tracks
-    /// the page's tables need. The render is given the same ones.
+    /// What measuring worked out that the markup did not say. The render is
+    /// given the same ones.
     tables: String,
+    /// The pictures the page refers to, read once and used by both the measure
+    /// and the render.
+    pictures: images::Pictures,
 }
 
 /// Pages, and everything needed to drive them.

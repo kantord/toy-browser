@@ -1,3 +1,4 @@
-TABLE 0/1/0  ours [0,0,800,46]  theirs [0,0,210,46]
-TBODY 0/1/0/0  ours [2,2,796,42]  theirs [2,2,206,42]
-TR 0/1/0/0/0  ours [2,2,796,42]  theirs [2,2,206,42]
+3 elements, 1770.00px apart in total
+TABLE 0/1/0  off by 590.00px  ours [0,0,800,46]  theirs [0,0,210,46]
+TBODY 0/1/0/0  off by 590.00px  ours [2,2,796,42]  theirs [2,2,206,42]
+TR 0/1/0/0/0  off by 590.00px  ours [2,2,796,42]  theirs [2,2,206,42]
