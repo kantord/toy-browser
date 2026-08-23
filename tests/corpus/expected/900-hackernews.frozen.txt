@@ -808,3 +808,4 @@ BR 0/1/0/0/0/3/0/3/1  off by 169.95px  ours [400,1140,0,29]  theirs [569.95,1119
 BR 0/1/0/0/0/3/0/3/2  off by 35.00px  ours [400,1169,0,29]  theirs [406,1134,0,15]
 FORM 0/1/0/0/0/3/0/3/3  off by 746.00px  ours [375,1198,50,15]  theirs [8,1149,796,24]
 INPUT 0/1/0/0/0/3/0/3/3/0  off by 1149.00px  ours [0,0,0,0]  theirs [338.81,1149,184,24]
+painted differently: 60 elements, 18.023 apart in colour in total

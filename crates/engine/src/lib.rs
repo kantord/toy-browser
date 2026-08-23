@@ -64,6 +64,31 @@ pub struct Environment {
     pub url: String,
     /// Where each element sits and which is in front, from whoever measured.
     pub boxes: Boxes,
+    /// What each element's style computed to, from the same measure.
+    pub styles: Styles,
+}
+
+/// The style each element ended up with, once the cascade had been read and
+/// inheritance applied.
+///
+/// A Realm cannot work this out for itself: resolving the cascade is layout's
+/// job, and layout happens outside the engine. So it arrives beside the boxes,
+/// for the same reason and from the same place — and, unlike a box, an element
+/// laid out inline still has one.
+#[derive(Clone, Debug, Default)]
+pub struct Styles(HashMap<NodeId, Vec<(String, String)>>);
+
+impl Styles {
+    /// Records what `node` computed, as `getComputedStyle` would report it:
+    /// property names spelled the way CSS spells them.
+    pub fn insert(&mut self, node: NodeId, computed: Vec<(String, String)>) {
+        self.0.insert(node, computed);
+    }
+
+    /// What `node` computed, or nothing when it was never styled.
+    pub fn of(&self, node: NodeId) -> &[(String, String)] {
+        self.0.get(&node).map_or(&[], Vec::as_slice)
+    }
 }
 
 /// One element's border box, in CSS pixels from the top-left of the document.

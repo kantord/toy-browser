@@ -33,6 +33,11 @@ pub struct Linked<'a> {
 ///   `Display` has no table variants, so rows are mapped onto flexbox. Columns
 ///   are sized per row and so do not line up with the row above, which is the
 ///   part this cannot fix from outside.
+/// - `input`/`textarea`/`select`/`button` — a form control does not inherit its
+///   colour, and takumi has no user-agent sheet to say so. Without this, Hacker
+///   News's search box drew its text in the page's grey where a browser draws it
+///   black. Found by comparing computed styles, which is the only place a wrong
+///   colour is a fact rather than an inference from pixels.
 /// - `center` — Chromium centres the blocks inside it and leaves their text
 ///   alone (`text-align: -webkit-center`). Plain `text-align: center` centres
 ///   the text too, which centred every story title on Hacker News.
@@ -51,6 +56,7 @@ tbody { display: flex; flex-direction: column; gap: 2px }\
 tr { display: flex; gap: 2px }\
 td { display: block; padding: 1px; flex-grow: 0 }\
 center { display: flex; flex-direction: column; align-items: center; text-align: left }\
+input, textarea, select, button { color: #000 }\
 th { display: block; padding: 1px; flex-grow: 0 }";
 
 /// Every stylesheet the document carries, in source order.

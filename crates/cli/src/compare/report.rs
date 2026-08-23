@@ -6,7 +6,7 @@
 
 use std::fmt::Write as _;
 
-use crate::compare::{blame::Blamed, pixels::Difference, text::Split, tree::Export};
+use crate::compare::{blame::Blamed, ink::Painted, pixels::Difference, text::Split, tree::Export};
 
 /// The report, as one file that sits beside the images it shows.
 pub fn page(
@@ -14,6 +14,7 @@ pub fn page(
     renders: &Difference,
     blamed: &[Blamed],
     split: &Split,
+    painted: &[Painted],
     top: usize,
 ) -> String {
     let mut out = String::new();
@@ -29,6 +30,7 @@ pub fn page(
     );
 
     out.push_str(&where_it_falls(split, renders.pixels));
+    out.push_str(&what_was_painted(painted, top));
 
     out.push_str("<h2>Side by side</h2>\n<p class=key><span class=ours>ours</span> left, \
                   <span class=theirs>chromium</span> right</p>\n\
@@ -37,7 +39,13 @@ pub fn page(
                   difference painted over it in red</p>\n\
                   <img src=\"difference.png\" alt=\"difference heatmap\">\n");
 
-    out.push_str("<h2>Why</h2>\n<table><tr><th>share<th>cause<th>elements\n");
+    out.push_str(&why(blamed, top));
+    out
+}
+
+/// What each difference is charged to, grouped and then named.
+fn why(blamed: &[Blamed], top: usize) -> String {
+    let mut out = String::from("<h2>Why</h2>\n<table><tr><th>share<th>cause<th>elements\n");
     for (kind, share, count) in causes(blamed) {
         let _ = writeln!(
             out,
@@ -59,6 +67,41 @@ pub fn page(
     }
     out.push_str("</table>\n");
     out
+}
+
+/// Elements a colour turned up in on one side and not the other: the wrong
+/// paint, or the right paint missing. No comparison of boxes can see either.
+fn what_was_painted(painted: &[Painted], top: usize) -> String {
+    if painted.is_empty() {
+        return String::new();
+    }
+    let mut out = format!(
+        "<h2>Painted differently</h2>\n<p class=key>{} elements &mdash; the darkest and \
+         lightest colour each element owns, which on a page of words are its text and what \
+         that sits on</p>\n         <table><tr><th>element<th>layer<th>ours<th>chromium<th>apart<th>px\n",
+        painted.len(),
+    );
+    for one in painted.iter().take(top) {
+        let _ = writeln!(
+            out,
+            "<tr><td>{}<td>{}<td>{}<td>{}<td class=n>{:.0}%<td class=n>{}",
+            escaped(&one.what),
+            one.layer,
+            swatch(one.ours),
+            swatch(one.theirs),
+            one.apart * 100.0,
+            one.pixels,
+        );
+    }
+    out.push_str("</table>\n");
+    out
+}
+
+/// A colour as a chip beside its value, because two greys named in numbers are
+/// not two greys anybody can tell apart.
+fn swatch([red, green, blue]: [f32; 3]) -> String {
+    let value = format!("rgb({red:.0}, {green:.0}, {blue:.0})");
+    format!("<span class=chip style=\"background:{value}\"></span>{value}")
 }
 
 /// Where the difference falls, split by the reference's own text boxes.
@@ -127,5 +170,7 @@ table { border-collapse: collapse; width: 100%; font-size: .9rem; }
 th { text-align: left; font-weight: 600; opacity: .6; }
 th, td { border-bottom: 1px solid var(--line); padding: .35rem .5rem .35rem 0; }
 td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip { display: inline-block; width: .8em; height: .8em; margin-right: .4em;
+        border: 1px solid var(--line); vertical-align: -1px; }
 </style></head><body>
 "#;

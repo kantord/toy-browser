@@ -131,7 +131,11 @@ fn subtrees(reference: &Export, charged: &HashMap<Option<usize>, f64>) -> HashMa
 
 /// One index per pixel, saying which element covers it. Tree order, so a child
 /// paints over the parent that contains it.
-fn owners(reference: &Export, width: u32, pixels: usize) -> Vec<Option<usize>> {
+///
+/// Shared with [`crate::compare::ink`], which asks the same question of the
+/// same boxes: two readers disagreeing about which element owns a pixel would
+/// blame one element and sample another.
+pub(super) fn owners(reference: &Export, width: u32, pixels: usize) -> Vec<Option<usize>> {
     let mut owners = vec![None; pixels];
     let width = width as usize;
     let height = pixels / width.max(1);

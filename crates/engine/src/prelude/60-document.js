@@ -34,6 +34,22 @@
   // Answered from the last measure, so it costs no layout and no round trip.
   // Null where nothing was painted, which is also what a real browser says for
   // a point outside the document.
+  // What an element's style computed to. Layout resolved the cascade, so this
+  // is a lookup rather than a calculation — the same measure the boxes come
+  // from, and the one thing an element laid out inline still has.
+  globals.getComputedStyle = (element) => {
+    const id = element && element.__id;
+    if (typeof id !== "number") throw new TypeError("not an element");
+    // A declaration answers "" for a property it does not have, never
+    // `undefined` — and this one holds only what layout was asked to report, so
+    // most properties are ones it does not have. A Proxy, as `style` is, for the
+    // same reason: the trap is the shortest honest way to say so.
+    return new Proxy(__dom.computedStyle(id), {
+      get: (declaration, name) =>
+        name in declaration ? declaration[name] : typeof name === "string" ? "" : undefined,
+    });
+  };
+
   document.elementFromPoint = (x, y) => {
     const id = __dom.elementFromPoint(x, y);
     return id === null || id === undefined ? null : tb.wrap(id);

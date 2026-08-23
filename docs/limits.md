@@ -11,6 +11,16 @@ difference falls inside them. What is left is over text, in boxes both browsers
 agree on. Whether those letters are drawn differently or placed differently is
 not something this browser can answer, because it has no geometry for text.
 
+**Nothing compared computed styles until recently.** Every case now reports
+`color` and `font-size` from both browsers, which is where a wrong colour is a
+fact rather than an inference from pixels — and the only account this browser can
+give of an element laid out inline.
+
+**Nothing tested colour until recently.** The corpus compared boxes, and a
+colour moves no box. Every case now also compares what each element got painted,
+which is how a wrong colour or a missing background is caught; 20 of the 26 cases
+are clean on it. See `docs/comparing.md`.
+
 **The pixel score can move the wrong way.** Painting story titles black instead
 of the grey of a followed link — a plain bug fix, confirmed by measuring the ink
 in each title box against Chromium's, 29.3 to 51.5 against their 50.0 — took the

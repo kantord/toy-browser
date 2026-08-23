@@ -8,6 +8,17 @@
  * and a value that differs is a real disagreement rather than a mismatch.
  */
 export const EXPORT = () => {
+  // The properties both browsers can report exactly. A style is not a position,
+  // so nothing about a box can see one — and an element laid out inline, which
+  // this browser gives no box to at all, still has a style to compare.
+  const STYLE = ["color", "font-size"];
+
+  // Both browsers spell a length as they please: `13.3333px` here, `13.33px`
+  // there. Rounding every number in the value, on both sides, compares what was
+  // computed rather than how it was printed.
+  const rounded = (value) =>
+    String(value).replace(/-?\d+\.?\d*/g, (n) => String(Math.round(parseFloat(n) * 100) / 100));
+
   const nodes = [];
   const visit = (element, path) => {
     const box = element.getBoundingClientRect();
@@ -19,10 +30,16 @@ export const EXPORT = () => {
     for (let i = 0; i < children.length; i += 1) {
       if (children[i].nodeType === 3) own += children[i].nodeValue ?? "";
     }
+    const computed = getComputedStyle(element);
+    const style = {};
+    for (const property of STYLE) {
+      style[property] = rounded(computed.getPropertyValue(property));
+    }
     nodes.push({
       path,
       tag: element.tagName,
       id: element.id || null,
+      style,
       text: own.replace(/\s+/g, " ").trim().slice(0, 60),
       rect: [box.x, box.y, box.width, box.height].map(
         (n) => Math.round(n * 100) / 100,

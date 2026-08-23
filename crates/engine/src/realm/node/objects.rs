@@ -106,6 +106,51 @@ pub(super) fn attributes<'js>(
     Ok(object)
 }
 
+/// What an element's style computed to, in the shape `getComputedStyle`
+/// promises: a property per name, readable either as CSS spells it or as
+/// JavaScript does.
+///
+/// Only what layout was asked to report is here. The Prelude wraps this in a
+/// Proxy so that a property nobody recorded reads as empty, which is what a
+/// declaration says about a property it does not have.
+pub(super) fn computed<'js>(ctx: Ctx<'js>, id: usize) -> rquickjs::Result<Object<'js>> {
+    let computed = super::support::styled(&ctx, id)?;
+    let declaration = Object::new(ctx.clone())?;
+    for (name, value) in &computed {
+        declaration.set(name.as_str(), value.as_str())?;
+        declaration.set(camel_case(name), value.as_str())?;
+    }
+    declaration.set(
+        "getPropertyValue",
+        Function::new(ctx, move |name: String| {
+            computed
+                .iter()
+                .find(|(property, _)| *property == name)
+                .map(|(_, value)| value.clone())
+                .unwrap_or_default()
+        })?,
+    )?;
+    Ok(declaration)
+}
+
+/// `font-size` as `fontSize`: a property spelled the way CSS spells it, named
+/// the way JavaScript reads it.
+fn camel_case(property: &str) -> String {
+    let mut out = String::with_capacity(property.len());
+    let mut capitalize = false;
+    for ch in property.chars() {
+        match (ch, capitalize) {
+            ('-', _) => capitalize = true,
+            (ch, true) => {
+                out.extend(ch.to_uppercase());
+                capitalize = false;
+            }
+            (ch, false) => out.push(ch),
+        }
+    }
+    out
+}
+
 /// The box layout measured for an element, in the shape `getBoundingClientRect`
 /// promises. An element layout never produced a box for reports an empty rect.
 pub(super) fn rect<'js>(ctx: Ctx<'js>, id: usize) -> rquickjs::Result<Object<'js>> {

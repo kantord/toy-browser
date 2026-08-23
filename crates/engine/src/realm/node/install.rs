@@ -47,6 +47,7 @@ pub(in crate::realm) fn install(ctx: &Ctx<'_>, dom: &Rc<Dom>) -> Result<()> {
     api.set("removeListener", Function::new(ctx.clone(), unlisten)?)?;
     api.set("dispatch", Function::new(ctx.clone(), fire)?)?;
     api.set("elementFromPoint", Function::new(ctx.clone(), at_point)?)?;
+    api.set("computedStyle", Function::new(ctx.clone(), styled)?)?;
     let dom_focus = Rc::clone(dom);
     api.set(
         "focus",
@@ -60,6 +61,10 @@ pub(in crate::realm) fn install(ctx: &Ctx<'_>, dom: &Rc<Dom>) -> Result<()> {
 
     super::tasks::install(ctx, &api)?;
     Ok(())
+}
+
+fn styled<'js>(ctx: Ctx<'js>, id: usize) -> rquickjs::Result<Object<'js>> {
+    super::objects::computed(ctx, id)
 }
 
 fn at_point(ctx: Ctx<'_>, x: f64, y: f64) -> rquickjs::Result<Option<usize>> {

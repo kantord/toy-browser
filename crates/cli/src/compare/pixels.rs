@@ -13,7 +13,7 @@ use tiny_skia::Pixmap;
 /// Cubed: a tenth of a channel apart counts a thousandth of what opposite
 /// colours do. Antialiasing and hinting live at the bottom of that curve; a
 /// missing element lives at the top.
-const GAMMA: f32 = 3.0;
+pub(super) const GAMMA: f32 = 3.0;
 
 /// The largest distance two pixels can be apart, so a score reads as a
 /// fraction: three channels, each up to 255.
@@ -171,7 +171,7 @@ fn black() -> tiny_skia::PremultipliedColorU8 {
 /// One of these renderers leaves the page transparent where nothing painted a
 /// background and the other does not, so comparing alpha would report a whole
 /// page of difference that nobody looking at the two images would see.
-fn over_white(pixel: tiny_skia::PremultipliedColorU8) -> [f32; 3] {
+pub(super) fn over_white(pixel: tiny_skia::PremultipliedColorU8) -> [f32; 3] {
     let clear = 255.0 - f32::from(pixel.alpha());
     [
         f32::from(pixel.red()) + clear,
@@ -180,7 +180,7 @@ fn over_white(pixel: tiny_skia::PremultipliedColorU8) -> [f32; 3] {
     ]
 }
 
-fn distance(ours: [f32; 3], theirs: [f32; 3]) -> f32 {
+pub(super) fn distance(ours: [f32; 3], theirs: [f32; 3]) -> f32 {
     let square: f32 = (0..3).map(|c| (ours[c] - theirs[c]).powi(2)).sum();
     square.sqrt() / FARTHEST
 }

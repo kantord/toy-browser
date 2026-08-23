@@ -126,6 +126,83 @@ because the two agree or because there was nothing in it, and only that number
 tells them apart — the withdrawn measurement recorded in `TAKUMI-ISSUES.md`
 section 0 was a whole page of the second mistaken for the first.
 
+## What the page was told to look like
+
+Boxes are where layout ended up and pixels are what it drew. Neither is what it
+was *told* — and a wrong colour is a fact about the instruction, not an inference
+from the result.
+
+So each element also reports its computed style, from both browsers, through the
+same `EXPORT` function. Chromium has `getComputedStyle`; this browser now does
+too, served from the measure exactly as the boxes are — layout resolves the
+cascade, so the engine is told the answer rather than working it out. `Styles`
+sits beside `Boxes` in `Environment` for that reason.
+
+```
+110 styles computed differently
+A 0/1/0/0/0/0/0/0/0/0/1/0/0/0  color: rgb(130, 130, 130), theirs rgb(0, 0, 0)
+```
+
+Two properties so far — `color` and `font-size` — chosen because takumi resolves
+both to a value with one obvious serialization, so the two accounts compare as
+strings rather than approximately. `line-height` is deliberately left out: takumi
+always has a number and a browser answers `normal` when nothing set one, and
+comparing those would report every element on every page.
+
+**This is the only account of an inline element.** Of the 812 elements on the
+frozen Hacker News page we give 444 no box at all, and no pixel comparison can
+isolate one either. Every one of them still computes a style.
+
+Checked against the bug it was built for: removing the `:link` rewrite makes the
+corpus fail with 110 elements whose colour was computed grey where Chromium
+computes black — the cause named directly, with no pixels involved. It then found
+one nobody had noticed, that a form control does not inherit its colour, and
+Hacker News's search box had been drawing grey text.
+
+## What was painted, not just where
+
+Boxes cannot see a colour. An element painted entirely the wrong shade lays out
+perfectly, and the `a:link` rule that makes every story title on Hacker News
+black was missing without one number in the geometry moving — it was spotted by
+eye, from a screenshot, which is not a test.
+
+So each element is also compared on what it actually got painted, read from the
+two renders rather than from either browser's idea of the cascade. One of them
+has no `getComputedStyle` at all, and in any case what a stylesheet computes and
+what a renderer paints are different claims of which only the second is visible.
+
+```
+painted differently: 38 elements, 8.349 apart in colour in total
+   51%  a ink rgb(130, 130, 130) against rgb(0, 0, 0) (4576 px)
+```
+
+Two colours per element — the darkest thing inside it and the lightest, which on
+a page of words are the text and what it sits on. Each is judged on the pixels it
+*owns*, so a container answers for its own background and not for the text on it.
+
+Getting that number to mean something took three attempts, and the two that
+failed are worth keeping:
+
+- **An average** measures how much ink landed rather than what colour it is. One
+  renderer draws a heavier letter than the other, so a mean put stem weight above
+  every real difference: a box of plain black text read 63 here against 130 in
+  Chromium, with both of them drawing black.
+- **A share** cannot reach text. Glyphs in a line of 10pt Verdana put their own
+  colour on well under a tenth of the box around them, so a threshold low enough
+  to see them sits inside the antialiasing.
+
+An extreme is the same colour however much of it there is — but only once the
+fringe is gone, because a box's edge pixels are shared with whatever is behind
+it, and the lightest pixel in a red inline span is the white page showing along
+its border. So the owner map is eroded first: a pixel counts for an element only
+when its neighbours belong to the same one.
+
+Checked against the bug it was built for: with the `:link` rewrite removed it
+reports `a ink rgb(130, 130, 130) against rgb(0, 0, 0)` on every story title and
+totals 21.093; with it restored, 8.349.
+
+## What the split settles
+
 What the split settles is *where* the difference is. What it cannot settle is
 whether text inside an agreed box is drawn differently or placed differently;
 that needs geometry for the text, which this browser has none of.

@@ -3,3 +3,4 @@ TABLE 0/1/0  off by 2.00px  ours [0,0,208,46]  theirs [0,0,210,46]
 TBODY 0/1/0/0  off by 2.00px  ours [2,2,204,42]  theirs [2,2,206,42]
 TR 0/1/0/0/0  off by 2.00px  ours [2,2,204,42]  theirs [2,2,206,42]
 TD 0/1/0/0/0/1  off by 2.00px  ours [106,2,100,42]  theirs [106,2,102,42]
+painted differently: 1 elements, 0.133 apart in colour in total

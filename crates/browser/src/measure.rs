@@ -13,6 +13,7 @@ use std::rc::Rc;
 use anyhow::{Context as _, Result};
 use takumi_core::{
     Fonts,
+    style::{Color, ColorInput},
     context::RenderContext,
     geometry::NodeId,
     layout::tree::{LayoutResults, LayoutTree, RenderNode},
@@ -26,11 +27,16 @@ use toy_browser_engine::{ElementBox, key_of};
 
 use crate::{pipeline::Viewport, tables, tables::Attributes};
 
-pub use toy_browser_engine::Boxes;
+pub use toy_browser_engine::{Boxes, Styles};
 
 /// What a Measure produced.
 pub struct Measurement {
     pub boxes: Boxes,
+    /// What each element's style computed to. Read off the same tree the boxes
+    /// come from, but by walking it rather than the paint list — so an element
+    /// laid out inline, which never reaches the paint list and so never gets a
+    /// box, still reports what it was told to look like.
+    pub styles: Styles,
     /// Rules that could only be worked out by measuring: the column tracks the
     /// page's tables need. Handed back so the render can be given the same ones
     /// — a picture laid out differently from what was measured describes
@@ -62,12 +68,14 @@ pub fn boxes(
     // been, so a table with one is laid out twice. Nothing else pays for that.
     let spanned = tables::spanned(&root, &boxes, said);
     if spanned.is_empty() {
-        return Ok(Measurement { boxes, tables: worked_out });
+        let styles = computed(&root);
+        return Ok(Measurement { boxes, styles, tables: worked_out });
     }
     told.push(spanned.clone());
-    let (_, boxes) = lay_out(keyed_html, &told, fonts, viewport, pictures)?;
+    let (root, boxes) = lay_out(keyed_html, &told, fonts, viewport, pictures)?;
     Ok(Measurement {
         boxes,
+        styles: computed(&root),
         tables: format!("{worked_out}{spanned}"),
     })
 }
@@ -176,4 +184,73 @@ fn record(root: &RenderNode, results: &LayoutResults, paint: &NodePaint, boxes: 
             height: layout.size.height * transform.d,
         },
     );
+}
+
+/// What every keyed element's style computed to.
+///
+/// The whole tree, not the paint list: styles are resolved for each node as it
+/// is built, so an inline element that layout never gives a box to has one of
+/// these all the same. It is the only account of an inline element this browser
+/// can give.
+fn computed(root: &RenderNode) -> Styles {
+    let mut styles = Styles::default();
+    collect_styles(root, &mut styles);
+    styles
+}
+
+fn collect_styles(node: &RenderNode, styles: &mut Styles) {
+    if let Some(key) = node
+        .node
+        .as_ref()
+        .and_then(|source| source.class_name())
+        .and_then(key_of)
+    {
+        styles.insert(key, declarations(&node.context));
+    }
+    for child in node.children.iter().flat_map(|children| children.iter()) {
+        collect_styles(child, styles);
+    }
+}
+
+/// The properties this browser can report exactly, spelled as CSS spells them
+/// and formatted as a browser serializes them — so the two accounts can be
+/// compared as strings rather than approximately.
+///
+/// Deliberately few. A property is here when takumi resolves it to a value with
+/// one obvious serialization; a keyword left unresolved would compare as a
+/// disagreement about wording rather than about the page. `line-height` is the
+/// one deliberately left out so far: takumi always has a number, a browser
+/// answers `normal` when nothing set one, and comparing those would report every
+/// element on every page.
+fn declarations(context: &RenderContext) -> Vec<(String, String)> {
+    vec![
+        ("color".to_owned(), colour(&context.style.color, context.current_color)),
+        ("font-size".to_owned(), css_px(context.sizing.font_size)),
+    ]
+}
+
+/// A colour the way `getComputedStyle` reports one: `rgb(…)` when opaque and
+/// `rgba(…)` when not, because that is the spelling a browser answers with.
+fn colour(input: &ColorInput, current: Color) -> String {
+    // `ColorInput` is `#[non_exhaustive]`, so anything takumi adds later reads
+    // as the inherited colour rather than as a compile error here.
+    let Color([red, green, blue, alpha]) = match *input {
+        ColorInput::Value(colour) => colour,
+        _ => current,
+    };
+    match alpha {
+        255 => format!("rgb({red}, {green}, {blue})"),
+        _ => format!("rgba({red}, {green}, {blue}, {})", round(f32::from(alpha) / 255.0)),
+    }
+}
+
+/// A length in the shortest spelling that survives a round trip, so a value a
+/// hair apart in the last place does not read as a difference.
+fn css_px(pixels: f32) -> String {
+    format!("{}px", round(pixels))
+}
+
+fn round(value: f32) -> String {
+    let rounded = (value * 100.0).round() / 100.0;
+    format!("{rounded}")
 }

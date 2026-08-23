@@ -6,8 +6,10 @@
 //! as something to watch move.
 
 mod blame;
+mod ink;
 mod pixels;
 mod report;
+mod subtree;
 mod text;
 mod tree;
 
@@ -33,7 +35,8 @@ pub enum Audience {
 }
 
 pub fn run(dir: &Path, top: usize, audience: Audience, max_score: Option<f32>) -> Result<()> {
-    let renders = pixels::compare(&read(dir, OURS, "png")?, &read(dir, THEIRS, "png")?)?;
+    let (ours_png, theirs_png) = (read(dir, OURS, "png")?, read(dir, THEIRS, "png")?);
+    let renders = pixels::compare(&ours_png, &theirs_png)?;
     let ours = tree::parse(&read(dir, OURS, "json")?)?;
     let theirs = tree::parse(&read(dir, THEIRS, "json")?)?;
     let documents = tree::compare(&ours, &theirs);
@@ -47,15 +50,19 @@ pub fn run(dir: &Path, top: usize, audience: Audience, max_score: Option<f32>) -
 
     let blamed = blame::blame(&renders.weights, renders.width, &ours, &theirs);
     let split = text::split(&renders.weights, &renders.ink, renders.width, &theirs);
+    let painted = ink::compare(&ours_png, &theirs_png, &theirs)?;
+    let diverged = subtree::diverged(&ours_png, &theirs_png, &ours, &theirs)?;
     let page = dir.join("report.html");
-    std::fs::write(&page, report::page(&ours, &renders, &blamed, &split, top))
+    std::fs::write(&page, report::page(&ours, &renders, &blamed, &split, &painted, top))
         .with_context(|| format!("writing {}", page.display()))?;
     match audience {
-        Audience::Loop => print_json(&renders, &blamed, &split),
+        Audience::Loop => print_json(&renders, &blamed, &split, &painted, &diverged),
         Audience::Person => {
             report_render(&renders, &heatmap, &beside);
             report_split(&split, renders.pixels);
+            report_painted(&painted, top);
             report_document(&documents, top);
+            report_diverged(&diverged, top);
             report_blame(&blamed, top);
             println!("report: {}", page.display());
         }
@@ -72,7 +79,13 @@ pub fn run(dir: &Path, top: usize, audience: Audience, max_score: Option<f32>) -
 }
 
 /// One line a loop can read: how far apart, and what is most to blame.
-fn print_json(renders: &pixels::Difference, blamed: &[blame::Blamed], split: &text::Split) {
+fn print_json(
+    renders: &pixels::Difference,
+    blamed: &[blame::Blamed],
+    split: &text::Split,
+    painted: &[ink::Painted],
+    diverged: &[subtree::Divergence],
+) {
     let causes: Vec<_> = by_cause(blamed)
         .into_iter()
         .map(|(kind, share, count)| json!({ "cause": kind, "share": share, "elements": count }))
@@ -83,6 +96,9 @@ fn print_json(renders: &pixels::Difference, blamed: &[blame::Blamed], split: &te
             "score": renders.score,
             "badly": renders.badly_share(),
             "cause": causes.first().and_then(|c| c["cause"].as_str()).unwrap_or("none"),
+            "painted_differently": painted.len(),
+            "diverged": diverged.len(),
+            "colour_apart": ink::total(painted),
             "over_text": region(&split.over_text, renders.pixels),
             "elsewhere": region(&split.elsewhere, renders.pixels),
             "causes": causes,
@@ -123,6 +139,22 @@ fn report_split(split: &text::Split, pixels: usize) {
             region.blame * 100.0,
             region.score,
         );
+    }
+}
+
+/// Elements a colour turned up in on one side and not the other — the wrong
+/// paint, or the right paint missing. No comparison of boxes can see either.
+fn report_painted(painted: &[ink::Painted], top: usize) {
+    if painted.is_empty() {
+        return;
+    }
+    println!(
+        "painted differently: {} elements, {:.3} of them disagreed about in total",
+        painted.len(),
+        ink::total(painted),
+    );
+    for one in painted.iter().take(top) {
+        println!("  {:>5.0}%  {} ({} px)", one.apart * 100.0, one.describe(), one.pixels);
     }
 }
 
@@ -216,6 +248,21 @@ fn report_blame(blamed: &[blame::Blamed], top: usize) {
             one.subtree * 100.0,
             one.because.describe(),
         );
+    }
+}
+
+/// The deepest elements the two renders disagree about, each compared against
+/// itself at its own box so the answer is about the element and not about where
+/// its container put it.
+fn report_diverged(diverged: &[subtree::Divergence], top: usize) {
+    println!("first divergence, walking up from the leaves");
+    if diverged.is_empty() {
+        println!("  nothing — every element we place looks like the reference's");
+        return;
+    }
+    println!("  {} elements, none of them holding another's problem", diverged.len());
+    for one in diverged.iter().take(top) {
+        println!("  {:>6.4}  depth {:<3} {}", one.score, one.depth, one.describe());
     }
 }
 

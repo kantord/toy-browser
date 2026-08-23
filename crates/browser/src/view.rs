@@ -192,12 +192,9 @@ impl Browser {
 
         self.remeasure_if_stale(page, &session, revision, viewport)?;
 
-        let boxes = self
-            .pages
-            .get(page)
-            .and_then(|page| page.measured.as_ref())
-            .map(|measured| measured.boxes.clone())
-            .unwrap_or_default();
+        let measured = self.pages.get(page).and_then(|page| page.measured.as_ref());
+        let boxes = measured.map(|it| it.boxes.clone()).unwrap_or_default();
+        let styles = measured.map(|it| it.styles.clone()).unwrap_or_default();
 
         self.engine.set_environment(
             &session,
@@ -205,6 +202,7 @@ impl Browser {
                 viewport: (viewport.width, viewport.height.unwrap_or(0)),
                 url,
                 boxes,
+                styles,
             },
         )
     }
@@ -249,6 +247,7 @@ impl Browser {
                 width: viewport.width,
                 height: viewport.height,
                 boxes: measured.boxes,
+                styles: measured.styles,
                 tables: measured.tables,
                 pictures,
             });

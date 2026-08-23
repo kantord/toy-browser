@@ -38,6 +38,7 @@ pub struct Sharing {
     /// someone measures, every box is empty — the same answer a browser gives
     /// for a `display: none` element, and nothing is anywhere to be hit.
     boxes: RefCell<Boxes>,
+    styles: RefCell<crate::Styles>,
 }
 
 unsafe impl<'js> JsLifetime<'js> for Sharing {
@@ -53,12 +54,23 @@ impl Sharing {
             listeners: RefCell::new(HashMap::new()),
             tasks: super::tasks::Queue::default(),
             boxes: RefCell::new(Boxes::default()),
+            styles: RefCell::new(crate::Styles::default()),
         }
     }
 
     /// Publishes where layout put things, replacing whatever was known before.
     pub fn set_boxes(&self, boxes: Boxes) {
         *self.boxes.borrow_mut() = boxes;
+    }
+
+    /// Publishes what each element's style computed to.
+    pub fn set_styles(&self, styles: crate::Styles) {
+        *self.styles.borrow_mut() = styles;
+    }
+
+    /// What `id` computed, or nothing when it was never styled.
+    pub(super) fn style_of(&self, id: usize) -> Vec<(String, String)> {
+        self.styles.borrow().of(id).to_vec()
     }
 
     /// The box measured for `id`, or an empty one.
@@ -229,6 +241,14 @@ pub(super) fn nearest_matching(dom: &Dom, id: usize, selector: &str) -> Option<u
 }
 
 /// Where layout put `id`.
+/// What `getComputedStyle` answers, served from the same measure the boxes are.
+pub(super) fn styled(ctx: &Ctx<'_>, id: usize) -> rquickjs::Result<Vec<(String, String)>> {
+    let shared = ctx
+        .userdata::<Sharing>()
+        .ok_or_else(|| rquickjs::Error::new_from_js("Realm", "a document to belong to"))?;
+    Ok(shared.style_of(id))
+}
+
 pub(super) fn measured(ctx: &Ctx<'_>, id: usize) -> rquickjs::Result<ElementBox> {
     let shared = ctx
         .userdata::<Sharing>()

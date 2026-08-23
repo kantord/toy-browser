@@ -91,6 +91,8 @@ struct Measured {
     width: u32,
     height: Option<u32>,
     boxes: measure::Boxes,
+    /// What each element's style computed to, published with the boxes.
+    styles: measure::Styles,
     /// What measuring worked out that the markup did not say. The render is
     /// given the same ones.
     tables: String,

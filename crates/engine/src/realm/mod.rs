@@ -209,6 +209,7 @@ impl Realm {
         self.context.with(|ctx| {
             if let Some(shared) = ctx.userdata::<node::Sharing>() {
                 shared.set_boxes(environment.boxes.clone());
+                shared.set_styles(environment.styles.clone());
             }
             let _ = ctx.eval::<Value, _>(script);
         });

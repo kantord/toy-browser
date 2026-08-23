@@ -1,2 +1,3 @@
 1 elements, 80.00px apart in total
 SPAN 0/1/0/0  off by 80.00px  ours [0,0,0,0]  theirs [44.86,0,80,20]
+painted differently: 1 elements, 0.816 apart in colour in total
