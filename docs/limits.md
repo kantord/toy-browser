@@ -3,14 +3,28 @@
 On the frozen Hacker News page, of the 812 elements Chromium reports this
 browser places 368 — median 0.72px out, 78% within 2px, 96% within 10px — and
 gives no box at all to the other 444, which are the inline elements the next
-entries are about. With the text showing, 10.7% of pixels differ, nearly all of
-it over text, which is precisely where there is no box to attribute it to.
+entries are about.
+
+Splitting the pixels by the reference's own text boxes: the 80% of the page
+outside them is inked on both sides and scores 0.0001, and 99.4% of the whole
+difference falls inside them. What is left is over text, in boxes both browsers
+agree on. Whether those letters are drawn differently or placed differently is
+not something this browser can answer, because it has no geometry for text.
+
+**The pixel score can move the wrong way.** Painting story titles black instead
+of the grey of a followed link — a plain bug fix, confirmed by measuring the ink
+in each title box against Chromium's, 29.3 to 51.5 against their 50.0 — took the
+score from 0.0074 to 0.0116. Nothing outside the text moved. Differences are
+weighted by distance cubed, so a correctly black glyph half a pixel out of place
+costs several times what a uniformly faded one does. The score is a thing to
+watch move, not a thing to optimise; when it and a direct measurement disagree,
+the direct measurement wins.
 
 An earlier version of this page claimed the two renders were pixel-identical
-once glyphs were made invisible. That measurement is withdrawn: both browsers
-load the same file, so the rule that hid the text hid it on the reference side
-too. Chromium's output is the reference and changing it to obtain a match
-measures nothing. See `TAKUMI-ISSUES.md` section 0.
+once glyphs were made invisible. That is withdrawn: both browsers load the same
+file, so the rule that hid the text hid it on the reference side too. Chromium's
+output is the reference, and changing it to obtain a match measures nothing. See
+`TAKUMI-ISSUES.md` section 0.
 
 What this browser cannot do, and whether each one is work left undone or a
 property of something underneath it. Written down so nobody re-discovers them,

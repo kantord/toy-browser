@@ -137,13 +137,8 @@ fn owners(reference: &Export, width: u32, pixels: usize) -> Vec<Option<usize>> {
     let height = pixels / width.max(1);
 
     for (index, node) in reference.nodes.iter().enumerate() {
-        let [x, y, w, h] = node.rect;
-        let left = x.max(0.0) as usize;
-        let top = y.max(0.0) as usize;
-        let right = ((x + w) as usize).min(width);
-        let bottom = ((y + h) as usize).min(height);
-        for row in top..bottom {
-            owners[row * width + left..row * width + right.max(left)].fill(Some(index));
+        for row in node.rows(width, height) {
+            owners[row].fill(Some(index));
         }
     }
     owners

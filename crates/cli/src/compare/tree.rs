@@ -45,6 +45,24 @@ impl Node {
         self.rect[2] > 0.0 || self.rect[3] > 0.0
     }
 
+    /// The pixel rows this element's box covers, each a range into a buffer of
+    /// `width` pixels per row, clipped to the page.
+    ///
+    /// Shared, because two readers of the same boxes disagreeing about where a
+    /// box ends would blame and mask different pixels.
+    pub fn rows(
+        &self,
+        width: usize,
+        height: usize,
+    ) -> impl Iterator<Item = std::ops::Range<usize>> + '_ {
+        let [x, y, w, h] = self.rect;
+        let left = (x.max(0.0) as usize).min(width);
+        let right = ((x + w).max(0.0) as usize).min(width);
+        let top = (y.max(0.0) as usize).min(height);
+        let bottom = ((y + h).max(0.0) as usize).min(height);
+        (top..bottom).map(move |row| row * width + left..row * width + right.max(left))
+    }
+
     pub fn describe(&self) -> String {
         match &self.id {
             Some(id) => format!("{} #{id}", self.tag.to_lowercase()),

@@ -8,6 +8,7 @@
 mod blame;
 mod pixels;
 mod report;
+mod text;
 mod tree;
 
 use std::path::{Path, PathBuf};
@@ -45,13 +46,15 @@ pub fn run(dir: &Path, top: usize, audience: Audience, max_score: Option<f32>) -
         .with_context(|| format!("writing {}", beside.display()))?;
 
     let blamed = blame::blame(&renders.weights, renders.width, &ours, &theirs);
+    let split = text::split(&renders.weights, &renders.ink, renders.width, &theirs);
     let page = dir.join("report.html");
-    std::fs::write(&page, report::page(&ours, &renders, &blamed, top))
+    std::fs::write(&page, report::page(&ours, &renders, &blamed, &split, top))
         .with_context(|| format!("writing {}", page.display()))?;
     match audience {
-        Audience::Loop => print_json(&renders, &blamed),
+        Audience::Loop => print_json(&renders, &blamed, &split),
         Audience::Person => {
             report_render(&renders, &heatmap, &beside);
+            report_split(&split, renders.pixels);
             report_document(&documents, top);
             report_blame(&blamed, top);
             println!("report: {}", page.display());
@@ -69,7 +72,7 @@ pub fn run(dir: &Path, top: usize, audience: Audience, max_score: Option<f32>) -
 }
 
 /// One line a loop can read: how far apart, and what is most to blame.
-fn print_json(renders: &pixels::Difference, blamed: &[blame::Blamed]) {
+fn print_json(renders: &pixels::Difference, blamed: &[blame::Blamed], split: &text::Split) {
     let causes: Vec<_> = by_cause(blamed)
         .into_iter()
         .map(|(kind, share, count)| json!({ "cause": kind, "share": share, "elements": count }))
@@ -80,6 +83,8 @@ fn print_json(renders: &pixels::Difference, blamed: &[blame::Blamed]) {
             "score": renders.score,
             "badly": renders.badly_share(),
             "cause": causes.first().and_then(|c| c["cause"].as_str()).unwrap_or("none"),
+            "over_text": region(&split.over_text, renders.pixels),
+            "elsewhere": region(&split.elsewhere, renders.pixels),
             "causes": causes,
             "worst": blamed.first().map(|one| json!({
                 "what": one.what,
@@ -89,6 +94,36 @@ fn print_json(renders: &pixels::Difference, blamed: &[blame::Blamed]) {
             })),
         })
     );
+}
+
+fn region(region: &text::Region, page: usize) -> serde_json::Value {
+    json!({
+        "page": region.share_of(page),
+        "score": region.score,
+        "blame": region.blame,
+        "badly": share(region.badly, region.pixels) / 100.0,
+        "painted": share(region.painted, region.pixels) / 100.0,
+    })
+}
+
+/// Where the difference falls, which is what tells a page laid out wrongly from
+/// a page whose letters are merely drawn differently.
+///
+/// Both renders are exactly as each browser drew them. What is split is the
+/// comparison: the reference's own text boxes say which pixels it put words
+/// into. The share of the page each side covers is printed beside its score,
+/// because a small score over a tiny region says nothing.
+fn report_split(split: &text::Split, pixels: usize) {
+    println!("  where it falls, by the reference's own text boxes:");
+    for (what, region) in [("over text", &split.over_text), ("elsewhere", &split.elsewhere)] {
+        println!(
+            "    {what:<10} {:>5.1}% of page, {:>5.1}% of it painted   {:>5.1}% of the difference   score {:.4}",
+            region.share_of(pixels) * 100.0,
+            share(region.painted, region.pixels),
+            region.blame * 100.0,
+            region.score,
+        );
+    }
 }
 
 fn report_render(renders: &pixels::Difference, heatmap: &Path, beside: &Path) {

@@ -63,8 +63,54 @@ pub fn sheets(html: &str, linked: Linked<'_>) -> Vec<String> {
     let mut found = written_in(html);
     found.extend(linked_from(html, linked));
     found.sort_by_key(|(at, _)| *at);
-    sheets.extend(found.into_iter().map(|(_, css)| css));
+    sheets.extend(found.into_iter().map(|(_, css)| unvisited(&css)));
     sheets
+}
+
+/// Rewrites `:link` as `[href]`, because nothing here has ever been visited.
+///
+/// TODO: a workaround for takumi, written up in `TAKUMI-ISSUES.md`. It parses
+/// every pseudo-class but `:lang()` and matches none of them, so
+/// `a:link { color: #000 }` never applies — and that is the rule a page uses to
+/// say what an ordinary link looks like. Hacker News paints its text grey on
+/// `body` and relies on `a:link` to make the story titles black, so without
+/// this every title comes out the colour of a link already followed.
+///
+/// `[href]` is the same specificity as `:link` — a pseudo-class and an
+/// attribute selector each count one — so the cascade reads exactly as before.
+///
+/// `:visited` is left alone on purpose. A browser with no history has no
+/// visited links, so a selector that matches nothing is already the right
+/// answer, and rewriting it could only make it wrong.
+fn unvisited(css: &str) -> String {
+    let mut out = String::with_capacity(css.len());
+    let mut rest = css;
+    while let Some(at) = rest.find(PSEUDO) {
+        let (before, after) = rest.split_at(at);
+        let tail = &after[PSEUDO.len()..];
+        out.push_str(before);
+        out.push_str(match on_its_own(before, tail) {
+            true => "[href]",
+            false => PSEUDO,
+        });
+        rest = tail;
+    }
+    out.push_str(rest);
+    out
+}
+
+const PSEUDO: &str = ":link";
+
+/// Whether this is the pseudo-class rather than part of something longer —
+/// `::link`, or `:linked`.
+///
+/// Not a CSS parser: `:link` inside a string would be rewritten too. No page
+/// has been seen to write one, and the cost if it happens is a selector that
+/// matches nothing, which is what it did before this existed.
+fn on_its_own(before: &str, after: &str) -> bool {
+    let next = after.chars().next();
+    !before.ends_with(':')
+        && !matches!(next, Some(c) if c.is_alphanumeric() || c == '-' || c == '_')
 }
 
 /// The `<style>` blocks, with where each one began.
@@ -168,4 +214,38 @@ pub fn referenced(sheets: &[String]) -> Vec<String> {
         }
     }
     found
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unvisited;
+
+    /// The rule Hacker News relies on to make its story titles black.
+    #[test]
+    fn a_link_becomes_an_element_with_an_href() {
+        assert_eq!(unvisited("a:link { color: #000 }"), "a[href] { color: #000 }");
+    }
+
+    /// Both halves of a selector list are rewritten, and the `:visited` half is
+    /// left to go on matching nothing.
+    #[test]
+    fn each_selector_in_a_list_is_rewritten_on_its_own() {
+        assert_eq!(
+            unvisited(".subtext a:link, .subtext a:visited { color: grey }"),
+            ".subtext a[href], .subtext a:visited { color: grey }"
+        );
+    }
+
+    /// A pseudo-class is a prefix of longer words, and rewriting those would
+    /// break selectors that have nothing to do with links.
+    #[test]
+    fn a_longer_word_beginning_the_same_way_is_left_alone() {
+        assert_eq!(unvisited("a:linked, a::link {}"), "a:linked, a::link {}");
+    }
+
+    #[test]
+    fn a_stylesheet_without_the_pseudo_class_comes_back_unchanged() {
+        let css = "a { color: red } .title td { padding: 0 }";
+        assert_eq!(unvisited(css), css);
+    }
 }

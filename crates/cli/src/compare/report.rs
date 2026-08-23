@@ -6,10 +6,16 @@
 
 use std::fmt::Write as _;
 
-use crate::compare::{blame::Blamed, pixels::Difference, tree::Export};
+use crate::compare::{blame::Blamed, pixels::Difference, text::Split, tree::Export};
 
 /// The report, as one file that sits beside the images it shows.
-pub fn page(ours: &Export, renders: &Difference, blamed: &[Blamed], top: usize) -> String {
+pub fn page(
+    ours: &Export,
+    renders: &Difference,
+    blamed: &[Blamed],
+    split: &Split,
+    top: usize,
+) -> String {
     let mut out = String::new();
     let _ = write!(
         out,
@@ -21,6 +27,8 @@ pub fn page(ours: &Export, renders: &Difference, blamed: &[Blamed], top: usize) 
         renders.score,
         renders.badly_share() * 100.0,
     );
+
+    out.push_str(&where_it_falls(split, renders.pixels));
 
     out.push_str("<h2>Side by side</h2>\n<p class=key><span class=ours>ours</span> left, \
                   <span class=theirs>chromium</span> right</p>\n\
@@ -51,6 +59,36 @@ pub fn page(ours: &Export, renders: &Difference, blamed: &[Blamed], top: usize) 
     }
     out.push_str("</table>\n");
     out
+}
+
+/// Where the difference falls, split by the reference's own text boxes.
+///
+/// `painted` is in the table on purpose: a region scores near zero either
+/// because the two renders agree or because nothing was drawn there, and that
+/// column is the only thing that tells those apart.
+fn where_it_falls(split: &Split, pixels: usize) -> String {
+    let mut out = String::from(
+        "<h2>Where it falls</h2>\n<p class=key>by the reference&rsquo;s own text boxes          &mdash; both renders exactly as each browser drew them</p>\n         <table><tr><th>region<th>of the page<th>of it painted<th>of the difference<th>score\n",
+    );
+    for (what, region) in [("over text", &split.over_text), ("elsewhere", &split.elsewhere)] {
+        let _ = writeln!(
+            out,
+            "<tr><td>{what}<td class=n>{:.1}%<td class=n>{:.1}%<td class=n>{:.1}%<td class=n>{:.4}",
+            region.share_of(pixels) * 100.0,
+            percent(region.painted, region.pixels),
+            region.blame * 100.0,
+            region.score,
+        );
+    }
+    out.push_str("</table>\n");
+    out
+}
+
+fn percent(part: usize, whole: usize) -> f32 {
+    match whole {
+        0 => 0.0,
+        whole => part as f32 / whole as f32 * 100.0,
+    }
 }
 
 /// The same grouping the printed report uses, kept here rather than shared so

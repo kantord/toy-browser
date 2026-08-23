@@ -19,6 +19,10 @@ const GAMMA: f32 = 3.0;
 /// fraction: three channels, each up to 255.
 const FARTHEST: f32 = 441.673;
 
+/// How far apart a pixel has to be before antialiasing stops explaining it.
+/// Shared, so the whole-page count and the per-region ones mean the same thing.
+pub const APART_ENOUGH: f32 = 0.1;
+
 /// What comparing two renders found.
 pub struct Difference {
     pub width: u32,
@@ -41,6 +45,13 @@ pub struct Difference {
     /// The same, per pixel and in reading order, so a caller can ask which
     /// element a difference belongs to rather than only where it fell.
     pub weights: Vec<f32>,
+    /// Whether the reference painted anything at all at each pixel, rather than
+    /// leaving the page's own white.
+    ///
+    /// Carried so that a region's score can be read against how much of that
+    /// region had any ink in it. A near-zero score over blank paper is not
+    /// agreement, and without this nothing in a report says which it was.
+    pub ink: Vec<bool>,
 }
 
 impl Difference {
@@ -67,37 +78,52 @@ pub fn compare(ours: &[u8], theirs: &[u8]) -> Result<Difference> {
     );
 
     let mut heat = Pixmap::new(ours.width(), ours.height()).context("allocating the heatmap")?;
-    let mut weights = Vec::with_capacity(ours.pixels().len());
-    let mut total = 0.0f64;
-    let mut differing = 0;
-    let mut badly = 0;
-
-    for (index, (ours, theirs)) in ours.pixels().iter().zip(theirs.pixels()).enumerate() {
-        let apart = distance(over_white(*ours), over_white(*theirs));
-        let weight = apart.powf(GAMMA);
-        weights.push(weight);
-        total += f64::from(weight);
-        if apart > 0.0 {
-            differing += 1;
-        }
-        if apart > 0.1 {
-            badly += 1;
-        }
-        heat.pixels_mut()[index] = mark(over_white(*theirs), apart);
-    }
-
+    let scanned = scan(&ours, &theirs, &mut heat);
     let pixels = ours.pixels().len();
     Ok(Difference {
         side_by_side: beside(&ours, &theirs)?,
         width: ours.width(),
         height: ours.height(),
-        score: (total / pixels.max(1) as f64) as f32,
-        differing,
-        badly,
+        score: (scanned.total / pixels.max(1) as f64) as f32,
+        differing: scanned.differing,
+        badly: scanned.badly,
         pixels,
         heatmap: heat.encode_png().context("encoding the heatmap")?,
-        weights,
+        weights: scanned.weights,
+        ink: scanned.ink,
     })
+}
+
+/// Everything one pass over the two images produces.
+#[derive(Default)]
+struct Scanned {
+    weights: Vec<f32>,
+    ink: Vec<bool>,
+    total: f64,
+    differing: usize,
+    badly: usize,
+}
+
+/// Walks both images once, weighing each pixel and painting the heatmap as it
+/// goes — one pass, because the images are the largest thing here.
+fn scan(ours: &Pixmap, theirs: &Pixmap, heat: &mut Pixmap) -> Scanned {
+    let mut scanned = Scanned {
+        weights: Vec::with_capacity(ours.pixels().len()),
+        ink: Vec::with_capacity(ours.pixels().len()),
+        ..Scanned::default()
+    };
+    for (index, (mine, reference)) in ours.pixels().iter().zip(theirs.pixels()).enumerate() {
+        let reference = over_white(*reference);
+        let apart = distance(over_white(*mine), reference);
+        let weight = apart.powf(GAMMA);
+        scanned.ink.push(reference != [255.0, 255.0, 255.0]);
+        scanned.weights.push(weight);
+        scanned.total += f64::from(weight);
+        scanned.differing += usize::from(apart > 0.0);
+        scanned.badly += usize::from(apart > APART_ENOUGH);
+        heat.pixels_mut()[index] = mark(reference, apart);
+    }
+    scanned
 }
 
 /// The two renders side by side, with a seam between them so it is obvious

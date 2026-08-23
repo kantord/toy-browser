@@ -108,10 +108,27 @@ text on both sides and the scores agree, but what agreed was two mostly-empty
 pages. A score is only evidence when Chromium's output is exactly what Chromium
 would have produced unprompted.
 
-To measure one part of the difference, change the **comparison**, not the page:
-mask a region at scoring time, or compare the DOM export, which never involved a
-render at all. `TAKUMI-ISSUES.md` section 0 records a claim that was withdrawn
-for getting this wrong.
+To measure one part of the difference, change the **comparison**, not the page.
+`just compare` does one of these already:
+
+```
+where it falls, by the reference's own text boxes:
+  over text   20.2% of page,  99.9% of it painted    99.4% of the difference   score 0.0362
+  elsewhere   79.8% of page,  78.4% of it painted     0.6% of the difference   score 0.0001
+```
+
+The reference's boxes say which pixels it put words into, and the weights
+already computed are added up on each side of that line. Both renders stay
+exactly as each browser drew them.
+
+`painted` is the column that keeps this honest. A region can score near zero
+because the two agree or because there was nothing in it, and only that number
+tells them apart — the withdrawn measurement recorded in `TAKUMI-ISSUES.md`
+section 0 was a whole page of the second mistaken for the first.
+
+What the split settles is *where* the difference is. What it cannot settle is
+whether text inside an agreed box is drawn differently or placed differently;
+that needs geometry for the text, which this browser has none of.
 
 ## Isolating one difference
 
