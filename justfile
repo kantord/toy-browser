@@ -83,19 +83,25 @@ corpus *ARGS:
     cd tests/playwright && pnpm exec playwright test corpus {{ ARGS }}
 
 
-# Capture a page from both browsers and say how far apart they are.
+# Compare a page against real Chromium, then open the report.
 compare url="https://news.ycombinator.com/":
     cd tests/playwright && COMPARE_URL={{ url }} pnpm exec playwright test compare
     cargo run -- compare
+    @just show
+
+# The last comparison's report, in a browser.
+show:
+    @xdg-open out/compare/report.html >/dev/null 2>&1 || echo "open out/compare/report.html"
 
 # Shrink a page until only the difference is left, and write the minimal repro.
 reduce url="https://news.ycombinator.com/":
     cargo build
     cd tests/playwright && node reduce.mjs {{ url }}
 
-# The heatmap the last comparison wrote: the reference dimmed, differences red.
-difference:
-    @echo out/compare/difference.png
+# What the last comparison produced, to open or drop into a message.
+shots:
+    @echo out/compare/side-by-side.png   "# ours left, chromium right"
+    @echo out/compare/difference.png     "# reference dimmed, differences red"
 
 # --- the gate a session has to pass ---
 

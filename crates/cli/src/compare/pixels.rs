@@ -34,6 +34,10 @@ pub struct Difference {
     /// Where the difference is, as a PNG: the reference dimmed, with the
     /// weight painted over it in red.
     pub heatmap: Vec<u8>,
+    /// The two renders beside each other, ours on the left, flattened onto
+    /// white. The numbers say how far apart they are; this says what that
+    /// looks like, which is the part anybody can check.
+    pub side_by_side: Vec<u8>,
     /// The same, per pixel and in reading order, so a caller can ask which
     /// element a difference belongs to rather than only where it fell.
     pub weights: Vec<f32>,
@@ -84,6 +88,7 @@ pub fn compare(ours: &[u8], theirs: &[u8]) -> Result<Difference> {
 
     let pixels = ours.pixels().len();
     Ok(Difference {
+        side_by_side: beside(&ours, &theirs)?,
         width: ours.width(),
         height: ours.height(),
         score: (total / pixels.max(1) as f64) as f32,
@@ -93,6 +98,46 @@ pub fn compare(ours: &[u8], theirs: &[u8]) -> Result<Difference> {
         heatmap: heat.encode_png().context("encoding the heatmap")?,
         weights,
     })
+}
+
+/// The two renders side by side, with a seam between them so it is obvious
+/// where one ends.
+fn beside(ours: &Pixmap, theirs: &Pixmap) -> Result<Vec<u8>> {
+    const SEAM: u32 = 4;
+    let mut both = Pixmap::new(ours.width() * 2 + SEAM, ours.height())
+        .context("allocating the side-by-side")?;
+
+    let width = both.width() as usize;
+    for (index, pixel) in both.pixels_mut().iter_mut().enumerate() {
+        let (x, y) = (index % width, index / width);
+        let from = match x < ours.width() as usize {
+            true => Some((ours, x)),
+            false => x
+                .checked_sub((ours.width() + SEAM) as usize)
+                .map(|at| (theirs, at)),
+        };
+        *pixel = match from {
+            Some((side, at)) => flattened(side, at, y),
+            // The seam itself, in something no page is likely to paint.
+            None => tiny_skia::PremultipliedColorU8::from_rgba(255, 0, 128, 255)
+                .unwrap_or_else(black),
+        };
+    }
+    both.encode_png().context("encoding the side-by-side")
+}
+
+/// One pixel of a render, over white, ready to sit next to the other's.
+fn flattened(from: &Pixmap, x: usize, y: usize) -> tiny_skia::PremultipliedColorU8 {
+    let Some(pixel) = from.pixels().get(y * from.width() as usize + x) else {
+        return black();
+    };
+    let [red, green, blue] = over_white(*pixel);
+    tiny_skia::PremultipliedColorU8::from_rgba(red as u8, green as u8, blue as u8, 255)
+        .unwrap_or_else(black)
+}
+
+fn black() -> tiny_skia::PremultipliedColorU8 {
+    tiny_skia::PremultipliedColorU8::from_rgba(0, 0, 0, 255).expect("opaque black")
 }
 
 /// Flattens a pixel onto white.

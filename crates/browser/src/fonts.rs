@@ -8,8 +8,10 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use takumi_core::{Fonts, resources::font::FontResource};
 
-/// Candidate system faces, tried in order until a regular/bold pair is found.
-/// Each entry is one family: regular first, then the bolder companion.
+/// System faces to register when a caller names none. Each entry is one family:
+/// regular first, then the bolder companion. The first family present is what
+/// an unstyled page is rendered in; the rest let a page that names a face have
+/// it.
 const CANDIDATE_FAMILIES: &[&[&str]] = &[
     &[
         "/usr/share/fonts/noto/NotoSans-Regular.ttf",
@@ -33,7 +35,12 @@ const CANDIDATE_FAMILIES: &[&[&str]] = &[
     ],
 ];
 
-/// Registers `paths` (or an auto-detected system sans-serif when empty).
+/// Registers `paths`, or every candidate face present on this machine.
+///
+/// Every one, not the first family found: takumi matches a `font-family` against
+/// the faces it has been given, so registering one means every page is rendered
+/// in that one whatever it asked for — and a page naming a face that is sitting
+/// on the disk gets the wrong metrics for no reason.
 pub fn load(paths: &[PathBuf]) -> Result<Fonts> {
     let paths = if paths.is_empty() {
         detect_system_family()
@@ -56,17 +63,16 @@ pub fn load(paths: &[PathBuf]) -> Result<Fonts> {
     Ok(fonts)
 }
 
-/// The first candidate family with at least one face present on disk.
+/// Every candidate face present on disk, in the order the families are listed.
+///
+/// The first family found is still what an unstyled page is rendered in, because
+/// takumi falls back to the first face it was given. The rest are there so a
+/// page that names one of them gets it.
 fn detect_system_family() -> Vec<PathBuf> {
     CANDIDATE_FAMILIES
         .iter()
-        .map(|family| {
-            family
-                .iter()
-                .map(PathBuf::from)
-                .filter(|path| Path::new(path).is_file())
-                .collect::<Vec<_>>()
-        })
-        .find(|found| !found.is_empty())
-        .unwrap_or_default()
+        .flat_map(|family| family.iter())
+        .map(PathBuf::from)
+        .filter(|path| Path::new(path).is_file())
+        .collect()
 }

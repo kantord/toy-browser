@@ -49,21 +49,26 @@ impl Browser {
         }
         self.sync(page)?;
         let viewport = self.viewport(page);
-        let html = self.html(page)?;
-        Ok(self.draw(page, &html, viewport)?.png)
+        Ok(self.draw(page, viewport)?.png)
     }
 
     /// Renders the page and keeps every intermediate artifact.
     pub fn render(&mut self, page: &PageId) -> Result<pipeline::Raster> {
         self.sync(page)?;
         let viewport = self.viewport(page);
-        let html = self.html(page)?;
-        self.draw(page, &html, viewport)
+        self.draw(page, viewport)
     }
 
     /// Renders with the rules the last Measure worked out, so the picture is
     /// laid out the way the geometry says it is.
-    fn draw(&self, page: &PageId, html: &str, viewport: Viewport) -> Result<pipeline::Raster> {
+    ///
+    /// From the **keyed** markup, because those rules name elements by their
+    /// marker class. Rendering the unkeyed form instead leaves every one of them
+    /// matching nothing: the measurement moves and the picture does not, which
+    /// looks exactly like a change that had no effect.
+    fn draw(&mut self, page: &PageId, viewport: Viewport) -> Result<pipeline::Raster> {
+        let session = self.session(page)?;
+        let html = self.engine.html(&session, Keyed::Yes)?;
         let base = self.base_url(page);
         let tables = self
             .pages
@@ -72,7 +77,7 @@ impl Browser {
             .map(|measured| measured.tables.clone())
             .unwrap_or_default();
         pipeline::render(
-            html,
+            &html,
             &self.fonts,
             viewport,
             Linked {
@@ -83,22 +88,18 @@ impl Browser {
         )
     }
 
-    /// How many columns each cell reaches across.
-    ///
-    /// Read here rather than off the laid-out tree, because takumi keeps a
-    /// node's attributes to itself — and a table cannot be given its columns
-    /// without knowing which cells span several of them.
+    /// What the page said in attributes rather than in CSS.
     fn table_attributes(
         &mut self,
         session: &toy_browser_engine::SessionId,
     ) -> Result<tables::Attributes> {
         let mut said = tables::Attributes::default();
-        for cell in self.engine.query(session, "td, th")? {
-            if let Some(across) = self.number(session, cell, "colspan")?.filter(|n| *n > 1.0) {
-                said.spans.insert(cell, across as usize);
+        self.table_spacing(session, &mut said)?;
+        for element in self.engine.query(session, "[bgcolor]")? {
+            if let Some(colour) = self.engine.attribute(session, element, "bgcolor")? {
+                said.background.insert(element, colour);
             }
         }
-        self.table_spacing(session, &mut said)?;
         Ok(said)
     }
 

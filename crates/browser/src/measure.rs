@@ -43,9 +43,8 @@ pub struct Measurement {
 /// `keyed_html` must come from the engine with keys attached; elements without
 /// a marker class simply do not appear in the result.
 ///
-/// A page with a table is laid out twice: once to find out how wide its columns
-/// want to be, and once knowing. Nothing else pays for that — a page without
-/// one is measured once and the second pass never happens.
+/// The rules worked out from the page's presentational attributes are applied
+/// here and handed back, so the render is given the same ones.
 pub fn boxes(
     keyed_html: &str,
     sheets: &[String],
@@ -53,25 +52,20 @@ pub fn boxes(
     viewport: Viewport,
     said: &Attributes,
 ) -> Result<Measurement> {
-    let (root, boxes) = lay_out(keyed_html, sheets, fonts, viewport)?;
-    let tables = tables::tracks(&root, &boxes, said);
-    if tables.is_empty() {
-        return Ok(Measurement { boxes, tables });
-    }
-
+    let tables = tables::rules(said);
     let mut told = sheets.to_vec();
     told.push(tables.clone());
-    let (_, boxes) = lay_out(keyed_html, &told, fonts, viewport)?;
+    let boxes = lay_out(keyed_html, &told, fonts, viewport)?;
     Ok(Measurement { boxes, tables })
 }
 
-/// One pass: build the tree, lay it out, and read the boxes back off it.
+/// Build the tree, lay it out, and read the boxes back off it.
 fn lay_out(
     keyed_html: &str,
     sheets: &[String],
     fonts: &Fonts,
     viewport: Viewport,
-) -> Result<(RenderNode, Boxes)> {
+) -> Result<Boxes> {
     let stylesheet = StyleSheet::parse_list_loosy(sheets.to_vec());
     let node = from_html(keyed_html, FromHtmlOptions::default())
         .context("building takumi node tree for measurement")?;
@@ -108,7 +102,7 @@ fn lay_out(
     let mut boxes = Boxes::default();
     // Index 0 is the root context; every other one is reached from inside it.
     collect(&root, &contexts, 0, &results, &mut boxes);
-    Ok((root, boxes))
+    Ok(boxes)
 }
 
 /// Walks one stacking context and everything painted within it, in the order it

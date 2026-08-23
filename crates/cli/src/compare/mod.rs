@@ -7,6 +7,7 @@
 
 mod blame;
 mod pixels;
+mod report;
 mod tree;
 
 use std::path::{Path, PathBuf};
@@ -39,14 +40,21 @@ pub fn run(dir: &Path, top: usize, audience: Audience, max_score: Option<f32>) -
     let heatmap = dir.join("difference.png");
     std::fs::write(&heatmap, &renders.heatmap)
         .with_context(|| format!("writing {}", heatmap.display()))?;
+    let beside = dir.join("side-by-side.png");
+    std::fs::write(&beside, &renders.side_by_side)
+        .with_context(|| format!("writing {}", beside.display()))?;
 
     let blamed = blame::blame(&renders.weights, renders.width, &ours, &theirs);
+    let page = dir.join("report.html");
+    std::fs::write(&page, report::page(&ours, &renders, &blamed, top))
+        .with_context(|| format!("writing {}", page.display()))?;
     match audience {
         Audience::Loop => print_json(&renders, &blamed),
         Audience::Person => {
-            report_render(&renders, &heatmap);
+            report_render(&renders, &heatmap, &beside);
             report_document(&documents, top);
             report_blame(&blamed, top);
+            println!("report: {}", page.display());
         }
     }
 
@@ -83,7 +91,7 @@ fn print_json(renders: &pixels::Difference, blamed: &[blame::Blamed]) {
     );
 }
 
-fn report_render(renders: &pixels::Difference, heatmap: &Path) {
+fn report_render(renders: &pixels::Difference, heatmap: &Path, beside: &Path) {
     println!("render  {}x{}", renders.width, renders.height);
     println!(
         "  score {:.4}{}",
@@ -99,6 +107,7 @@ fn report_render(renders: &pixels::Difference, heatmap: &Path) {
         renders.badly_share() * 100.0,
     );
     println!("  heatmap: {}", heatmap.display());
+    println!("  side by side ({OURS} left, {THEIRS} right): {}", beside.display());
 }
 
 fn report_document(documents: &tree::TreeDiff, top: usize) {

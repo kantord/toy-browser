@@ -31,8 +31,8 @@ const USER_AGENT: &str = "\
 table { display: block; padding: 2px }\
 tbody { display: flex; flex-direction: column; gap: 2px }\
 tr { display: flex; gap: 2px }\
-td { display: block; padding: 1px }\
-th { display: block; padding: 1px }";
+td { display: block; padding: 1px; flex-shrink: 0 }\
+th { display: block; padding: 1px; flex-shrink: 0 }";
 
 /// Every stylesheet the document carries, in source order.
 ///

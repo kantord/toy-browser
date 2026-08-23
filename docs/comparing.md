@@ -82,6 +82,25 @@ canvas, so everything below the boxes is transparent here and dark in Chromium.
 No fixture test could have caught it, because our renders were only ever
 compared against themselves.
 
+## A frozen page, so a real-page number means something
+
+A live page cannot be a baseline. Its content changes hourly, so a score
+measured against it moves for reasons nobody controls, and a change of a
+thousandth is indistinguishable from a different set of stories. Two runs of
+`just compare` against live Hacker News an hour apart gave 0.0222 twice — and
+two runs either side of a real code change gave numbers that could not be told
+apart from drift.
+
+`tests/playwright/freeze.mjs` takes a page off the network: the DOM after its
+scripts have run, stylesheets inlined, scripts dropped. It becomes a corpus
+case like any other, and its score repeats to the digit.
+
+Images are **left exactly as written** and simply do not load. They carry
+`width` and `height`, so they take the same room either way — and a page that
+styles them by source, as `img[src="s.gif"]` does on a real site, goes on
+matching. Carrying them inline as data URIs breaks that rule and changes the
+layout, which is the opposite of freezing.
+
 ## Isolating one difference
 
 `just compare` names the element. It does not say what about it is wrong, and

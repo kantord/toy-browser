@@ -35,8 +35,32 @@ and so a limit is not mistaken for a bug.
 - **Tables are approximated with flexbox, not laid out.** takumi's `Display` has
   no table variants at all — `None, Flex, InlineFlex, Grid, InlineGrid, Inline,
   Block, InlineBlock, ListItem` — so `display: table` means nothing to it. The
-  user-agent stylesheet maps rows to flex containers instead, which puts cells
-  side by side and gets their heights exactly right. What it cannot do is
+  user-agent stylesheet maps rows to flex containers, which puts cells side by
+  side. Columns do not line up with the columns above them, because each row
+  sizes its own.
+
+  Compiling the columns into `grid-template-columns` was built and removed. It
+  works on a small table — a case whose columns only align because of it went
+  exact — and destroys a real one: the measuring pass sizes cells under flex,
+  where they shrink to min-content, so a column of prose measures one word wide
+  and the tracks pin it there. Hacker News rendered one word per line. The
+  weighted pixel score **preferred** that version, 0.0118 against 0.0136, which
+  says more about the score than about the layout.
+
+- **`line-height: normal` is a pixel too tall.** Given an explicit
+  `line-height` the two agree exactly. Given `normal` and the same face, this
+  rounds a line up where Chromium rounds it down: Noto Sans at 13.3px is
+  18.16px of metrics, reported as 19 here and 18 there.
+
+  It was a *fifth* too tall until fonts resolved. Only one face used to be
+  registered, so every page was laid out in it whatever it asked for — a page
+  naming a font sitting on the disk got the wrong metrics for no reason.
+
+- **A face a page names has to be installed under that name.** There is no
+  substitution: real browsers ask fontconfig, which answers `Arial` with
+  Liberation Sans and `Verdana` with whatever it likes. Here an unknown family
+  falls back to the first registered face, so a page asking for Verdana and a
+  real browser asking for Verdana do not end up in the same font. What it cannot do is
   shrink-to-fit the table or size columns: a table fills its line, because the
   `inline-block` that would shrink it is an inline box, and inline boxes have no
   box. The two limits meet there.
@@ -52,6 +76,9 @@ and so a limit is not mistaken for a bug.
   viewport and this browser does not. **In standards mode the two agree
   exactly** — `html` 1000x8, `body` 984x0 on an empty page — so the height was
   never the cause. The reducer now keeps the doctype.
+- **Images referenced by a page are not fetched.** `<img>` reaches nothing, so
+  a logo or an icon leaves a gap where the markup's `width`/`height` say it
+  should be.
 - **`el.onclick = fn` does nothing.** An `on*` *attribute* in the markup is run,
   and `addEventListener` works, but assigning the property is neither stored nor
   called — a page that registers a handler that way is silently ignored.
