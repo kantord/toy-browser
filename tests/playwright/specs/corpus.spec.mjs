@@ -128,6 +128,11 @@ function restyled(ours, theirs) {
   return lines.length === 0 ? [] : [`${lines.length} styles computed differently`, ...lines];
 }
 
+// Every case is read from two browsers, screenshotted twice and compared by a
+// subprocess, and one of them is a real page. That is minutes of work, not the
+// seconds a unit test gets.
+test.setTimeout(5 * 60 * 1000);
+
 test("every corpus case disagrees exactly as much as it did", async () => {
   // Its own browser, so its cache is as new as the corpus files are.
   const ours = await serve(9224);

@@ -1,5 +1,1 @@
-1 elements, 800.00px apart in total
-BODY 0/1  off by 800.00px  ours [0,0,0,0]  theirs [0,0,800,0]
-2 styles computed differently
-BODY 0/1  color: , theirs rgb(0, 0, 0)
-BODY 0/1  font-size: , theirs 16px
+

@@ -1,1 +1,4 @@
-
+3 elements, 3.00px apart in total
+HTML 0  off by 1.00px  ours [0,0,800,14]  theirs [0,0,800,15]
+BODY 0/1  off by 1.00px  ours [0,0,800,14]  theirs [0,0,800,15]
+DIV 0/1/0  off by 1.00px  ours [0,0,200,14]  theirs [0,0,200,15]

@@ -36,6 +36,29 @@ enum Command {
     Webdriver(WebdriverArgs),
     /// Measure a render and a document against a real browser's.
     Compare(CompareArgs),
+    /// Lay a page out with the browser engine and write the same account of it
+    /// the comparison tooling reads from a real browser.
+    Layout(LayoutArgs),
+}
+
+#[derive(clap::Args)]
+struct LayoutArgs {
+    /// The HTML file to lay out.
+    input: PathBuf,
+
+    /// Where to write the export.
+    #[arg(long, default_value = "out/compare/toy.json")]
+    out: PathBuf,
+
+    /// Also paint the page, as SVG and as PNG beside it.
+    #[arg(long)]
+    paint: Option<PathBuf>,
+
+    #[arg(long, default_value_t = 1000)]
+    width: u32,
+
+    #[arg(long, default_value_t = 800)]
+    height: u32,
 }
 
 #[derive(clap::Args)]
@@ -120,6 +143,7 @@ fn main() -> Result<()> {
             let browser = Browser::new(Resources::new(), &args.fonts)?;
             webdriver::serve(args.port, browser)
         }
+        Command::Layout(args) => layout(args),
         Command::Compare(args) => compare::run(
             &args.dir,
             args.top,
@@ -130,6 +154,34 @@ fn main() -> Result<()> {
             args.max_score,
         ),
     }
+}
+
+/// Lays one page out and writes what came of it, for the comparator to read
+/// beside a real browser's account of the same page.
+fn layout(args: LayoutArgs) -> Result<()> {
+    let source = std::fs::read_to_string(&args.input)?;
+    let url = format!("file://{}", args.input.canonicalize()?.display());
+    let laid_out = toy_browser::lay_out(
+        &source,
+        &[],
+        Viewport { width: args.width, height: Some(args.height) },
+        &url,
+    )?;
+    if let Some(parent) = args.out.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let export = laid_out.export(&url);
+    std::fs::write(&args.out, serde_json::to_vec_pretty(&export)?)?;
+    if let Some(into) = &args.paint {
+        let viewport = Viewport { width: args.width, height: None };
+        let svg = toy_browser::blitz::paint::svg(&laid_out, viewport);
+        std::fs::write(into, &svg)?;
+        let png = into.with_extension("png");
+        std::fs::write(&png, toy_browser::rasterize(&svg)?)?;
+        println!("painted {} ({} bytes) and {}", into.display(), svg.len(), png.display());
+    }
+    println!("laid out {} elements into {}", export["nodes"].as_array().map_or(0, Vec::len), args.out.display());
+    Ok(())
 }
 
 fn render(args: RenderArgs) -> Result<()> {

@@ -68,6 +68,15 @@ impl Browser {
     fn draw(&mut self, page: &PageId, viewport: Viewport) -> Result<pipeline::Raster> {
         let session = self.session(page)?;
         let html = self.engine.html(&session, Keyed::Yes)?;
+        if crate::blitz::chosen() {
+            let base = self
+                .base_url(page)
+                .map(|url| url.to_string())
+                .unwrap_or_else(|| "about:blank".to_owned());
+            let laid_out = crate::blitz::lay_out(&html, &[], viewport, &base)?;
+            let svg = crate::blitz::paint::svg(&laid_out, viewport);
+            return pipeline::rasterized(svg);
+        }
         let base = self.base_url(page);
         let measured = self.pages.get(page).and_then(|page| page.measured.as_ref());
         let tables = measured.map(|it| it.tables.clone()).unwrap_or_default();
@@ -142,6 +151,38 @@ impl Browser {
         )
     }
 
+    /// The same, through the browser engine rather than the screenshot library.
+    ///
+    /// Everything the other path works out by hand — the table columns, the
+    /// user-agent defaults, which element a box belongs to — this one is simply
+    /// told, because a real style system and a real set of formatting contexts
+    /// already know.
+    fn remeasure_with_blitz(
+        &mut self,
+        page: &PageId,
+        keyed: &str,
+        revision: u64,
+        viewport: Viewport,
+    ) -> Result<()> {
+        let base = self
+            .base_url(page)
+            .map(|url| url.to_string())
+            .unwrap_or_else(|| "about:blank".to_owned());
+        let laid_out = crate::blitz::lay_out(keyed, &[], viewport, &base)?;
+        if let Some(page) = self.pages.get_mut(page) {
+            page.measured = Some(Measured {
+                revision,
+                width: viewport.width,
+                height: viewport.height,
+                boxes: laid_out.boxes(),
+                styles: laid_out.styles(),
+                tables: String::new(),
+                pictures: crate::images::Pictures::default(),
+            });
+        }
+        Ok(())
+    }
+
     /// Lays the page out again if anything it was measured against has moved
     /// on — the document itself, or the viewport it was measured at.
     fn remeasure_if_stale(
@@ -165,6 +206,9 @@ impl Browser {
         }
 
         let keyed = self.engine.html(session, Keyed::Yes)?;
+        if crate::blitz::chosen() {
+            return self.remeasure_with_blitz(page, &keyed, revision, viewport);
+        }
         let base = self.base_url(page);
         let sheets = crate::css::sheets(
             &keyed,

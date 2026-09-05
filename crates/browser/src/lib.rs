@@ -10,6 +10,7 @@
 //! document, [`view`] measures and renders it.
 
 mod asked;
+pub mod blitz;
 mod css;
 mod tables;
 mod dom;
@@ -28,8 +29,9 @@ use anyhow::Result;
 use takumi_core::Fonts;
 use toy_browser_engine::{Engine, Handle, SessionId};
 
+pub use blitz::{LaidOut, lay_out};
 pub use navigate::{Loaded, NavigationError};
-pub use pipeline::{Raster, Viewport};
+pub use pipeline::{Raster, Viewport, rasterize};
 pub use toy_browser_engine::{Budget, ElementBox, NodeId, Point, ScriptSurvey};
 pub use toy_browser_fetch::{Resources, Url};
 

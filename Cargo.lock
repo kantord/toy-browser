@@ -3841,8 +3841,13 @@ name = "toy-browser"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "blitz-dom",
+ "blitz-html",
+ "blitz-traits",
+ "parley 0.6.0",
  "resvg",
  "serde_json",
+ "stylo",
  "takumi-core",
  "takumi-html",
  "takumi-svg",

@@ -92,7 +92,7 @@ pub fn stylesheet(html: &str, linked: Linked<'_>, worked_out: &str) -> StyleShee
 
 /// Rasterizes an SVG document at its intrinsic size.
 fn to_png(svg: String) -> Result<Raster> {
-    let tree = usvg::Tree::from_str(&svg, &usvg::Options::default()).context("parsing SVG")?;
+    let tree = usvg::Tree::from_str(&svg, &options()).context("parsing SVG")?;
     let size = tree.size().to_int_size();
     let mut pixmap = tiny_skia::Pixmap::new(size.width(), size.height())
         .with_context(|| format!("allocating {}x{} pixmap", size.width(), size.height()))?;
@@ -107,6 +107,27 @@ fn to_png(svg: String) -> Result<Raster> {
         png,
         uniform_color,
     })
+}
+
+/// How an SVG is read, with the system's fonts available to it.
+///
+/// A painter that emits `<text>` rather than glyph outlines needs the
+/// rasterizer to have the same faces layout had — it chooses the glyphs, even
+/// though the positions come from the document.
+fn options() -> usvg::Options<'static> {
+    let mut options = usvg::Options::default();
+    options.fontdb_mut().load_system_fonts();
+    options
+}
+
+/// Rasterizes an SVG painted elsewhere.
+pub fn rasterize(svg: &str) -> Result<Vec<u8>> {
+    Ok(to_png(svg.to_owned())?.png)
+}
+
+/// The same, keeping every artifact the caller might want.
+pub fn rasterized(svg: String) -> Result<Raster> {
+    to_png(svg)
 }
 
 /// The single color filling the pixmap, if there is one.
