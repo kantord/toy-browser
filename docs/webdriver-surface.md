@@ -28,6 +28,8 @@ at a time regardless.
 | GET | `/session/:id/source` | `html` |
 | GET | `/session/:id/screenshot` | `screenshot` |
 | POST | `/session/:id/execute/sync` | `call` |
+| POST | `/session/:id/execute/async` | `call`, `run_tasks` |
+| GET/POST | `/session/:id/window/rect` | `viewport`, `set_viewport` |
 | POST | `/session/:id/element(s)` | `query` |
 | GET | `/session/:id/element/:e/text` | `text` |
 | GET | `/session/:id/element/:e/name` | `tag_name` |

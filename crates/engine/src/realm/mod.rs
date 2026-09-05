@@ -201,8 +201,14 @@ impl Realm {
         let (width, height) = environment.viewport;
         // The viewport and the URL are plain globals a page reads directly; the
         // boxes are not, because every element asks for its own.
+        //
+        // Outer and inner are the same size here: there is no window furniture
+        // around the page, so nothing is taken off. A caller asking the
+        // difference — which is what a reftest runner does before it sizes a
+        // window — gets zero, which is the truth.
         let script = format!(
             "globalThis.innerWidth = {width}; globalThis.innerHeight = {height}; \
+             globalThis.outerWidth = {width}; globalThis.outerHeight = {height}; \
              globalThis.location.href = {};",
             quote(&environment.url),
         );

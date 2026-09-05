@@ -4,6 +4,7 @@
 //! can drive the browser, the WebDriver front end is a front end and not a
 //! private arrangement.
 
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::{
     net::TcpStream,
     path::{Path, PathBuf},
@@ -18,7 +19,13 @@ use thirtyfour::{By, DesiredCapabilities, WebDriver};
 mod reads;
 
 /// A port unlikely to collide with a real driver or another test run.
-const PORT: u16 = 4455;
+///
+/// One per test, because each brings up a server of its own and the suite runs
+/// them at the same time. A single number worked while there was a single test.
+fn port() -> u16 {
+    static NEXT: AtomicU16 = AtomicU16::new(4455);
+    NEXT.fetch_add(1, Ordering::SeqCst)
+}
 
 /// The server, killed when the test ends however it ends.
 struct Serving(Child);
@@ -30,16 +37,16 @@ impl Drop for Serving {
     }
 }
 
-fn start() -> Serving {
+fn start(on: u16) -> Serving {
     // The already-built binary, not `cargo run`: a test cannot take the build
     // lock its own run is holding.
     let server = Command::new(env!("CARGO_BIN_EXE_toy-browser"))
-        .args(["webdriver", "--port", &PORT.to_string()])
+        .args(["webdriver", "--port", &on.to_string()])
         .spawn()
         .expect("starting toy-browser");
 
     let deadline = Instant::now() + Duration::from_secs(30);
-    while TcpStream::connect(("127.0.0.1", PORT)).is_err() {
+    while TcpStream::connect(("127.0.0.1", on)).is_err() {
         assert!(Instant::now() < deadline, "webdriver did not start");
         std::thread::sleep(Duration::from_millis(100));
     }
@@ -65,9 +72,10 @@ struct Session {
 
 #[fixture]
 async fn session() -> Session {
-    let _serving = start();
+    let on = port();
+    let _serving = start(on);
     let driver = WebDriver::new(
-        &format!("http://127.0.0.1:{PORT}"),
+        &format!("http://127.0.0.1:{on}"),
         DesiredCapabilities::chrome(),
     )
     .await
@@ -175,4 +183,44 @@ async fn read_scripted_page(driver: &WebDriver) -> ScriptedPage {
         // PNG header: width is a big-endian u32 at byte 16.
         screenshot_width: u32::from_be_bytes(png[16..20].try_into().unwrap()),
     }
+}
+
+/// What a reftest runner does before it looks at anything: find how much of the
+/// window is furniture, then size it.
+#[rstest]
+#[tokio::test(flavor = "multi_thread")]
+async fn a_window_can_be_sized_and_asked_how_big_it_is(#[future] session: Session) {
+    let Session { _serving, driver } = session.await;
+
+    let offsets = driver
+        .execute(
+            "return [window.outerWidth - window.innerWidth,
+                     window.outerHeight - window.innerHeight];",
+            vec![],
+        )
+        .await
+        .expect("the offsets");
+    // No furniture around the page, so nothing is taken off.
+    assert_eq!(offsets.json(), &serde_json::json!([0, 0]));
+
+    driver.set_window_rect(0, 0, 800, 600).await.expect("sizing");
+    let rect = driver.get_window_rect().await.expect("the rect");
+    assert_eq!((rect.width, rect.height), (800, 600));
+
+    driver.quit().await.expect("quit");
+}
+
+/// A script that finishes by calling back rather than by returning.
+#[rstest]
+#[tokio::test(flavor = "multi_thread")]
+async fn an_asynchronous_script_answers_with_what_it_passed_back(#[future] session: Session) {
+    let Session { _serving, driver } = session.await;
+
+    let answered = driver
+        .execute_async("arguments[arguments.length - 1]('settled');", vec![])
+        .await
+        .expect("the callback");
+    assert_eq!(answered.json(), &serde_json::json!("settled"));
+
+    driver.quit().await.expect("quit");
 }

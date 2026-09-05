@@ -6,3 +6,6 @@ playwright-report/
 
 # Findings to take upstream, not part of this repo's history.
 TAKUMI-ISSUES.md
+
+# Fetched by `just wpt-setup`, not ours to carry.
+tests/wpt/checkout/

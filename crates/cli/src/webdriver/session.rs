@@ -11,10 +11,11 @@ use serde_json::{Value, json};
 use toy_browser::{Browser, PageId, Remote, Viewport};
 
 use super::element::First;
+use super::script::Wait;
 use super::{Answer, Failure, Route};
 
 /// The key a W3C client recognises an element reference by.
-const ELEMENT_KEY: &str = "element-6066-11e4-a52e-4f735466cecf";
+pub(super) const ELEMENT_KEY: &str = "element-6066-11e4-a52e-4f735466cecf";
 
 /// What a fresh session is sized at, since a client need not say.
 const DEFAULT_VIEWPORT: Viewport = Viewport {
@@ -25,7 +26,7 @@ const DEFAULT_VIEWPORT: Viewport = Viewport {
 /// One WebDriver session: a page, and the element references handed out for it.
 pub(super) struct Session {
     page: PageId,
-    elements: HashMap<String, Remote>,
+    pub(super) elements: HashMap<String, Remote>,
     next_element: u32,
 }
 
@@ -42,7 +43,7 @@ impl Session {
 /// Every open session, and the browser they run in.
 pub struct Sessions {
     pub(super) browser: Browser,
-    open: HashMap<String, Session>,
+    pub(super) open: HashMap<String, Session>,
     next_id: u32,
 }
 
@@ -75,7 +76,10 @@ impl Sessions {
             ("GET", ["session", id, "title"]) => self.title(id),
             ("GET", ["session", id, "source"]) => self.source(id),
             ("GET", ["session", id, "screenshot"]) => self.screenshot(id),
-            ("POST", ["session", id, "execute", "sync"]) => self.execute(id, body),
+            ("POST", ["session", id, "execute", "sync"]) => self.execute(id, body, Wait::No),
+            ("POST", ["session", id, "execute", "async"]) => self.execute(id, body, Wait::Yes),
+            ("GET", ["session", id, "window", "rect"]) => self.window_rect(id),
+            ("POST", ["session", id, "window", "rect"]) => self.set_window_rect(id, body),
 
             ("POST", ["session", id, "element"]) => self.find(id, body, First::Yes),
             ("POST", ["session", id, "elements"]) => self.find(id, body, First::No),
@@ -179,43 +183,35 @@ impl Sessions {
         Ok(json!(BASE64.encode(png)))
     }
 
-    /// Runs a script body, as WebDriver defines it: a function body, not an
-    /// expression, so `return` is what produces the value.
-    fn execute(&mut self, id: &str, body: &Value) -> Answer {
+    /// How big the window is, and where.
+    ///
+    /// There is no window furniture, so the rect is the viewport and the
+    /// position is always the origin — nothing here is on a desktop.
+    fn window_rect(&mut self, id: &str) -> Answer {
         let page = self.page(id)?;
-        let script = body["script"].as_str().unwrap_or_default();
-        let arguments: Vec<Remote> = body["args"]
-            .as_array()
-            .map(Vec::as_slice)
-            .unwrap_or_default()
-            .iter()
-            .map(|argument| self.remote_of(id, argument))
-            .collect();
-
-        let declaration = format!("function() {{ {script} }}");
-        let result = self
-            .browser
-            .call(&page, &declaration, None, &arguments, true)
-            .map_err(internal)?;
-
-        match result {
-            Remote::Value(value) => Ok(value),
-            Remote::Threw(message) => Err(Failure::new("javascript error", message)),
-            other => {
-                let session = self.session_mut(id)?;
-                Ok(session.remember(other))
-            }
-        }
+        let viewport = self.browser.viewport(&page);
+        Ok(json!({
+            "x": 0,
+            "y": 0,
+            "width": viewport.width,
+            "height": viewport.height.unwrap_or(0),
+        }))
     }
 
-    /// A script argument: an element reference if the client sent one back,
-    /// otherwise a plain value.
-    fn remote_of(&self, id: &str, argument: &Value) -> Remote {
-        argument[ELEMENT_KEY]
-            .as_str()
-            .and_then(|element| self.open.get(id)?.elements.get(element).cloned())
-            .unwrap_or_else(|| Remote::Value(argument.clone()))
+    /// Sizes the window, which here means sizing the page.
+    ///
+    /// The position is accepted and ignored: a page that is not on a desktop
+    /// cannot be moved about on one, and refusing would stop every caller that
+    /// sets a rect in one go.
+    fn set_window_rect(&mut self, id: &str, body: &Value) -> Answer {
+        let page = self.page(id)?;
+        let was = self.browser.viewport(&page);
+        let width = body["width"].as_u64().map_or(was.width, |value| value as u32);
+        let height = body["height"].as_u64().map(|value| value as u32).or(was.height);
+        self.browser.set_viewport(&page, Viewport { width, height });
+        self.window_rect(id)
     }
+
 
     pub(super) fn page(&self, id: &str) -> Result<PageId, Failure> {
         self.open
