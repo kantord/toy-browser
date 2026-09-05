@@ -26,7 +26,12 @@ pub(super) struct Around {
 
 impl Around {
     fn of(x: f32, y: f32, width: f32, height: f32) -> Self {
-        Self { left: x, top: y, right: x + width, bottom: y + height }
+        Self {
+            left: x,
+            top: y,
+            right: x + width,
+            bottom: y + height,
+        }
     }
 
     fn with(self, other: Self) -> Self {
@@ -65,7 +70,9 @@ impl LaidOut {
     pub(super) fn implied(&self) -> HashMap<usize, Around> {
         let mut found: HashMap<usize, Around> = HashMap::new();
         self.walk(&mut |node, x, y| {
-            let Some(inline) = node.element_data().and_then(|it| it.inline_layout_data.as_ref())
+            let Some(inline) = node
+                .element_data()
+                .and_then(|it| it.inline_layout_data.as_ref())
             else {
                 return;
             };
@@ -118,10 +125,13 @@ impl LaidOut {
         let mut styles = toy_browser_engine::Styles::default();
         self.walk(&mut |node, _, _| {
             let Some(key) = keyed(node) else { return };
-            styles.insert(key, vec![
-                ("color".to_owned(), colour(node)),
-                ("font-size".to_owned(), font_size(node)),
-            ]);
+            styles.insert(
+                key,
+                vec![
+                    ("color".to_owned(), colour(node)),
+                    ("font-size".to_owned(), font_size(node)),
+                ],
+            );
         });
         styles
     }
@@ -143,10 +153,20 @@ impl LaidOut {
 pub(super) fn placed(node: &Node, x: f32, y: f32, implied: &HashMap<usize, Around>) -> ElementBox {
     let size = node.final_layout.size;
     if size.width > 0.0 || size.height > 0.0 {
-        return ElementBox { x, y, width: size.width, height: size.height };
+        return ElementBox {
+            x,
+            y,
+            width: size.width,
+            height: size.height,
+        };
     }
     implied.get(&node.id).copied().map_or(
-        ElementBox { x, y, width: 0.0, height: 0.0 },
+        ElementBox {
+            x,
+            y,
+            width: 0.0,
+            height: 0.0,
+        },
         Around::into_box,
     )
 }

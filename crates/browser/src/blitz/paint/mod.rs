@@ -35,7 +35,10 @@ pub fn svg(unit: &Composed, viewport: Viewport) -> String {
     compose(unit, 0.0, 0.0, &mut marks, &mut height);
     // Never nothing: a rasterizer refuses a picture with no area, and a page
     // that has not loaded yet is a real thing to be asked to draw.
-    let tall = viewport.height.map_or(height.ceil() as u32, |given| given).max(1);
+    let tall = viewport
+        .height
+        .map_or(height.ceil() as u32, |given| given)
+        .max(1);
     format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{wide}\" height=\"{tall}\" \
          viewBox=\"0 0 {wide} {tall}\">\n{marks}</svg>\n",
@@ -177,18 +180,18 @@ fn resolved(page: &LaidOut, src: &str) -> String {
         return src.to_owned();
     };
     match base.join(src) {
-        Ok(url) => url.to_file_path().map_or_else(
-            |()| url.to_string(),
-            |path| path.display().to_string(),
-        ),
+        Ok(url) => url
+            .to_file_path()
+            .map_or_else(|()| url.to_string(), |path| path.display().to_string()),
         Err(_) => src.to_owned(),
     }
 }
 
 pub(super) fn escaped(text: &str) -> String {
-    text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
-
 
 mod words;
 

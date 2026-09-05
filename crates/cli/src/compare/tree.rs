@@ -96,7 +96,11 @@ const UNRENDERED: [&str; 7] = ["HEAD", "STYLE", "SCRIPT", "TITLE", "META", "LINK
 pub fn restyled(ours: &Export, theirs: &Export) -> Vec<Restyled> {
     let mine: HashMap<&str, &Node> = ours.nodes.iter().map(|n| (n.path.as_str(), n)).collect();
     let mut found = Vec::new();
-    for node in theirs.nodes.iter().filter(|n| !UNRENDERED.contains(&n.tag.as_str())) {
+    for node in theirs
+        .nodes
+        .iter()
+        .filter(|n| !UNRENDERED.contains(&n.tag.as_str()))
+    {
         let Some(ours) = mine.get(node.path.as_str()) else {
             continue;
         };
@@ -188,11 +192,8 @@ struct Sorted {
 impl Sorted {
     fn take(&mut self, node: &Node, other: &Node) {
         if node.tag != other.tag {
-            self.diverged.push((
-                node.path.clone(),
-                node.tag.clone(),
-                other.tag.clone(),
-            ));
+            self.diverged
+                .push((node.path.clone(), node.tag.clone(), other.tag.clone()));
         }
         let apart = node.apart_from(other);
         if apart == 0.0 {

@@ -12,7 +12,6 @@
 mod asked;
 pub mod blitz;
 mod css;
-mod tables;
 mod dom;
 mod fonts;
 mod frames;
@@ -22,6 +21,7 @@ mod navigate;
 mod pipeline;
 mod pointer;
 mod script;
+mod tables;
 mod view;
 
 use std::collections::HashMap;

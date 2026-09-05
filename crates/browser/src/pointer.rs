@@ -56,7 +56,12 @@ impl Browser {
         let mut emitted = Emitted::default();
 
         if pointer.over != over {
-            self.raise(page, pointer.over, at("mouseout", point, buttons), &mut emitted)?;
+            self.raise(
+                page,
+                pointer.over,
+                at("mouseout", point, buttons),
+                &mut emitted,
+            )?;
             self.raise(page, over, at("mouseover", point, buttons), &mut emitted)?;
         }
         self.raise(page, over, at("mousemove", point, buttons), &mut emitted)?;

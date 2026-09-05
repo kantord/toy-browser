@@ -7,8 +7,8 @@
 
 use rquickjs::{Ctx, Function, Persistent, Value};
 
-use super::Phase;
 use super::super::support::{Sharing, dom_of};
+use super::Phase;
 
 /// One registration.
 ///
@@ -111,7 +111,12 @@ pub(super) fn registered_for(
 ///
 /// There is no way to spell a capturing handler in markup, so the capture pass
 /// never has one to run.
-pub(super) fn has_inline(ctx: &Ctx<'_>, target: &str, kind: &str, phase: Phase) -> rquickjs::Result<bool> {
+pub(super) fn has_inline(
+    ctx: &Ctx<'_>,
+    target: &str,
+    kind: &str,
+    phase: Phase,
+) -> rquickjs::Result<bool> {
     if phase == Phase::Capturing {
         return Ok(false);
     }
@@ -126,12 +131,19 @@ pub(super) fn attribute_for(kind: &str) -> String {
 }
 
 /// Whether anything anywhere on the path would hear this event.
-pub(super) fn anyone_listening(ctx: &Ctx<'_>, path: &[String], kind: &str) -> rquickjs::Result<bool> {
+pub(super) fn anyone_listening(
+    ctx: &Ctx<'_>,
+    path: &[String],
+    kind: &str,
+) -> rquickjs::Result<bool> {
     let registered = {
         let shared = sharing(ctx)?;
         let listeners = shared.listeners.borrow();
-        path.iter()
-            .any(|target| listeners.get(&slot(target, kind)).is_some_and(|at| !at.is_empty()))
+        path.iter().any(|target| {
+            listeners
+                .get(&slot(target, kind))
+                .is_some_and(|at| !at.is_empty())
+        })
     };
     if registered {
         return Ok(true);

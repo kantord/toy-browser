@@ -17,7 +17,6 @@ use blitz_dom::{DocumentConfig, Node};
 use blitz_html::HtmlDocument;
 use blitz_traits::shell::{ColorScheme, Viewport as BlitzViewport};
 
-
 use std::collections::HashMap;
 
 use toy_browser_engine::{ElementBox, key_of};
@@ -25,8 +24,11 @@ use toy_browser_engine::{ElementBox, key_of};
 use crate::pipeline::Viewport;
 
 mod export;
+pub(crate) mod fonts;
 mod geometry;
 mod net;
+
+use fonts::context;
 
 use export::{colour, font_size};
 pub mod paint;
@@ -70,9 +72,14 @@ pub fn lay_out(
     let mut document = HtmlDocument::from_html(
         html,
         DocumentConfig {
-            viewport: Some(BlitzViewport::new(viewport.width, height, 1.0, ColorScheme::Light)),
+            viewport: Some(BlitzViewport::new(
+                viewport.width,
+                height,
+                1.0,
+                ColorScheme::Light,
+            )),
             base_url: Some(base.to_owned()),
-            font_ctx: Some(fonts()),
+            font_ctx: Some(context()),
             net_provider: Some(Arc::clone(&files) as Arc<dyn blitz_traits::net::NetProvider<_>>),
             ..Default::default()
         },
@@ -100,7 +107,10 @@ pub fn lay_out(
         }
         document.resolve(0.0);
     }
-    Ok(LaidOut { document, base: base.to_owned() })
+    Ok(LaidOut {
+        document,
+        base: base.to_owned(),
+    })
 }
 
 /// One thing to draw: a page, and the pages mounted inside it.
@@ -175,7 +185,9 @@ impl LaidOut {
     pub fn webviews(&self) -> Vec<Webview> {
         let mut found = Vec::new();
         self.walk(&mut |node, x, y| {
-            let Some(element) = node.element_data() else { return };
+            let Some(element) = node.element_data() else {
+                return;
+            };
             if element.name.local.as_ref() != "webview" {
                 return;
             }
@@ -218,7 +230,9 @@ impl LaidOut {
             .iter()
             .filter_map(|child| self.document.get_node(*child))
             .find(|child| {
-                child.element_data().is_some_and(|it| it.name.local.as_ref() == "body")
+                child
+                    .element_data()
+                    .is_some_and(|it| it.name.local.as_ref() == "body")
             });
         [Some(root), body]
             .into_iter()
@@ -276,41 +290,4 @@ fn keyed(node: &Node) -> Option<usize> {
     node.element_data()?
         .attr(blitz_dom::local_name!("class"))
         .and_then(key_of)
-}
-
-/// A font context that resolves the generic families the way the browser this
-/// is measured against does.
-///
-/// A page asking for `Verdana, Geneva, sans-serif` has none of the first two on
-/// a Linux machine, so what it gets is whatever `sans-serif` means — and that
-/// decides every line height on the page. Chromium answers Liberation Sans
-/// here, measured by asking it directly with `CSS.getPlatformFontsForNode`.
-fn fonts() -> parley::FontContext {
-    let mut context = parley::FontContext::new();
-    for generic in [parley::GenericFamily::SansSerif, parley::GenericFamily::SystemUi] {
-        let families: Vec<_> = SANS_SERIF
-            .iter()
-            .filter_map(|name| context.collection.family_id(name))
-            .collect();
-        context.collection.set_generic_families(generic, families.into_iter());
-    }
-    context
-}
-
-/// What `sans-serif` resolves to, in the order a browser would try them.
-const SANS_SERIF: &[&str] = &["Liberation Sans", "Arimo", "DejaVu Sans"];
-
-/// The same list, for the painter to hand the rasterizer.
-///
-/// A page asking for a font nobody has gets whatever `sans-serif` means, and
-/// layout has already decided that. Writing only what the page asked for leaves
-/// the rasterizer to decide again, and it does not decide the same way: Hacker
-/// News came out in Greek letters, because the only thing on this machine
-/// claiming to be Verdana was a symbol face.
-pub fn fallback() -> String {
-    SANS_SERIF
-        .iter()
-        .map(|name| format!("'{name}'"))
-        .collect::<Vec<_>>()
-        .join(", ")
 }

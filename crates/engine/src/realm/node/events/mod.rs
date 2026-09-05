@@ -13,12 +13,12 @@ mod listeners;
 
 use rquickjs::{Ctx, Function, IntoJs, Object, Value, function::This};
 
-use listeners::{anyone_listening, attribute_for, has_inline, registered_for};
 pub(in crate::realm::node) use listeners::Registered;
 pub(in crate::realm) use listeners::{add_listener, capture_of, remove_listener};
+use listeners::{anyone_listening, attribute_for, has_inline, registered_for};
 
-use crate::Activated;
 use super::support::{dom_of, wrap};
+use crate::Activated;
 
 /// The one target that is not a node. Matches `tb.WINDOW` in the Prelude.
 const WINDOW: &str = "window";
@@ -180,8 +180,6 @@ fn report_listener_error(ctx: &Ctx<'_>, kind: &str, error: &rquickjs::Error) {
     }
 }
 
-
-
 /// Runs the `on*` attribute, which the DOM treats as a listener registered
 /// where the attribute was written — before any the page added later.
 fn run_inline<'js>(
@@ -250,4 +248,3 @@ fn tell_the_page(ctx: &Ctx<'_>, node: usize, mouse: crate::Mouse<'_>) -> rquickj
     dispatch(ctx, target, event.clone())?;
     Ok(flag(&event, "defaultPrevented"))
 }
-

@@ -50,7 +50,11 @@ impl Browser {
     /// Composed before anything is drawn, so drawing is one pass over one
     /// coordinate space rather than a picture per browser to be fitted together
     /// afterwards.
-    pub(crate) fn compose(&mut self, page: &PageId, viewport: Viewport) -> Result<crate::blitz::Composed> {
+    pub(crate) fn compose(
+        &mut self,
+        page: &PageId,
+        viewport: Viewport,
+    ) -> Result<crate::blitz::Composed> {
         let session = self.session(page)?;
         let html = self.engine.html(&session, Keyed::Yes)?;
         let base = self
@@ -60,12 +64,18 @@ impl Browser {
         let measuring = crate::blitz::lay_out(&html, &[], viewport, &base, &self.resources)?;
         let frames = measuring.webviews();
         if frames.is_empty() {
-            return Ok(crate::blitz::Composed { laid_out: measuring, mounted: HashMap::new() });
+            return Ok(crate::blitz::Composed {
+                laid_out: measuring,
+                mounted: HashMap::new(),
+            });
         }
 
         let (inside, told) = self.inhabit(page, &frames, viewport)?;
         let laid_out = crate::blitz::lay_out(&html, &[told], viewport, &base, &self.resources)?;
-        Ok(crate::blitz::Composed { mounted: self.framed(page, &laid_out, inside), laid_out })
+        Ok(crate::blitz::Composed {
+            mounted: self.framed(page, &laid_out, inside),
+            laid_out,
+        })
     }
 
     /// Lays out the page behind every frame, and says how tall each turned out.
@@ -90,7 +100,10 @@ impl Browser {
                 true => frame.width as u32,
                 false => viewport.width,
             };
-            let width = Viewport { width: across, height: None };
+            let width = Viewport {
+                width: across,
+                height: None,
+            };
             self.set_viewport(&child, width);
             let composed = self.compose(&child, width)?;
             told.push_str(&format!(
@@ -129,7 +142,11 @@ impl Browser {
         if let Some(held) = self.pages.get_mut(page) {
             held.mounted.insert(
                 frame.node,
-                crate::Mounted { page: child.clone(), src, area: crate::ElementBox::default() },
+                crate::Mounted {
+                    page: child.clone(),
+                    src,
+                    area: crate::ElementBox::default(),
+                },
             );
         }
         Ok(child)

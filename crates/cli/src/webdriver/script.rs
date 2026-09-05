@@ -78,18 +78,21 @@ impl Sessions {
     /// settled.
     fn awaited(&mut self, id: &str) -> Answer {
         let page = self.page(id)?;
-        self.browser.run_tasks(&page, Budget::default()).map_err(internal)?;
+        self.browser
+            .run_tasks(&page, Budget::default())
+            .map_err(internal)?;
         let held = self
             .browser
             .evaluate(&page, &format!("globalThis.{DONE}"), true)
             .map_err(internal)?;
         match held {
-            Remote::Value(Value::Array(mut passed)) if !passed.is_empty() => {
-                Ok(passed.remove(0))
-            }
+            Remote::Value(Value::Array(mut passed)) if !passed.is_empty() => Ok(passed.remove(0)),
             // Never called. WebDriver calls that a timeout, and so does
             // whatever asked — the script had its turn and did not finish.
-            _ => Err(Failure::new("script timeout", "the script never called back")),
+            _ => Err(Failure::new(
+                "script timeout",
+                "the script never called back",
+            )),
         }
     }
 

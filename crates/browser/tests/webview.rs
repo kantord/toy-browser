@@ -28,7 +28,12 @@ fn each_webview_holds_a_page_of_its_own() {
     let second = browser.routed(&page, IN_THE_SECOND).unwrap();
     assert_ne!(first.0, second.0);
     assert!(browser.url(&first.0).unwrap().ends_with("webview-top.html"));
-    assert!(browser.url(&second.0).unwrap().ends_with("webview-bottom.html"));
+    assert!(
+        browser
+            .url(&second.0)
+            .unwrap()
+            .ends_with("webview-bottom.html")
+    );
 }
 
 /// A Point inside a webview is measured from that page's own corner, not from
@@ -61,7 +66,12 @@ fn a_click_in_one_follows_that_page_s_link_and_leaves_the_others_alone() {
     browser.pointer_down(&page, IN_THE_SECOND).unwrap();
     browser.pointer_up(&page, IN_THE_SECOND).unwrap();
 
-    assert!(browser.url(&second).unwrap().ends_with("webview-elsewhere.html"));
+    assert!(
+        browser
+            .url(&second)
+            .unwrap()
+            .ends_with("webview-elsewhere.html")
+    );
     assert!(browser.url(&first).unwrap().ends_with("webview-top.html"));
     assert!(browser.url(&page).unwrap().ends_with("webview-host.html"));
 }
@@ -83,7 +93,12 @@ fn redrawing_the_host_leaves_a_followed_link_alone() {
     browser.pointer_up(&page, IN_THE_SECOND).unwrap();
     browser.render(&page).unwrap();
 
-    assert!(browser.url(&second).unwrap().ends_with("webview-elsewhere.html"));
+    assert!(
+        browser
+            .url(&second)
+            .unwrap()
+            .ends_with("webview-elsewhere.html")
+    );
 }
 
 /// A webview with no height of its own is as tall as what is inside it — the

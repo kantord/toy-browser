@@ -133,9 +133,7 @@ pub fn within(export: &Export, path: Option<&str>, origin: (f64, f64)) -> Export
     let Some(path) = path else {
         return export.clone();
     };
-    let inside = |node: &Node| {
-        node.path == path || node.path.starts_with(&format!("{path}/"))
-    };
+    let inside = |node: &Node| node.path == path || node.path.starts_with(&format!("{path}/"));
     Export {
         url: export.url.clone(),
         title: export.title.clone(),

@@ -75,7 +75,13 @@ pub struct Painted {
 
 impl Painted {
     pub fn describe(&self) -> String {
-        format!("{} {} {} against {}", self.what, self.layer, rgb(self.ours), rgb(self.theirs))
+        format!(
+            "{} {} {} against {}",
+            self.what,
+            self.layer,
+            rgb(self.ours),
+            rgb(self.theirs)
+        )
     }
 }
 
@@ -86,7 +92,10 @@ fn rgb(colour: Colour) -> String {
 /// Every element painted noticeably differently, worst first.
 pub fn compare(ours: &Pixmap, theirs: &Pixmap, reference: &Export) -> Result<Vec<Painted>> {
     let width = ours.width() as usize;
-    let owners = inside(&blame::owners(reference, ours.width(), ours.pixels().len()), width);
+    let owners = inside(
+        &blame::owners(reference, ours.width(), ours.pixels().len()),
+        width,
+    );
 
     let mut owned: Vec<Owned> = vec![Owned::default(); reference.nodes.len()];
     for (index, owner) in owners.iter().enumerate() {
@@ -140,7 +149,10 @@ pub fn total(painted: &[Painted]) -> f32 {
 }
 
 fn sample(from: &Pixmap, index: usize) -> Colour {
-    from.pixels().get(index).copied().map_or([255.0; 3], over_white)
+    from.pixels()
+        .get(index)
+        .copied()
+        .map_or([255.0; 3], over_white)
 }
 
 fn luminance(colour: Colour) -> f32 {
@@ -176,7 +188,11 @@ impl Owned {
             false => ("ground", ground.0, ground.1),
         };
         Some(Painted {
-            what: reference.nodes.get(at).map(Node::describe).unwrap_or_default(),
+            what: reference
+                .nodes
+                .get(at)
+                .map(Node::describe)
+                .unwrap_or_default(),
             layer,
             ours,
             theirs,
@@ -262,7 +278,11 @@ mod tests {
         .unwrap();
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].layer, "ink");
-        assert!(found[0].describe().contains("rgb(130, 130, 130)"), "{}", found[0].describe());
+        assert!(
+            found[0].describe().contains("rgb(130, 130, 130)"),
+            "{}",
+            found[0].describe()
+        );
     }
 
     /// The confound this exists to survive: the same colours in both, one of
@@ -276,7 +296,11 @@ mod tests {
             &page(),
         )
         .unwrap();
-        assert!(found.is_empty(), "{}", found.first().map_or(String::new(), Painted::describe));
+        assert!(
+            found.is_empty(),
+            "{}",
+            found.first().map_or(String::new(), Painted::describe)
+        );
     }
 
     #[test]

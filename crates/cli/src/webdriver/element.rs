@@ -134,9 +134,7 @@ impl Sessions {
             .browser
             .bounding_box(&page, &remote)
             .map_err(internal)?
-            .ok_or_else(|| {
-                Failure::new("element not interactable", "the layout gave it no box")
-            })?;
+            .ok_or_else(|| Failure::new("element not interactable", "the layout gave it no box"))?;
         let point = Point {
             x: area.x + area.width / 2.0,
             y: area.y + area.height / 2.0,

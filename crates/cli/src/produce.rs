@@ -19,7 +19,10 @@ pub fn layout(args: LayoutArgs) -> Result<()> {
     let laid_out = toy_browser::lay_out(
         &source,
         &[],
-        Viewport { width: args.width, height: Some(args.height) },
+        Viewport {
+            width: args.width,
+            height: Some(args.height),
+        },
         &url,
         &Resources::new(),
     )?;
@@ -30,13 +33,24 @@ pub fn layout(args: LayoutArgs) -> Result<()> {
     std::fs::write(&args.out, serde_json::to_vec_pretty(&export)?)?;
     let count = export["nodes"].as_array().map_or(0, Vec::len);
     if let Some(into) = &args.paint {
-        let viewport = Viewport { width: args.width, height: None };
-        let alone = toy_browser::blitz::Composed { laid_out, mounted: Default::default() };
+        let viewport = Viewport {
+            width: args.width,
+            height: None,
+        };
+        let alone = toy_browser::blitz::Composed {
+            laid_out,
+            mounted: Default::default(),
+        };
         let svg = toy_browser::blitz::paint::svg(&alone, viewport);
         std::fs::write(into, &svg)?;
         let png = into.with_extension("png");
         std::fs::write(&png, toy_browser::rasterize(&svg)?)?;
-        println!("painted {} ({} bytes) and {}", into.display(), svg.len(), png.display());
+        println!(
+            "painted {} ({} bytes) and {}",
+            into.display(),
+            svg.len(),
+            png.display()
+        );
     }
     println!("laid out {count} elements into {}", args.out.display());
     Ok(())

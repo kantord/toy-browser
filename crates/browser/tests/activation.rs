@@ -55,7 +55,9 @@ fn clicking_a_link_follows_it() {
     click(&mut browser, &page, "#label");
 
     assert!(
-        browser.url(&page).is_some_and(|url| url.ends_with("hello.html")),
+        browser
+            .url(&page)
+            .is_some_and(|url| url.ends_with("hello.html")),
         "expected to be on hello.html, got {:?}",
         browser.url(&page)
     );
@@ -104,7 +106,10 @@ fn pressing_moves_focus_and_pressing_elsewhere_takes_it_away() {
 
     let field = centre(&mut browser, &page, "#field");
     browser.pointer_down(&page, field).unwrap();
-    assert_eq!(text_of(&mut browser, &page, "document.activeElement.id"), "field");
+    assert_eq!(
+        text_of(&mut browser, &page, "document.activeElement.id"),
+        "field"
+    );
 
     // Nothing about a plain div can hold focus, so pressing one gives it up —
     // which is what makes clicking the background dismiss a field.
@@ -149,7 +154,10 @@ fn a_page_can_move_focus_itself() {
     browser
         .evaluate(&page, "document.getElementById('field').focus();", true)
         .unwrap();
-    assert_eq!(text_of(&mut browser, &page, "document.activeElement.id"), "field");
+    assert_eq!(
+        text_of(&mut browser, &page, "document.activeElement.id"),
+        "field"
+    );
 
     browser
         .evaluate(&page, "document.getElementById('field').blur();", true)

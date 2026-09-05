@@ -54,8 +54,13 @@ fn painted(said: &Attributes) -> String {
     for (key, colour) in &ordered_strings(&said.background) {
         // A colour, not a payload: the value is going into a stylesheet, and
         // anything that is not a name or a hex triple has no business there.
-        if colour.chars().all(|at| at.is_ascii_alphanumeric() || at == '#') {
-            rules.push_str(&format!(".{KEY_CLASS_PREFIX}{key} {{ background: {colour} }}\n"));
+        if colour
+            .chars()
+            .all(|at| at.is_ascii_alphanumeric() || at == '#')
+        {
+            rules.push_str(&format!(
+                ".{KEY_CLASS_PREFIX}{key} {{ background: {colour} }}\n"
+            ));
         }
     }
 
@@ -69,7 +74,10 @@ fn sized(said: &Attributes) -> String {
     // layout with `width="85%"` on a table, and a browser that ignores it lays
     // the page out at whatever the content happened to need.
     for (key, width) in &ordered_strings(&said.width) {
-        if width.chars().all(|at| at.is_ascii_digit() || at == '%' || at == '.') {
+        if width
+            .chars()
+            .all(|at| at.is_ascii_digit() || at == '%' || at == '.')
+        {
             let css = match width.ends_with('%') {
                 true => width.clone(),
                 false => format!("{width}px"),

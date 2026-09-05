@@ -1,0 +1,22 @@
+# This browser, registered with wptrunner as a product it can drive.
+#
+# An installed package with an entry point rather than a file dropped into the
+# suite's own tree: `wptrunner.products` is the extension point upstream
+# documents for exactly this, so a fetched checkout stays untouched and can be
+# thrown away and fetched again.
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wptrunner-toy-browser"
+version = "0.1.0"
+description = "toy-browser as a product wptrunner can drive"
+requires-python = ">=3.9"
+
+[project.entry-points."wptrunner.products"]
+toy_browser = "wptrunner_toy_browser:product"
+
+[tool.setuptools]
+packages = ["wptrunner_toy_browser"]

@@ -69,11 +69,7 @@ impl Browser {
     /// is not a failure — it is a button that does nothing, which is what a
     /// browser's does at the start of its history.
     pub fn go_back(&mut self, page: &PageId) -> Result<bool, NavigationError> {
-        let Some(before) = self
-            .pages
-            .get_mut(page)
-            .and_then(|held| held.visited.pop())
-        else {
+        let Some(before) = self.pages.get_mut(page).and_then(|held| held.visited.pop()) else {
             return Ok(false);
         };
         // Not remembered: going back to where you were is not going somewhere

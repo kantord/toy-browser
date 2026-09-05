@@ -84,7 +84,11 @@ impl Files {
 
     /// Waits until nothing is still on its way, or until patience runs out.
     pub fn settle(&self) {
-        let mut held = self.outstanding.lock.lock().expect("nothing else holds this");
+        let mut held = self
+            .outstanding
+            .lock
+            .lock()
+            .expect("nothing else holds this");
         while self.outstanding.count.load(Ordering::SeqCst) > 0 {
             let (again, timed_out) = self
                 .outstanding
@@ -126,7 +130,10 @@ impl NetProvider<Resource> for Files {
 fn landing(arrived: Arc<Mutex<Vec<Resource>>>) -> SharedCallback<Resource> {
     Arc::new(move |_: usize, result: Result<Resource, Option<String>>| {
         if let Ok(resource) = result {
-            arrived.lock().expect("nothing else holds this").push(resource);
+            arrived
+                .lock()
+                .expect("nothing else holds this")
+                .push(resource);
         }
     })
 }
@@ -136,7 +143,10 @@ fn landing(arrived: Arc<Mutex<Vec<Resource>>>) -> SharedCallback<Resource> {
 /// Through the cache the rest of the browser reads with, so nothing is fetched
 /// that has already been fetched and every read shares the open connections.
 fn read(resources: &Resources, url: &Url) -> Option<Vec<u8>> {
-    resources.get(url).ok().map(|resource| resource.bytes.clone())
+    resources
+        .get(url)
+        .ok()
+        .map(|resource| resource.bytes.clone())
 }
 
 // A preload scan was tried here and taken out again. Reading the names out of

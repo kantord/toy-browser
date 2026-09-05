@@ -8,6 +8,7 @@
 //! threads, and only one piece of JavaScript runs at a time regardless.
 
 mod element;
+mod routes;
 mod script;
 mod session;
 

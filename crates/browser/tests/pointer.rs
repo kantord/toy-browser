@@ -159,7 +159,11 @@ fn nothing_is_built_for_an_event_nobody_is_waiting_for() {
     let tap = centre(&mut browser, &page, "#tap");
     browser.pointer_down(&page, tap).unwrap();
     browser.pointer_up(&page, tap).unwrap();
-    assert_eq!(made(&mut browser, &page), 3, "only the ones with a listener");
+    assert_eq!(
+        made(&mut browser, &page),
+        3,
+        "only the ones with a listener"
+    );
 }
 
 /// The gate has to close again. A page that added a listener and took it away

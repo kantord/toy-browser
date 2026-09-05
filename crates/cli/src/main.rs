@@ -8,8 +8,8 @@
 mod cdp;
 mod compare;
 mod produce;
-mod window;
 mod webdriver;
+mod window;
 
 use std::path::PathBuf;
 

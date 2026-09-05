@@ -216,7 +216,10 @@ mod tests {
         let url = written(&dir, "page.html", "steady");
         let first = resources.get(&url).unwrap();
         let again = resources.get(&url).unwrap();
-        assert!(Arc::ptr_eq(&first, &again), "re-read a file that had not moved");
+        assert!(
+            Arc::ptr_eq(&first, &again),
+            "re-read a file that had not moved"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }

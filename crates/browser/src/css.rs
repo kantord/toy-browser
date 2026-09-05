@@ -188,9 +188,9 @@ fn stylesheet_href(tag: &str) -> Option<&str> {
 /// The name must follow whitespace, so `href` does not match `data-href`.
 fn attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
     let needle = format!("{name}=");
-    let at = tag.match_indices(&needle).find(|(index, _)| {
-        *index > 0 && tag.as_bytes()[index - 1].is_ascii_whitespace()
-    })?;
+    let at = tag
+        .match_indices(&needle)
+        .find(|(index, _)| *index > 0 && tag.as_bytes()[index - 1].is_ascii_whitespace())?;
     let rest = &tag[at.0 + needle.len()..];
     let quote = rest.chars().next()?;
     if quote != '"' && quote != '\'' {
@@ -229,7 +229,10 @@ mod tests {
     /// The rule Hacker News relies on to make its story titles black.
     #[test]
     fn a_link_becomes_an_element_with_an_href() {
-        assert_eq!(unvisited("a:link { color: #000 }"), "a[href] { color: #000 }");
+        assert_eq!(
+            unvisited("a:link { color: #000 }"),
+            "a[href] { color: #000 }"
+        );
     }
 
     /// Both halves of a selector list are rewritten, and the `:visited` half is

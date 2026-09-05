@@ -91,9 +91,9 @@ fn sized_cell(cell: usize, at: usize, across: usize, columns: &[f32], pinned: &[
         .map(|column| columns[column])
         .sum();
     match width > 0.0 {
-        true => format!(
-            ".{KEY_CLASS_PREFIX}{cell} {{ width: {width:.0}px; flex-grow: {grow:.0} }}\n"
-        ),
+        true => {
+            format!(".{KEY_CLASS_PREFIX}{cell} {{ width: {width:.0}px; flex-grow: {grow:.0} }}\n")
+        }
         false => String::new(),
     }
 }
@@ -120,7 +120,9 @@ fn columns_of(table: &RenderNode, boxes: &Boxes, said: &Attributes) -> Vec<f32> 
         if widths.len() <= at {
             widths.resize(at + 1, 0.0);
         }
-        if across == 1 && let Some(area) = boxes.get(cell) {
+        if across == 1
+            && let Some(area) = boxes.get(cell)
+        {
             widths[at] = widths[at].max(area.width);
         }
     }
@@ -134,7 +136,9 @@ fn cells_of(table: &RenderNode, said: &Attributes) -> Vec<(usize, usize, usize)>
     for row in walk(table, true).filter(|node| tagged(node, "tr")) {
         let mut at = 0;
         for cell in walk(row, true).filter(|node| tagged(node, "td") || tagged(node, "th")) {
-            let Some(key) = key_of_node(cell) else { continue };
+            let Some(key) = key_of_node(cell) else {
+                continue;
+            };
             let across = said.spans.get(&key).copied().unwrap_or(1);
             found.push((key, at, across));
             at += across;

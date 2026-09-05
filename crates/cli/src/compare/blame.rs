@@ -96,8 +96,8 @@ pub fn blame(weights: &[f32], width: u32, ours: &Export, reference: &Export) -> 
                 .map(|node| node.path.clone())
                 .unwrap_or_default(),
             share: (sum / total.max(f64::MIN_POSITIVE)) as f32,
-            subtree: (subtrees.get(&owner).copied().unwrap_or(sum)
-                / total.max(f64::MIN_POSITIVE)) as f32,
+            subtree: (subtrees.get(&owner).copied().unwrap_or(sum) / total.max(f64::MIN_POSITIVE))
+                as f32,
             because: reason(owner, reference, &ours),
         })
         .collect()
@@ -108,7 +108,10 @@ pub fn blame(weights: &[f32], width: u32, ours: &Export, reference: &Export) -> 
 /// Every element's own charge is added to each of its ancestors, which are
 /// found by walking its path back a segment at a time — the tree is in the
 /// keys, so nothing has to be threaded through the export to rebuild it.
-fn subtrees(reference: &Export, charged: &HashMap<Option<usize>, f64>) -> HashMap<Option<usize>, f64> {
+fn subtrees(
+    reference: &Export,
+    charged: &HashMap<Option<usize>, f64>,
+) -> HashMap<Option<usize>, f64> {
     let by_path: HashMap<&str, usize> = reference
         .nodes
         .iter()

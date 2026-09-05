@@ -19,7 +19,10 @@ use crate::compare::{CLOSE_ENOUGH, OURS, Report, THEIRS, blame, ink, pixels, tex
 /// because a small score over a tiny region says nothing.
 pub(super) fn report_split(split: &text::Split, pixels: usize) {
     println!("  where it falls, by the reference's own text boxes:");
-    for (what, region) in [("over text", &split.over_text), ("elsewhere", &split.elsewhere)] {
+    for (what, region) in [
+        ("over text", &split.over_text),
+        ("elsewhere", &split.elsewhere),
+    ] {
         println!(
             "    {what:<10} {:>5.1}% of page, {:>5.1}% of it painted   {:>5.1}% of the difference   score {:.4}",
             region.share_of(pixels) * 100.0,
@@ -39,7 +42,10 @@ pub(super) fn report_restyled(restyled: &[tree::Restyled], top: usize) {
     }
     println!("{} styles computed differently", restyled.len());
     for one in restyled.iter().take(top) {
-        println!("  {:<22} {}: {}, theirs {}", one.what, one.property, one.ours, one.theirs);
+        println!(
+            "  {:<22} {}: {}, theirs {}",
+            one.what, one.property, one.ours, one.theirs
+        );
     }
 }
 
@@ -55,7 +61,12 @@ pub(super) fn report_painted(painted: &[ink::Painted], top: usize) {
         ink::total(painted),
     );
     for one in painted.iter().take(top) {
-        println!("  {:>5.0}%  {} ({} px)", one.apart * 100.0, one.describe(), one.pixels);
+        println!(
+            "  {:>5.0}%  {} ({} px)",
+            one.apart * 100.0,
+            one.describe(),
+            one.pixels
+        );
     }
 }
 
@@ -75,7 +86,10 @@ pub(super) fn report_render(renders: &pixels::Difference, heatmap: &Path, beside
         renders.badly_share() * 100.0,
     );
     println!("  heatmap: {}", heatmap.display());
-    println!("  side by side ({OURS} left, {THEIRS} right): {}", beside.display());
+    println!(
+        "  side by side ({OURS} left, {THEIRS} right): {}",
+        beside.display()
+    );
 }
 
 pub(super) fn report_document(documents: &tree::TreeDiff, top: usize) {
@@ -133,7 +147,10 @@ fn list(what: &str, differences: &[tree::Moved], top: usize) {
 pub(super) fn report_blame(blamed: &[blame::Blamed], top: usize) {
     println!("why the difference is there");
     for (kind, share, count) in by_cause(blamed) {
-        let elements = match count { 1 => "element", _ => "elements" };
+        let elements = match count {
+            1 => "element",
+            _ => "elements",
+        };
         println!("  {:>5.1}%  {kind}  ({count} {elements})", share * 100.0);
     }
 
@@ -156,7 +173,10 @@ pub(super) fn report_blame(blamed: &[blame::Blamed], top: usize) {
 pub(super) fn by_cause(blamed: &[blame::Blamed]) -> Vec<(&'static str, f32, usize)> {
     let mut causes: Vec<(&'static str, f32, usize)> = Vec::new();
     for one in blamed {
-        match causes.iter_mut().find(|(kind, _, _)| *kind == one.because.kind()) {
+        match causes
+            .iter_mut()
+            .find(|(kind, _, _)| *kind == one.because.kind())
+        {
             Some(cause) => {
                 cause.1 += one.share;
                 cause.2 += 1;

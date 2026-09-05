@@ -10,9 +10,8 @@ use anyhow::{Result, anyhow};
 use toy_browser_fetch::Resources;
 
 use crate::{
-    Activated, Argument, Budget, Environment, Evaluated, Handle, Keyed, LoadPage, LoadReport,
-    Mode, NodeId,
-    Mouse, Outcome, Point, SessionId, realm::Realm,
+    Activated, Argument, Budget, Environment, Evaluated, Handle, Keyed, LoadPage, LoadReport, Mode,
+    Mouse, NodeId, Outcome, Point, SessionId, realm::Realm,
 };
 
 /// A place a page can be loaded, and the unit of isolation between callers.
@@ -218,7 +217,12 @@ impl Engine {
     ///
     /// What a caller comparing a Hit test against the element it aimed at
     /// needs: a click landing on a child of that element still landed on it.
-    pub fn contains(&mut self, session: &SessionId, ancestor: NodeId, node: NodeId) -> Result<bool> {
+    pub fn contains(
+        &mut self,
+        session: &SessionId,
+        ancestor: NodeId,
+        node: NodeId,
+    ) -> Result<bool> {
         Ok(self.realm(session)?.contains(ancestor, node))
     }
 

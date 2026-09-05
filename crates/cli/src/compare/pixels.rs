@@ -143,8 +143,9 @@ fn beside(ours: &Pixmap, theirs: &Pixmap) -> Result<Vec<u8>> {
         *pixel = match from {
             Some((side, at)) => flattened(side, at, y),
             // The seam itself, in something no page is likely to paint.
-            None => tiny_skia::PremultipliedColorU8::from_rgba(255, 0, 128, 255)
-                .unwrap_or_else(black),
+            None => {
+                tiny_skia::PremultipliedColorU8::from_rgba(255, 0, 128, 255).unwrap_or_else(black)
+            }
         };
     }
     both.encode_png().context("encoding the side-by-side")
@@ -240,8 +241,7 @@ mod tests {
     #[test]
     fn different_sizes_are_refused_rather_than_guessed_at() {
         let mut tall = Pixmap::new(4, 8).unwrap();
-        tall.pixels_mut()[0] =
-            tiny_skia::PremultipliedColorU8::from_rgba(0, 0, 0, 255).unwrap();
+        tall.pixels_mut()[0] = tiny_skia::PremultipliedColorU8::from_rgba(0, 0, 0, 255).unwrap();
         let refused = compare(&solid([0, 0, 0]), &tall);
         let error = refused.err().expect("a refusal, not a guess").to_string();
         assert!(error.contains("different sizes"), "{error}");

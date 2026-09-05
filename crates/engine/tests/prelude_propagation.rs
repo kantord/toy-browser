@@ -148,5 +148,9 @@ fn capture_means_the_same_spelled_either_way() {
          document.getElementById('tap').dispatchEvent(new Event('click', { bubbles: true }));",
     );
 
-    holds(&mut engine, &session, "heard.join() === 'flag,option,bubble'");
+    holds(
+        &mut engine,
+        &session,
+        "heard.join() === 'flag,option,bubble'",
+    );
 }

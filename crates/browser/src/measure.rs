@@ -13,12 +13,12 @@ use std::rc::Rc;
 use anyhow::{Context as _, Result};
 use takumi_core::{
     Fonts,
-    style::{Color, ColorInput},
     context::RenderContext,
     geometry::NodeId,
     layout::tree::{LayoutResults, LayoutTree, RenderNode},
     scene::{NodePaint, PaintItemKind, StackingContextNode, build_stacking_contexts},
     style::{Affine, ComputedStyle, SizingContext, StyleSheet},
+    style::{Color, ColorInput},
     viewport::Viewport as TakumiViewport,
 };
 use takumi_html::{FromHtmlOptions, from_html};
@@ -69,7 +69,11 @@ pub fn boxes(
     let spanned = tables::spanned(&root, &boxes, said);
     if spanned.is_empty() {
         let styles = computed(&root);
-        return Ok(Measurement { boxes, styles, tables: worked_out });
+        return Ok(Measurement {
+            boxes,
+            styles,
+            tables: worked_out,
+        });
     }
     told.push(spanned.clone());
     let (root, boxes) = lay_out(keyed_html, &told, fonts, viewport, pictures)?;
@@ -224,7 +228,10 @@ fn collect_styles(node: &RenderNode, styles: &mut Styles) {
 /// element on every page.
 fn declarations(context: &RenderContext) -> Vec<(String, String)> {
     vec![
-        ("color".to_owned(), colour(&context.style.color, context.current_color)),
+        (
+            "color".to_owned(),
+            colour(&context.style.color, context.current_color),
+        ),
         ("font-size".to_owned(), css_px(context.sizing.font_size)),
     ]
 }
@@ -240,7 +247,10 @@ fn colour(input: &ColorInput, current: Color) -> String {
     };
     match alpha {
         255 => format!("rgb({red}, {green}, {blue})"),
-        _ => format!("rgba({red}, {green}, {blue}, {})", round(f32::from(alpha) / 255.0)),
+        _ => format!(
+            "rgba({red}, {green}, {blue}, {})",
+            round(f32::from(alpha) / 255.0)
+        ),
     }
 }
 

@@ -1,0 +1,35 @@
+# The web platform tests, and this browser, in one place.
+#
+# Not for isolation's sake. The suite serves itself over real hostnames —
+# `web-platform.test` and a few dozen relatives — so that a test about what one
+# origin may do to another is about something, and it will not start until they
+# resolve. On a machine that means editing `/etc/hosts` as root. In here it is
+# a file we own.
+#
+# It also pins what the rendering depends on. Which fonts are installed decides
+# every line height on every page, so a suite run on one machine and a suite run
+# on another are only comparable if they agree about that. Here they do.
+
+FROM docker.io/library/rust:1-trixie
+
+# The suite's own requirements include the accessibility ones, which build
+# pycairo and PyGObject from source, which need headers. Nothing here uses
+# them; they are installed so that installing them succeeds.
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        python3 python3-venv python3-pip python3-dev \
+        git ca-certificates pkg-config \
+        libcairo2-dev libgirepository1.0-dev cmake \
+        fonts-liberation fontconfig \
+    && rm -rf /var/lib/apt/lists/*
+
+# Where the suite is fetched to, kept out of the image so it can be a cached
+# volume rather than a layer: it is 135MB and it changes on its own schedule.
+ENV WPT=/wpt
+WORKDIR /repo
+
+# The suite refuses to start unless its hostnames resolve. Written at run time
+# rather than baked in, because `/etc/hosts` is remade for every container.
+COPY entrypoint.sh /usr/local/bin/wpt-run
+RUN chmod +x /usr/local/bin/wpt-run
+
+ENTRYPOINT ["/usr/local/bin/wpt-run"]

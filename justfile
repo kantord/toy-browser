@@ -93,34 +93,26 @@ runs:
 
 # --- the web platform tests ---
 
-# Fetch the suite and register this browser with its runner. Pinned, sparse and
-# gitignored: it is upstream's, not ours to carry.
-wpt-setup:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cd {{ justfile_directory() }}/tests/wpt
-    if [ ! -d checkout ]; then
-        git clone --filter=blob:none --no-checkout --depth 1 \
-            https://github.com/web-platform-tests/wpt.git checkout
-        cd checkout
-        git sparse-checkout init --cone
-        git sparse-checkout set tools resources docs css
-        git checkout
-        cd ..
-    fi
-    cp toy_browser.py checkout/tools/wptrunner/wptrunner/browsers/toy_browser.py
-    echo "wptrunner also needs host aliases, once, as root:"
-    echo "    cd tests/wpt/checkout && ./wpt make-hosts-file | sudo tee -a /etc/hosts"
+# Build the image the suite runs in. Once, and again when the Containerfile
+# changes.
+wpt-image:
+    podman build -t toy-browser-wpt {{ justfile_directory() }}/tests/wpt
 
-# Run part of the suite against this browser. `just wpt css/CSS2/normal-flow`
+# Run part of the suite against this browser. `just wpt css/css-flexbox`
+#
+# In a container, because the suite serves itself over real hostnames and will
+# not start until they resolve — which on a machine means editing `/etc/hosts`
+# as root, and in here means writing a file we own. It also pins the fonts,
+# which decide every line height on every page.
+#
+# The suite and the build cache live in named volumes, so a second run does not
+# fetch 135MB or compile from scratch again.
 wpt tests="css/CSS2/normal-flow":
-    cargo build --release
-    cd {{ justfile_directory() }}/tests/wpt/checkout && ./wpt run \
-        --webdriver-binary={{ justfile_directory() }}/target/release/toy-browser \
-        --binary={{ justfile_directory() }}/target/release/toy-browser \
-        --no-pause-after-test \
-        --log-wptreport={{ justfile_directory() }}/out/wptreport.json \
-        toy_browser {{ tests }}
+    podman run --rm -it \
+        -v {{ justfile_directory() }}:/repo:Z \
+        -v toy-browser-wpt-suite:/wpt \
+        -v toy-browser-wpt-target:/repo/target \
+        toy-browser-wpt {{ tests }}
 
 # --- measuring against a real browser ---
 

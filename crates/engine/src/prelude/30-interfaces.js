@@ -36,6 +36,15 @@
   defineInterface("DocumentFragment");
   defineInterface("ShadowRoot");
 
+  // The document's own interface, so that a feature can be tested for the way
+  // one is: `Document.prototype.hasOwnProperty("fonts")` rather than by asking
+  // an instance. Test runners open with exactly that, and a missing name is a
+  // thrown reference rather than a false answer.
+  class Document {}
+  Document.prototype.fonts = { ready: Promise.resolve(), status: "loaded" };
+  globalThis.Document = Document;
+  globalThis.HTMLDocument = Document;
+
   // Nothing observes anything here: the DOM only changes while script is
   // running, and no client is watching when it does. These exist because
   // tooling constructs them on load and fails outright if the name is missing.

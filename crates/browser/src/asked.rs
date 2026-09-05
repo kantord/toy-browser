@@ -37,7 +37,10 @@ impl Browser {
         session: &toy_browser_engine::SessionId,
         said: &mut tables::Attributes,
     ) -> Result<()> {
-        for element in self.engine.query(session, "table[width], td[width], th[width]")? {
+        for element in self
+            .engine
+            .query(session, "table[width], td[width], th[width]")?
+        {
             if let Some(width) = self.engine.attribute(session, element, "width")? {
                 said.width.insert(element, width);
             }

@@ -13,8 +13,8 @@ use toy_browser::{Browser, Point, Remote, Viewport};
 
 use super::Outcome;
 use super::dispatch::Session;
-use super::page::Page;
 use super::events::{context_events, frame_of, navigation_events, remote_object, unhandled};
+use super::page::Page;
 use super::page::error_text;
 
 impl Session<'_> {

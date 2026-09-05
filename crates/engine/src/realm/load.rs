@@ -93,8 +93,14 @@ pub(super) fn drain_tasks(ctx: &Ctx<'_>, report: &Rc<RefCell<Diagnostics>>, roun
                 return;
             }
         };
-        drain_microtasks(ctx);
-        if !more {
+        // Whether to go round again is decided after the microtasks, not
+        // before: a promise continuation is free to schedule a timer or a
+        // frame, and asking first meant that work was queued and then thrown
+        // away. A page waiting on `document.fonts.ready` before asking for an
+        // animation frame — which is what a test runner does — never got the
+        // frame.
+        let woke = drain_microtasks(ctx);
+        if !more && !woke {
             return;
         }
     }
@@ -105,9 +111,14 @@ pub(super) fn drain_tasks(ctx: &Ctx<'_>, report: &Rc<RefCell<Diagnostics>>, roun
         .push(format!("tasks still pending after {rounds} rounds"));
 }
 
-/// Promise continuations and anything else queued as a microtask.
-fn drain_microtasks(ctx: &Ctx<'_>) {
-    while ctx.execute_pending_job() {}
+/// Promise continuations and anything else queued as a microtask. Answers
+/// whether any ran, because what they queue is work too.
+fn drain_microtasks(ctx: &Ctx<'_>) -> bool {
+    let mut any = false;
+    while ctx.execute_pending_job() {
+        any = true;
+    }
+    any
 }
 
 pub(super) fn evaluate(ctx: &Ctx<'_>, report: &Rc<RefCell<Diagnostics>>, name: &str, source: &str) {

@@ -32,7 +32,8 @@ pub(crate) fn get(url: &Url) -> Result<Fetched, FetchError> {
         .call()
         .map_err(|error| transport_error(url, &error))?;
 
-    let landed = Url::parse(response.get_uri().to_string().as_str()).unwrap_or_else(|_| url.clone());
+    let landed =
+        Url::parse(response.get_uri().to_string().as_str()).unwrap_or_else(|_| url.clone());
     let bytes = response
         .body_mut()
         .with_config()

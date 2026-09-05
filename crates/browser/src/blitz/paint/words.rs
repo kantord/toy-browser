@@ -17,7 +17,10 @@ use crate::blitz::paint::escaped;
 
 /// Every run of text an element lays out, positioned glyph by glyph.
 pub(super) fn text(page: &LaidOut, node: &Node, x: f32, y: f32, into: &mut String) {
-    let Some(inline) = node.element_data().and_then(|it| it.inline_layout_data.as_ref()) else {
+    let Some(inline) = node
+        .element_data()
+        .and_then(|it| it.inline_layout_data.as_ref())
+    else {
         return;
     };
     for line in inline.layout.lines() {
@@ -35,7 +38,17 @@ pub(super) fn text(page: &LaidOut, node: &Node, x: f32, y: f32, into: &mut Strin
             let from = consumed.get(&key).copied().unwrap_or(0);
             let count = run.glyphs().count();
             consumed.insert(key, from + count);
-            emit_run(page, &Placed { run, from, count, origin: (x, y) }, &inline.text, into);
+            emit_run(
+                page,
+                &Placed {
+                    run,
+                    from,
+                    count,
+                    origin: (x, y),
+                },
+                &inline.text,
+                into,
+            );
         }
     }
 }
@@ -114,7 +127,12 @@ fn colour(page: &LaidOut, owner: usize) -> String {
     };
     let [red, green, blue, _] = *style.clone_color().raw_components();
     let channel = |part: f32| (part * 255.0).round() as u8;
-    format!("rgb({}, {}, {})", channel(red), channel(green), channel(blue))
+    format!(
+        "rgb({}, {}, {})",
+        channel(red),
+        channel(green),
+        channel(blue)
+    )
 }
 
 fn family(page: &LaidOut, owner: usize) -> String {
@@ -132,8 +150,8 @@ fn family(page: &LaidOut, owner: usize) -> String {
                 .join(", ")
         })
         .filter(|named| !named.is_empty())
-        .map(|named| format!("{named}, {}", crate::blitz::fallback()))
-        .unwrap_or_else(crate::blitz::fallback)
+        .map(|named| format!("{named}, {}", crate::blitz::fonts::fallback()))
+        .unwrap_or_else(crate::blitz::fonts::fallback)
 }
 
 /// A family the page named. Generics are dropped: what one resolves to is
@@ -141,9 +159,7 @@ fn family(page: &LaidOut, owner: usize) -> String {
 /// rather than left to reach its own.
 fn named(family: &SingleFontFamily) -> Option<String> {
     match family {
-        SingleFontFamily::FamilyName(name) => {
-            Some(escaped(name.name.as_ref()))
-        }
+        SingleFontFamily::FamilyName(name) => Some(escaped(name.name.as_ref())),
         SingleFontFamily::Generic(_) => None,
     }
 }

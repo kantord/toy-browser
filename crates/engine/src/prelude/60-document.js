@@ -9,8 +9,9 @@
   const globals = globalThis;
   const document = globals.document;
 
-  // Fonts are registered before a page loads, so they are never pending.
-  document.fonts = { ready: Promise.resolve(), status: "loaded" };
+  // Fonts are registered before a page loads, so they are never pending. The
+  // interface carries it too, because that is where a feature test looks.
+  document.fonts = Document.prototype.fonts;
 
   // The pre-constructor way of making an event. Still reached for by code that
   // supports old engines.

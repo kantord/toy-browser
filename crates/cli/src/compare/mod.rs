@@ -18,8 +18,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use tiny_skia::Pixmap;
 use serde_json::json;
+use tiny_skia::Pixmap;
 
 /// What each side is called on disk, and in the report.
 const OURS: &str = "toy";
@@ -95,7 +95,10 @@ pub fn run(dir: &Path, top: usize, audience: Audience, max_score: Option<f32>) -
     if let Some(limit) = max_score
         && page.renders.score > limit
     {
-        anyhow::bail!("score {:.4} is over the {limit:.4} allowed", page.renders.score);
+        anyhow::bail!(
+            "score {:.4} is over the {limit:.4} allowed",
+            page.renders.score
+        );
     }
     Ok(())
 }
@@ -149,7 +152,8 @@ fn subtrees(page: &Report, ours: &tree::Export, theirs: &tree::Export) -> Vec<sc
     let mut seen: HashMap<String, usize> = HashMap::new();
     let mut chosen = Vec::new();
     for one in &page.blamed {
-        let (Some(theirs), Some(ours)) = (by_path.get(one.path.as_str()), mine.get(one.path.as_str()))
+        let (Some(theirs), Some(ours)) =
+            (by_path.get(one.path.as_str()), mine.get(one.path.as_str()))
         else {
             continue;
         };
@@ -177,7 +181,12 @@ fn subtrees(page: &Report, ours: &tree::Export, theirs: &tree::Export) -> Vec<sc
 /// story cell and the masthead do not.
 fn kind_of(node: &tree::Node) -> String {
     let coarse = |value: f64| (value / 10.0).round() as i64;
-    format!("{} {}x{}", node.tag, coarse(node.rect[2]), coarse(node.rect[3]))
+    format!(
+        "{} {}x{}",
+        node.tag,
+        coarse(node.rect[2]),
+        coarse(node.rect[3])
+    )
 }
 
 /// One report's page and the two pictures it shows.

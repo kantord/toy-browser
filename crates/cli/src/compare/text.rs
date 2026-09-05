@@ -161,7 +161,12 @@ mod tests {
     /// score on one of them cannot come from pixels quietly going missing.
     #[test]
     fn the_two_sides_add_up_to_the_whole() {
-        let split = split(&[0.5, 0.25, 0.125, 0.0625], &[true; 4], 2, &reference("words"));
+        let split = split(
+            &[0.5, 0.25, 0.125, 0.0625],
+            &[true; 4],
+            2,
+            &reference("words"),
+        );
         let blame = split.over_text.blame + split.elsewhere.blame;
         assert!((blame - 1.0).abs() < 1e-6, "got {blame}");
         assert_eq!(split.over_text.pixels + split.elsewhere.pixels, 4);
@@ -182,7 +187,12 @@ mod tests {
     /// anyone repeating.
     #[test]
     fn a_region_says_how_much_of_it_the_reference_painted() {
-        let blank = split(&[0.0; 4], &[true, true, false, false], 2, &reference("words"));
+        let blank = split(
+            &[0.0; 4],
+            &[true, true, false, false],
+            2,
+            &reference("words"),
+        );
         assert_eq!(blank.over_text.painted, 2);
         assert_eq!(blank.elsewhere.painted, 0);
         assert_eq!(blank.elsewhere.score, 0.0);

@@ -19,7 +19,6 @@ use crate::blitz::geometry::{Around, placed};
 /// element per line, named by where it sits, with the box layout gave it and
 /// the style the cascade computed.
 impl LaidOut {
-
     pub fn export(&self, url: &str) -> serde_json::Value {
         let mut nodes = Vec::new();
         let root = self.document.root_element().id;
@@ -74,7 +73,12 @@ fn own_text(page: &LaidOut, node: &Node) -> String {
             text.push_str(&data.content);
         }
     }
-    text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(60).collect()
+    text.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(60)
+        .collect()
 }
 
 /// The computed `color`, spelled the way a browser reports one.
@@ -91,7 +95,12 @@ pub(super) fn colour(node: &Node) -> String {
     let [red, green, blue, alpha] = *value.raw_components();
     let channel = |part: f32| (part * 255.0).round() as u8;
     match alpha >= 1.0 {
-        true => format!("rgb({}, {}, {})", channel(red), channel(green), channel(blue)),
+        true => format!(
+            "rgb({}, {}, {})",
+            channel(red),
+            channel(green),
+            channel(blue)
+        ),
         false => format!(
             "rgba({}, {}, {}, {})",
             channel(red),

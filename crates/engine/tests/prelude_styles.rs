@@ -50,7 +50,10 @@ fn a_computed_style_reads_back_what_was_published() {
     engine
         .set_environment(
             &session,
-            &toy_browser_engine::Environment { styles, ..Default::default() },
+            &toy_browser_engine::Environment {
+                styles,
+                ..Default::default()
+            },
         )
         .expect("publishing an environment");
 

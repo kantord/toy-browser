@@ -203,7 +203,10 @@ async fn a_window_can_be_sized_and_asked_how_big_it_is(#[future] session: Sessio
     // No furniture around the page, so nothing is taken off.
     assert_eq!(offsets.json(), &serde_json::json!([0, 0]));
 
-    driver.set_window_rect(0, 0, 800, 600).await.expect("sizing");
+    driver
+        .set_window_rect(0, 0, 800, 600)
+        .await
+        .expect("sizing");
     let rect = driver.get_window_rect().await.expect("the rect");
     assert_eq!((rect.width, rect.height), (800, 600));
 

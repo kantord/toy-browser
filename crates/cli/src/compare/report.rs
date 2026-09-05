@@ -129,9 +129,7 @@ fn why(blamed: &[Blamed], top: usize) -> String {
 /// every pixel below it.
 fn what_was_told(restyled: &[Restyled], top: usize) -> String {
     if restyled.is_empty() {
-        return String::from(
-            "<h2>What it was told</h2>\n<p class=key>computed styles agree</p>\n",
-        );
+        return String::from("<h2>What it was told</h2>\n<p class=key>computed styles agree</p>\n");
     }
     let mut out = format!(
         "<h2>What it was told</h2>\n<p class=key>{} properties computed differently &mdash; \
@@ -196,7 +194,10 @@ fn where_it_falls(split: &Split, pixels: usize) -> String {
     let mut out = String::from(
         "<h2>Where it falls</h2>\n<p class=key>by the reference&rsquo;s own text boxes          &mdash; both renders exactly as each browser drew them</p>\n         <table><tr><th>region<th>of the page<th>of it painted<th>of the difference<th>score\n",
     );
-    for (what, region) in [("over text", &split.over_text), ("elsewhere", &split.elsewhere)] {
+    for (what, region) in [
+        ("over text", &split.over_text),
+        ("elsewhere", &split.elsewhere),
+    ] {
         let _ = writeln!(
             out,
             "<tr><td>{what}<td class=n>{:.1}%<td class=n>{:.1}%<td class=n>{:.1}%<td class=n>{:.4}",
@@ -222,7 +223,10 @@ fn percent(part: usize, whole: usize) -> f32 {
 fn causes(blamed: &[Blamed]) -> Vec<(&'static str, f32, usize)> {
     let mut causes: Vec<(&'static str, f32, usize)> = Vec::new();
     for one in blamed {
-        match causes.iter_mut().find(|(kind, ..)| *kind == one.because.kind()) {
+        match causes
+            .iter_mut()
+            .find(|(kind, ..)| *kind == one.because.kind())
+        {
             Some(cause) => {
                 cause.1 += one.share;
                 cause.2 += 1;
@@ -235,7 +239,9 @@ fn causes(blamed: &[Blamed]) -> Vec<(&'static str, f32, usize)> {
 }
 
 fn escaped(text: &str) -> String {
-    text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 const HEAD: &str = r#"<!DOCTYPE html><html><head><meta charset="utf-8">
