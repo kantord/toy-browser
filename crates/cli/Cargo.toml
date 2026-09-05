@@ -3,6 +3,7 @@ name = "toy-browser-cli"
 description = "The command line, and the Chrome DevTools Protocol front end."
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [[bin]]
 name = "toy-browser"

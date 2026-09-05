@@ -162,8 +162,10 @@ impl ApplicationHandler for Open {
                 );
                 // Nothing redraws on its own while the loop is waiting, so the
                 // first frame has to be asked for.
-                window.request_redraw();
                 self.shown = Some(Shown { window, surface });
+                // Says where it is before it is first drawn, so the address is
+                // right in the first frame rather than after the first click.
+                self.settled();
             }
             Err(error) => eprintln!("could not draw into the window: {error}"),
         }
@@ -224,14 +226,75 @@ impl Open {
     /// drive — so a link followed here is followed the way a script would.
     fn clicked(&mut self, state: ElementState) {
         let at = self.at();
-        let was = self.browser.url(&self.page).map(ToOwned::to_owned);
+        let showing = self.showing();
+        if state == ElementState::Released && self.pressed_back(at) {
+            self.went(|browser, page| {
+                browser.go_back(page).map(|_| ()).map_err(|error| anyhow::anyhow!("{error}"))
+            });
+            return;
+        }
         let _ = match state {
             ElementState::Pressed => self.browser.pointer_down(&self.page, at),
             ElementState::Released => self.browser.pointer_up(&self.page, at),
         };
-        // A click that followed a link starts the new page at the top.
-        if self.browser.url(&self.page).map(ToOwned::to_owned) != was {
+        // A click that went somewhere starts the new page at the top.
+        if self.showing() != showing {
             self.scrolled = 0.0;
+        }
+        self.settled();
+    }
+
+    /// Whether a Point is the chrome's Back button rather than anything in the
+    /// page being shown.
+    ///
+    /// Asked of the chrome, not of the page: a click inside a `<webview>`
+    /// belongs to the page mounted there, and this is only about what is
+    /// around it.
+    fn pressed_back(&mut self, at: Point) -> bool {
+        if self.browser.routed(&self.page, at).is_some() {
+            return false;
+        }
+        let Ok(Some(node)) = self.browser.hit_test(&self.page, at) else {
+            return false;
+        };
+        let element = toy_browser::Remote::Element(node);
+        matches!(
+            self.browser.attribute(&self.page, &element, "id"),
+            Ok(Some(id)) if id == "back"
+        )
+    }
+
+    /// Does something to whichever page the chrome is about, and settles up
+    /// afterwards.
+    fn went(&mut self, act: impl FnOnce(&mut Browser, &PageId) -> anyhow::Result<()>) {
+        let about = self.browser.frame(&self.page).unwrap_or_else(|| self.page.clone());
+        if let Err(error) = act(&mut self.browser, &about) {
+            eprintln!("could not go there: {error:#}");
+        }
+        self.scrolled = 0.0;
+        self.settled();
+    }
+
+    /// What the window is showing: the page in the frame if there is one, and
+    /// the page itself otherwise.
+    fn showing(&self) -> Option<String> {
+        let about = self.browser.frame(&self.page).unwrap_or_else(|| self.page.clone());
+        self.browser.url(&about).map(ToOwned::to_owned)
+    }
+
+    /// Tells the chrome where it is, then redraws.
+    ///
+    /// The address is written into the chrome's own document rather than drawn
+    /// over it, because the chrome is a page like any other and this is how a
+    /// page is changed.
+    fn settled(&mut self) {
+        if let Some(showing) = self.showing() {
+            let code = format!(
+                "const field = document.getElementById('url'); \
+                 if (field) field.textContent = {};",
+                serde_json::to_string(&showing).unwrap_or_else(|_| "''".to_owned()),
+            );
+            let _ = self.browser.evaluate(&self.page, &code, true);
         }
         self.changed();
     }

@@ -3,6 +3,7 @@ name = "toy-browser"
 description = "Pages, elements, measuring and rendering, built on the engine."
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
 anyhow.workspace = true

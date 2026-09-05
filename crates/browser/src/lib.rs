@@ -76,6 +76,8 @@ struct Page {
     /// Where the mouse is and whether it is pressed. A setting of the Page, so
     /// it outlives each event the way a real pointer does.
     pointer: Pointer,
+    /// The pages behind this one, oldest first. What Back walks.
+    visited: Vec<String>,
     /// The page behind each `<webview>` in this one, by the element holding it.
     ///
     /// A whole page, not a frame: its own session, its own DOM, its own realm.
@@ -173,6 +175,7 @@ impl Browser {
                 run_scripts: true,
                 measured: None,
                 pointer: Pointer::default(),
+                visited: Vec::new(),
                 mounted: HashMap::new(),
             },
         );

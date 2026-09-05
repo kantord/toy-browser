@@ -5,6 +5,7 @@ resolver = "3"
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
 
 # `cognitive_complexity` is a nursery lint, so nothing turns it on by default.
 # Asking for it here rather than in the hook means a plain `cargo clippy` sees

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>toy-browser</title>
+    <style>
+      html, body { margin: 0; padding: 0; background: #dcdcdc;
+                   font-family: system-ui, sans-serif; font-size: 13px }
+      #bar { padding: 6px 8px; background: #dcdcdc; border-bottom: 1px solid #aaa }
+      #back { display: inline-block; width: 26px; height: 22px; line-height: 22px;
+              text-align: center; background: #f4f4f4; border: 1px solid #aaa;
+              border-radius: 4px; color: #222; text-decoration: none }
+      #url { display: inline-block; width: 84%; height: 20px; line-height: 20px;
+             padding: 0 8px; margin-left: 6px; background: #fff;
+             border: 1px solid #aaa; border-radius: 4px; color: #333;
+             overflow: hidden }
+      webview { width: 100% }
+    </style>
+  </head>
+  <body>
+    <div id="bar"><a id="back" href="#back">&#8592;</a><span id="url">&#8230;</span></div>
+    <webview id="content" src="https://news.ycombinator.com/"></webview>
+  </body>
+</html>

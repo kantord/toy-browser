@@ -51,6 +51,11 @@ open url:
 browse url="https://news.ycombinator.com/":
     cargo run --release -- browse {{ url }}
 
+# The browser with a browser's chrome: a Back button and an address, over a
+# webview holding the page. The chrome is a page of ours too.
+ui url="https://news.ycombinator.com/":
+    cargo run --release -- browse "file://{{ justfile_directory() }}/tests/fixtures/chrome.html"
+
 # Two Hacker News in one window, one above the other, each a separate browser.
 # A click in either follows that one's link and leaves the other alone.
 split:

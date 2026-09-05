@@ -24,6 +24,19 @@ use toy_browser_engine::Keyed;
 use crate::{Browser, PageId, Viewport};
 
 impl Browser {
+    /// The page inside the first `<webview>` this one holds, if it holds one.
+    ///
+    /// What a browser's chrome is for: the toolbar is a page, and the thing the
+    /// toolbar is about is the page mounted in it.
+    pub fn frame(&self, page: &PageId) -> Option<PageId> {
+        let held = self.pages.get(page)?;
+        let mut frames: Vec<_> = held.mounted.iter().collect();
+        // By the element holding it, so a page with two frames answers with the
+        // same one every time.
+        frames.sort_by_key(|(node, _)| **node);
+        frames.first().map(|(_, mounted)| mounted.page.clone())
+    }
+
     /// Everything one picture has to hold: this page laid out, and every page
     /// mounted in it laid out too.
     ///

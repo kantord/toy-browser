@@ -47,12 +47,48 @@ pub struct Loaded {
     pub skipped: usize,
 }
 
+/// Whether a load is somewhere new, or somewhere already been.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Remembering {
+    Yes,
+    No,
+}
+
 impl Browser {
     /// Loads `url`, replacing the page's document.
     ///
     /// The previous document stays in place if the load fails, as a browser
     /// leaves you on the page you were already looking at.
     pub fn navigate(&mut self, page: &PageId, url: &str) -> Result<Loaded, NavigationError> {
+        self.travel(page, url, Remembering::Yes)
+    }
+
+    /// Goes back to the page before this one, if there is one.
+    ///
+    /// Answers whether it went anywhere, because a Back with nothing behind it
+    /// is not a failure — it is a button that does nothing, which is what a
+    /// browser's does at the start of its history.
+    pub fn go_back(&mut self, page: &PageId) -> Result<bool, NavigationError> {
+        let Some(before) = self
+            .pages
+            .get_mut(page)
+            .and_then(|held| held.visited.pop())
+        else {
+            return Ok(false);
+        };
+        // Not remembered: going back to where you were is not going somewhere
+        // new, and remembering it would make Back walk between two pages
+        // forever.
+        self.travel(page, &before, Remembering::No)?;
+        Ok(true)
+    }
+
+    fn travel(
+        &mut self,
+        page: &PageId,
+        url: &str,
+        remembering: Remembering,
+    ) -> Result<Loaded, NavigationError> {
         let session = self
             .session(page)
             .map_err(|error| NavigationError::Failed(error.to_string()))?;
@@ -74,6 +110,9 @@ impl Browser {
             .map_err(|error| NavigationError::Failed(error.to_string()))?;
 
         if let Some(page) = self.pages.get_mut(page) {
+            if remembering == Remembering::Yes && !page.url.is_empty() {
+                page.visited.push(std::mem::take(&mut page.url));
+            }
             page.url = url.to_owned();
             // The old document's geometry describes nothing now.
             page.measured = None;

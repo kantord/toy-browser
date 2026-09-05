@@ -3,6 +3,7 @@ name = "toy-browser-engine"
 description = "The smallest set of operations a browser automation API can be built on."
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
