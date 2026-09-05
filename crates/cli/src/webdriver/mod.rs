@@ -11,6 +11,7 @@ mod element;
 mod routes;
 mod script;
 mod session;
+mod window;
 
 use anyhow::{Context, Result};
 use serde_json::{Value, json};

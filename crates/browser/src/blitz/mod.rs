@@ -13,8 +13,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use blitz_dom::{DocumentConfig, Node};
-use blitz_html::HtmlDocument;
+use blitz_dom::{BaseDocument, DocumentConfig, Node};
 use blitz_traits::shell::{ColorScheme, Viewport as BlitzViewport};
 
 use std::collections::HashMap;
@@ -47,7 +46,7 @@ pub fn chosen() -> bool {
 
 /// A document, laid out.
 pub struct LaidOut {
-    pub document: HtmlDocument,
+    pub document: BaseDocument,
     /// What the page's own references resolve against, kept so the painter can
     /// write out somewhere a rasterizer can find rather than somewhere only
     /// this document could.
@@ -69,7 +68,7 @@ pub fn lay_out(
 ) -> Result<LaidOut> {
     let height = viewport.height.unwrap_or(DEFAULT_HEIGHT);
     let files = Arc::new(net::Files::new(resources.clone()));
-    let mut document = HtmlDocument::from_html(
+    let mut document = toy_browser_engine::parse_document(
         html,
         DocumentConfig {
             viewport: Some(BlitzViewport::new(

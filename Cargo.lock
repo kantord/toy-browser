@@ -4688,9 +4688,11 @@ dependencies = [
  "anyhow",
  "blitz-dom",
  "blitz-html",
+ "html5ever 0.35.0",
  "rquickjs",
  "serde_json",
  "toy-browser-fetch",
+ "xml5ever 0.35.0",
 ]
 
 [[package]]

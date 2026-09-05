@@ -39,9 +39,20 @@ pub fn svg(unit: &Composed, viewport: Viewport) -> String {
         .height
         .map_or(height.ceil() as u32, |given| given)
         .max(1);
+    // Painted here rather than inside `compose`, because the paper is the size
+    // of the picture and that is not known until the marks have been placed.
+    let mut paper = String::new();
+    paint_paper(
+        &unit.laid_out,
+        0.0,
+        0.0,
+        wide as f32,
+        tall as f32,
+        &mut paper,
+    );
     format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{wide}\" height=\"{tall}\" \
-         viewBox=\"0 0 {wide} {tall}\">\n{marks}</svg>\n",
+         viewBox=\"0 0 {wide} {tall}\">\n{paper}{marks}</svg>\n",
     )
 }
 
@@ -82,18 +93,18 @@ fn opacity(alpha: f32) -> String {
 
 /// The paper a page is on, painted before anything on it.
 ///
-/// As wide and as tall as the page itself, which for the page in a `<webview>`
-/// is the frame — so nothing behind it shows through where it happens to paint
-/// nothing.
-fn canvas(unit: &Composed, across: f32, down: f32, into: &mut String) {
-    let [red, green, blue, alpha] = unit.laid_out.canvas();
-    let root = unit.laid_out.root();
+/// It fills everything the page is drawn into — the whole picture for the page
+/// at the top, the frame for a page in a `<webview>` — and not the root box.
+/// The root element's background propagates to the canvas, and the canvas is
+/// the surface, so a short page is still white all the way down. Painting only
+/// as far as the content reaches makes two documents that draw the same marks
+/// differ below the shorter one, which is what a reftest reads as a failure.
+fn paint_paper(page: &LaidOut, across: f32, down: f32, wide: f32, tall: f32, into: &mut String) {
+    let [red, green, blue, alpha] = page.canvas();
     let _ = writeln!(
         into,
-        "<rect x=\"{across:.2}\" y=\"{down:.2}\" width=\"{:.2}\" height=\"{:.2}\" \
+        "<rect x=\"{across:.2}\" y=\"{down:.2}\" width=\"{wide:.2}\" height=\"{tall:.2}\" \
          fill=\"rgb({}, {}, {})\"{}/>",
-        root.0,
-        root.1,
         red.round() as u8,
         green.round() as u8,
         blue.round() as u8,
@@ -109,7 +120,6 @@ fn canvas(unit: &Composed, across: f32, down: f32, into: &mut String) {
 /// in the same coordinates, so paint order is one order and a Point means one
 /// thing.
 fn compose(unit: &Composed, across: f32, down: f32, into: &mut String, height: &mut f32) {
-    canvas(unit, across, down, into);
     unit.laid_out.walk(&mut |node, x, y| {
         let (x, y) = (x + across, y + down);
         *height = height.max(y + node.final_layout.size.height);
@@ -135,6 +145,8 @@ fn compose(unit: &Composed, across: f32, down: f32, into: &mut String, height: &
         // the frame allows. What it holds must not make the document taller —
         // the frame already counted, as a box in the page around it.
         let mut clipped = 0.0;
+        let (at_x, at_y) = (area.x + across, area.y + down);
+        paint_paper(&child.laid_out, at_x, at_y, area.width, area.height, into);
         compose(child, across + area.x, down + area.y, into, &mut clipped);
         into.push_str("</g>\n");
     }

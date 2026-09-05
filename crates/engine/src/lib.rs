@@ -22,6 +22,7 @@ use std::collections::HashMap;
 
 use toy_browser_fetch::Url;
 
+pub use dom::parse_document;
 pub use engine::Engine;
 pub use realm::{Argument, Evaluated, Handle};
 pub use scripts::{EntryKind, EntryPoint, Fetch, Payload, ScriptSurvey, Timing};

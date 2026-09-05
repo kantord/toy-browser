@@ -21,11 +21,23 @@ const DEFAULT_VIEWPORT: Viewport = Viewport {
     height: Some(720),
 };
 
-/// One WebDriver session: a page, and the element references handed out for it.
+/// One WebDriver session: the windows it has open, which one it is looking at,
+/// and the element references handed out for it.
+///
+/// More than one window because a test runner opens a fresh one per test and
+/// closes it after — so "the session's page" is whichever window is current,
+/// not the one it started with.
 pub(super) struct Session {
-    page: PageId,
+    pub(super) windows: Vec<Window>,
+    pub(super) current: usize,
     pub(super) elements: HashMap<String, Remote>,
     next_element: u32,
+}
+
+/// One window: what a client calls it, and the page behind it.
+pub(super) struct Window {
+    pub(super) handle: String,
+    pub(super) page: PageId,
 }
 
 impl Session {
@@ -63,7 +75,11 @@ impl Sessions {
         self.open.insert(
             id.clone(),
             Session {
-                page,
+                windows: vec![Window {
+                    handle: format!("window-{id}"),
+                    page,
+                }],
+                current: 0,
                 elements: HashMap::new(),
                 next_element: 0,
             },
@@ -82,7 +98,9 @@ impl Sessions {
 
     pub(super) fn delete_session(&mut self, id: &str) -> Answer {
         if let Some(session) = self.open.remove(id) {
-            self.browser.close_page(&session.page);
+            for window in &session.windows {
+                self.browser.close_page(&window.page);
+            }
         }
         Ok(Value::Null)
     }
@@ -139,75 +157,18 @@ impl Sessions {
     /// per session and has no way to make another. A caller that asks is told
     /// so consistently rather than told nothing, because a runner reads the
     /// handle before it does anything else.
-    pub(super) fn window_handle(&mut self, id: &str) -> Answer {
-        self.page(id)?;
-        Ok(json!(handle_of(id)))
-    }
-
-    /// All of them, which is the one.
-    pub(super) fn window_handles(&mut self, id: &str) -> Answer {
-        self.page(id)?;
-        Ok(json!([handle_of(id)]))
-    }
-
-    /// Switching to the only window there is, which is where we already are.
-    pub(super) fn switch_window(&mut self, id: &str, body: &Value) -> Answer {
-        self.page(id)?;
-        match body["handle"].as_str() {
-            Some(asked) if asked != handle_of(id) => Err(Failure::new(
-                "no such window",
-                "this session has one window",
-            )),
-            _ => Ok(Value::Null),
-        }
-    }
-
-    /// Closing it. A session with no windows left is over, so the answer is an
-    /// empty list and the page goes.
-    pub(super) fn close_window(&mut self, id: &str) -> Answer {
-        let page = self.page(id)?;
-        self.browser.close_page(&page);
-        Ok(json!([]))
-    }
-
-    /// How big the window is, and where.
-    ///
-    /// There is no window furniture, so the rect is the viewport and the
-    /// position is always the origin — nothing here is on a desktop.
-    pub(super) fn window_rect(&mut self, id: &str) -> Answer {
-        let page = self.page(id)?;
-        let viewport = self.browser.viewport(&page);
-        Ok(json!({
-            "x": 0,
-            "y": 0,
-            "width": viewport.width,
-            "height": viewport.height.unwrap_or(0),
-        }))
-    }
-
-    /// Sizes the window, which here means sizing the page.
-    ///
-    /// The position is accepted and ignored: a page that is not on a desktop
-    /// cannot be moved about on one, and refusing would stop every caller that
-    /// sets a rect in one go.
-    pub(super) fn set_window_rect(&mut self, id: &str, body: &Value) -> Answer {
-        let page = self.page(id)?;
-        let was = self.browser.viewport(&page);
-        let width = body["width"]
-            .as_u64()
-            .map_or(was.width, |value| value as u32);
-        let height = body["height"]
-            .as_u64()
-            .map(|value| value as u32)
-            .or(was.height);
-        self.browser.set_viewport(&page, Viewport { width, height });
-        self.window_rect(id)
-    }
-
     pub(super) fn page(&self, id: &str) -> Result<PageId, Failure> {
+        let session = self.session(id)?;
+        session
+            .windows
+            .get(session.current)
+            .map(|window| window.page.clone())
+            .ok_or_else(|| Failure::new("no such window", "this session has no window open"))
+    }
+
+    pub(super) fn session(&self, id: &str) -> Result<&Session, Failure> {
         self.open
             .get(id)
-            .map(|session| session.page.clone())
             .ok_or_else(|| Failure::new("invalid session id", format!("no session {id}")))
     }
 
@@ -223,11 +184,6 @@ impl Sessions {
             .and_then(|session| session.elements.get(element).cloned())
             .ok_or_else(|| Failure::no_such_element(format!("stale or unknown: {element}")))
     }
-}
-
-/// What a session calls its one window.
-fn handle_of(id: &str) -> String {
-    format!("window-{id}")
 }
 
 pub(super) fn internal(error: anyhow::Error) -> Failure {

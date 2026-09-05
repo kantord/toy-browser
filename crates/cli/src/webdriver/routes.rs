@@ -52,6 +52,12 @@ impl Sessions {
             ("GET", ["session", id, "title"]) => self.title(id),
             ("GET", ["session", id, "source"]) => self.source(id),
             ("GET", ["session", id, "screenshot"]) => self.screenshot(id),
+            // Releasing input state with none in flight is a no-op, and a
+            // client sends this to tidy up after every test. `POST actions` is
+            // deliberately still unknown: a test that actually needs input
+            // should fail saying so rather than quietly acting on nothing.
+            ("DELETE", ["session", _, "actions"]) => Ok(Value::Null),
+
             ("POST", ["session", id, "execute", "sync"]) => self.execute(id, body, Wait::No),
             ("POST", ["session", id, "execute", "async"]) => self.execute(id, body, Wait::Yes),
             _ => return None,
@@ -66,6 +72,7 @@ impl Sessions {
             ("GET", ["session", id, "window"]) => self.window_handle(id),
             ("POST", ["session", id, "window"]) => self.switch_window(id, body),
             ("DELETE", ["session", id, "window"]) => self.close_window(id),
+            ("POST", ["session", id, "window", "new"]) => self.new_window(id, body),
             ("GET", ["session", id, "window", "handles"]) => self.window_handles(id),
             ("GET", ["session", id, "window", "rect"]) => self.window_rect(id),
             ("POST", ["session", id, "window", "rect"]) => self.set_window_rect(id, body),

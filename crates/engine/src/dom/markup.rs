@@ -5,16 +5,16 @@
 //! configuration lives here for the same reason `innerHTML` does — both are the
 //! same conversion, once at load and once per assignment.
 
-use blitz_dom::DocumentConfig;
-use blitz_html::{HtmlDocument, HtmlProvider};
+use blitz_dom::{BaseDocument, DocumentConfig};
+use blitz_html::HtmlProvider;
 use toy_browser_fetch::Url;
 
 use super::{Dom, html_name};
 
 /// Parses `source` into a DOM whose relative references resolve against
 /// `base_url`.
-pub fn parse(source: &str, base_url: &Url) -> HtmlDocument {
-    HtmlDocument::from_html(
+pub fn parse(source: &str, base_url: &Url) -> BaseDocument {
+    super::parse::document(
         source,
         DocumentConfig {
             // blitz resolves every relative URL it sees against this, and panics

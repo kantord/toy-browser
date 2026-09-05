@@ -227,3 +227,35 @@ async fn an_asynchronous_script_answers_with_what_it_passed_back(#[future] sessi
 
     driver.quit().await.expect("quit");
 }
+
+/// What a test runner does around every test: open a window of its own, work in
+/// it, close it, and go back to the one it came from.
+#[rstest]
+#[tokio::test(flavor = "multi_thread")]
+async fn a_session_can_open_a_second_window_and_close_it(#[future] session: Session) {
+    let Session { _serving, driver } = session.await;
+
+    let first = driver.window().await.expect("the first window");
+    driver.goto(fixture("hello.html")).await.expect("goto");
+
+    let second = driver.new_window().await.expect("a second window");
+    assert_ne!(second, first, "a new window is a window of its own");
+    assert_eq!(driver.windows().await.expect("the windows").len(), 2);
+    // Opening does not switch: the session is still looking at the first.
+    assert_eq!(driver.window().await.expect("still the first"), first);
+
+    driver.switch_to_window(second).await.expect("switch");
+    driver
+        .goto(fixture("click.html"))
+        .await
+        .expect("goto in the second");
+    // A window of its own means a document of its own.
+    let title = driver.title().await.expect("title");
+    driver.close_window().await.expect("close");
+    driver.switch_to_window(first).await.expect("switch back");
+
+    assert_eq!(driver.windows().await.expect("the windows").len(), 1);
+    assert_ne!(title, driver.title().await.expect("the first title"));
+
+    driver.quit().await.expect("quit");
+}

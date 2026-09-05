@@ -5,18 +5,21 @@
 //! `classList`, `style`, events — is built on top of these in `prelude/`.
 
 mod markup;
+mod names;
+mod parse;
 
 use std::cell::{Cell, RefCell};
 
-use blitz_dom::{LocalName, NodeData, QualName, ns};
-use blitz_html::HtmlDocument;
+use blitz_dom::{BaseDocument, NodeData};
 use toy_browser_fetch::{Resources, Url};
 
 pub use markup::parse;
+pub(crate) use names::{attribute_name, html_name};
+pub use parse::document as parse_document;
 
 /// A parsed document plus the directory its relative URLs resolve against.
 pub struct Dom {
-    doc: RefCell<HtmlDocument>,
+    doc: RefCell<BaseDocument>,
     base_url: Url,
     resources: Resources,
     /// Bumped by every mutation, so anything computed from an earlier state can
@@ -28,7 +31,7 @@ pub struct Dom {
 }
 
 impl Dom {
-    pub fn new(doc: HtmlDocument, base_url: Url, resources: Resources) -> Self {
+    pub fn new(doc: BaseDocument, base_url: Url, resources: Resources) -> Self {
         Self {
             doc: RefCell::new(doc),
             base_url,
@@ -69,7 +72,7 @@ impl Dom {
 
     /// Reads the live document. Held only for the duration of `visit`, so
     /// JavaScript can go on mutating it afterwards.
-    pub fn with_document<R>(&self, visit: impl FnOnce(&HtmlDocument) -> R) -> R {
+    pub fn with_document<R>(&self, visit: impl FnOnce(&BaseDocument) -> R) -> R {
         visit(&self.doc.borrow())
     }
 
@@ -289,7 +292,7 @@ impl Dom {
     }
 }
 
-fn collect_by_tag(doc: &HtmlDocument, id: usize, tag: &str, found: &mut Vec<usize>) {
+fn collect_by_tag(doc: &BaseDocument, id: usize, tag: &str, found: &mut Vec<usize>) {
     let Some(node) = doc.get_node(id) else {
         return;
     };
@@ -301,20 +304,4 @@ fn collect_by_tag(doc: &HtmlDocument, id: usize, tag: &str, found: &mut Vec<usiz
     for &child_id in &node.children {
         collect_by_tag(doc, child_id, tag, found);
     }
-}
-
-/// An unprefixed element name in the HTML namespace, which is all this toy
-/// needs.
-fn html_name(name: &str) -> QualName {
-    QualName::new(None, ns!(html), LocalName::from(name))
-}
-
-/// An attribute name, which carries no namespace.
-///
-/// Only element names live in the HTML namespace; attributes parsed out of
-/// markup have an empty one. Naming them otherwise makes a write miss the
-/// attribute already there, so the document ends up with the name twice and
-/// every read keeps answering with the old value.
-fn attribute_name(name: &str) -> QualName {
-    QualName::new(None, ns!(), LocalName::from(name))
 }
