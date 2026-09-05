@@ -110,3 +110,34 @@ asked for arrives. Nothing was cached, so five files were read about sixty
 times.
 
 A preload scan was tried and removed; `blitz/net.rs` records why.
+
+## `<webview>`: another browser inside the page
+
+```
+just split          # two Hacker News, one above the other
+```
+
+An `<iframe>` is a browsing context *inside* the document holding it: same
+engine, same event loop, reachable across the boundary when the origins agree.
+A `<webview>` is a separate browser — its own session, its own DOM, its own
+JavaScript realm — sharing nothing with its host but the rectangle it is drawn
+into. That separation is not new work here: every `PageId` already is one. The
+element is what says where to put one.
+
+```html
+<webview src="https://news.ycombinator.com/"></webview>
+<webview src="https://news.ycombinator.com/newest"></webview>
+```
+
+- **Drawn** as a nested `<svg>` with its own `viewBox`, so the child clips to
+  its frame the way a window shows part of a page, and its marks stay as
+  readable and as traceable as the host's — `data-node` inside the child still
+  names the child's elements.
+- **Clicked** through `Browser::routed`, which says which page a Point belongs
+  to and where in it. A click inside a webview is not the host's to handle; it
+  goes to the page mounted there, at coordinates measured from that page's own
+  corner, and recurses if a webview holds one.
+- **Kept.** The page behind a webview is opened once and remembered. Drawing the
+  host again does not send it back to its `src` — otherwise every link followed
+  inside one would be undone by the next frame, which `crates/browser/tests/
+  webview.rs` pins.

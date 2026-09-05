@@ -101,6 +101,26 @@ pub fn lay_out(
     Ok(LaidOut { document, base: base.to_owned() })
 }
 
+/// One `<webview>` in a document: a rectangle the host lays out, holding a page
+/// the host has nothing to do with.
+///
+/// Not an iframe. An iframe is a browsing context inside the document that
+/// holds it — same engine, same event loop, reachable across the boundary when
+/// the origins agree. A webview is a **separate browser**: its own session, its
+/// own DOM, its own JavaScript realm, sharing nothing but the rectangle it is
+/// drawn into. This browser has had that separation since the beginning,
+/// because every `PageId` already is one; a webview is the element that says
+/// where to put one.
+pub struct Webview {
+    /// The element, so the page behind it can be remembered against it.
+    pub node: usize,
+    pub src: String,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
 /// A page with no height of its own still has to be laid out in something; a
 /// browser would call this the window.
 const DEFAULT_HEIGHT: u32 = 600;
@@ -125,9 +145,38 @@ const ROUNDS: usize = 8;
 const LINE_HEIGHT: &str = "html { line-height: 1.08 }\
 \
 table[cellspacing=\"0\"] { border-spacing: 0 }\
-table[cellpadding=\"0\"] td, table[cellpadding=\"0\"] th { padding: 0 }";
+table[cellpadding=\"0\"] td, table[cellpadding=\"0\"] th { padding: 0 }\
+\
+webview { display: block; overflow: hidden }";
 
 impl LaidOut {
+    /// Every `<webview>` the document holds, with the box it was given.
+    pub fn webviews(&self) -> Vec<Webview> {
+        let mut found = Vec::new();
+        self.walk(&mut |node, x, y| {
+            let Some(element) = node.element_data() else { return };
+            if element.name.local.as_ref() != "webview" {
+                return;
+            }
+            let Some(src) = element.attr(blitz_dom::local_name!("src")) else {
+                return;
+            };
+            let size = node.final_layout.size;
+            if size.width <= 0.0 || size.height <= 0.0 {
+                return;
+            }
+            found.push(Webview {
+                node: node.id,
+                src: src.to_owned(),
+                x,
+                y,
+                width: size.width,
+                height: size.height,
+            });
+        });
+        found
+    }
+
     /// Every element, with the absolute position layout gave it.
     ///
     /// The position is asked for rather than accumulated on the way down: a box

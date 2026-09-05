@@ -51,6 +51,11 @@ open url:
 browse url="https://news.ycombinator.com/":
     cargo run --release -- browse {{ url }}
 
+# Two Hacker News in one window, one above the other, each a separate browser.
+# A click in either follows that one's link and leaves the other alone.
+split:
+    cargo run --release -- browse "file://{{ justfile_directory() }}/tests/fixtures/webviews.html"
+
 # The same protocol without a test runner in the way.
 smoke:
     pnpm test:smoke

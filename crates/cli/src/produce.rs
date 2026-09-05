@@ -30,7 +30,7 @@ pub fn layout(args: LayoutArgs) -> Result<()> {
     std::fs::write(&args.out, serde_json::to_vec_pretty(&export)?)?;
     if let Some(into) = &args.paint {
         let viewport = Viewport { width: args.width, height: None };
-        let svg = toy_browser::blitz::paint::svg(&laid_out, viewport);
+        let svg = toy_browser::blitz::paint::svg(&laid_out, viewport, &Default::default());
         std::fs::write(into, &svg)?;
         let png = into.with_extension("png");
         std::fs::write(&png, toy_browser::rasterize(&svg)?)?;

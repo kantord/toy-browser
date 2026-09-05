@@ -20,11 +20,36 @@ const RELEASED: u8 = 0;
 const FIRST: u32 = 1;
 
 impl Browser {
+    /// Which page a Point belongs to, and where in it.
+    ///
+    /// A `<webview>` holds a separate browser, so a click inside one is not the
+    /// host's to handle: it belongs to the page mounted there, at coordinates
+    /// measured from that page's own corner. Recursive, because a webview may
+    /// hold one.
+    pub fn routed(&self, page: &PageId, point: Point) -> Option<(PageId, Point)> {
+        let held = self.pages.get(page)?;
+        let (child, area) = held
+            .mounted
+            .values()
+            .find(|mounted| mounted.area.contains(point))
+            .map(|mounted| (mounted.page.clone(), mounted.area))?;
+        let inside = Point {
+            x: point.x - area.x,
+            y: point.y - area.y,
+        };
+        Some(self.routed(&child, inside).unwrap_or((child, inside)))
+    }
+}
+
+impl Browser {
     /// Moves the pointer, raising what crossing an element's edge raises.
     ///
     /// Leaving and entering are a difference between two calls, which is the
     /// whole reason a Page remembers its Pointer.
     pub fn pointer_move(&mut self, page: &PageId, point: Point) -> Result<Emitted> {
+        if let Some((child, inside)) = self.routed(page, point) {
+            return self.pointer_move(&child, inside);
+        }
         let over = self.hit_test(page, point)?;
         let mut pointer = self.pointer(page);
         let buttons = held(pointer);
@@ -44,6 +69,9 @@ impl Browser {
 
     /// Presses the primary button wherever the pointer now is.
     pub fn pointer_down(&mut self, page: &PageId, point: Point) -> Result<Emitted> {
+        if let Some((child, inside)) = self.routed(page, point) {
+            return self.pointer_down(&child, inside);
+        }
         let over = self.hit_test(page, point)?;
         let mut emitted = Emitted::default();
 
@@ -67,6 +95,9 @@ impl Browser {
     /// Releasing somewhere else is a real thing a person does to abandon a
     /// click, and the page is entitled to see it that way.
     pub fn pointer_up(&mut self, page: &PageId, point: Point) -> Result<Emitted> {
+        if let Some((child, inside)) = self.routed(page, point) {
+            return self.pointer_up(&child, inside);
+        }
         let over = self.hit_test(page, point)?;
         let pressed = self.pointer(page).pressed;
         let mut emitted = Emitted::default();

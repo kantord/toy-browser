@@ -26,7 +26,7 @@ use crate::blitz::LaidOut;
 use crate::pipeline::Viewport;
 
 /// The page, as one self-contained SVG.
-pub fn svg(page: &LaidOut, viewport: Viewport) -> String {
+pub fn svg(page: &LaidOut, viewport: Viewport, mounted: &HashMap<usize, String>) -> String {
     let wide = viewport.width.max(1);
     let mut marks = String::new();
     let mut height = 0.0f32;
@@ -34,6 +34,7 @@ pub fn svg(page: &LaidOut, viewport: Viewport) -> String {
         height = height.max(y + node.final_layout.size.height);
         background(node, x, y, &mut marks);
         picture(page, node, x, y, &mut marks);
+        embedded(node, x, y, mounted, &mut marks);
         text(page, node, x, y, &mut marks);
     });
     // Never nothing: a rasterizer refuses a picture with no area, and a page
@@ -78,6 +79,39 @@ fn opacity(alpha: f32) -> String {
         true => String::new(),
         false => format!(" fill-opacity=\"{alpha:.3}\""),
     }
+}
+
+/// A `<webview>`: another browser's page, drawn where this one put the box.
+///
+/// A nested `<svg>` rather than a picture of one. The child keeps its own
+/// coordinates inside its own viewBox, so it clips to the frame the way a
+/// window shows part of a page, and everything in it stays as readable and as
+/// traceable as the page around it — `data-node` on the child's marks still
+/// names the child's elements.
+fn embedded(node: &Node, x: f32, y: f32, mounted: &HashMap<usize, String>, into: &mut String) {
+    let Some(child) = mounted.get(&node.id) else {
+        return;
+    };
+    let size = node.final_layout.size;
+    let _ = writeln!(
+        into,
+        "<svg x=\"{x:.2}\" y=\"{y:.2}\" width=\"{:.2}\" height=\"{:.2}\" \
+         viewBox=\"0 0 {:.2} {:.2}\" data-node=\"{}\">{}</svg>",
+        size.width,
+        size.height,
+        size.width,
+        size.height,
+        node.id,
+        inside(child),
+    );
+}
+
+/// What a painted page holds, without the document around it — so it can be put
+/// inside another one.
+fn inside(svg: &str) -> &str {
+    let opened = svg.find('>').map_or(0, |at| at + 1);
+    let closed = svg.rfind("</svg>").unwrap_or(svg.len());
+    svg.get(opened..closed).unwrap_or_default()
 }
 
 /// An `<img>`, referred to where the page refers to it.

@@ -75,6 +75,23 @@ struct Page {
     /// Where the mouse is and whether it is pressed. A setting of the Page, so
     /// it outlives each event the way a real pointer does.
     pointer: Pointer,
+    /// The page behind each `<webview>` in this one, by the element holding it.
+    ///
+    /// A whole page, not a frame: its own session, its own DOM, its own realm.
+    /// Kept here so it outlives a draw — a webview that opened its page afresh
+    /// every frame would lose whatever the person using it had done.
+    mounted: HashMap<usize, Mounted>,
+}
+
+/// A page put inside another one, and where it was last drawn.
+struct Mounted {
+    page: PageId,
+    /// What the element asked for. Kept so the page is only sent there once: a
+    /// webview whose page was reloaded whenever it did not match its `src`
+    /// would undo every link the person using it followed.
+    src: String,
+    /// The box it was drawn into, so a click in it can be given to it.
+    area: ElementBox,
 }
 
 /// Where the mouse is and whether it is pressed.
@@ -155,6 +172,7 @@ impl Browser {
                 run_scripts: true,
                 measured: None,
                 pointer: Pointer::default(),
+                mounted: HashMap::new(),
             },
         );
         self.navigate(&id, "about:blank")
