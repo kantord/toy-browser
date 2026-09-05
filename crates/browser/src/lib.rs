@@ -126,7 +126,13 @@ impl Browser {
             // modules, which is most of what a page pulls.
             engine: Engine::with_resources(resources.clone()),
             resources,
-            fonts: fonts::load(font_files)?,
+            // Only the older renderer reads these, and finding a system font
+            // means scanning for one. A browser that is not going to lay
+            // anything out with it should not pay for that at startup.
+            fonts: match blitz::chosen() {
+                true => Fonts::default(),
+                false => fonts::load(font_files)?,
+            },
             pages: HashMap::new(),
             next_id: 0,
         })

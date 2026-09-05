@@ -71,6 +71,10 @@ fn agent() -> &'static ureq::Agent {
     AGENT.get_or_init(|| {
         ureq::Agent::config_builder()
             .timeout_global(Some(TIMEOUT))
+            // A page keeps its stylesheet and its pictures on the host it came
+            // from, and they are read at the same time. Without a pool each one
+            // pays for its own handshake.
+            .max_idle_connections_per_host(8)
             .build()
             .into()
     })

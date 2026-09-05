@@ -44,6 +44,13 @@ accept-offline *ARGS:
 open url:
     cargo run -- render {{ url }}
 
+# The browser in a window, with a mouse that works. Click a link and it follows.
+#
+# Optimised, because this is the one target somebody sits and waits for: the
+# same page takes 2.5s to draw unoptimised and 0.3s built properly.
+browse url="https://news.ycombinator.com/":
+    cargo run --release -- browse {{ url }}
+
 # The same protocol without a test runner in the way.
 smoke:
     pnpm test:smoke

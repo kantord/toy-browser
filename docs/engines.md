@@ -74,3 +74,39 @@ Both are in `lay_out`, as a user-agent stylesheet, and both are marked.
 - **Inline margins.** `.hnname { margin-right: 5px }` is not applied, so the
   masthead still reads "Hacker Newsnew".
 - **Table column widths**, above.
+
+## Seeing it
+
+```
+just browse                       # live Hacker News
+just browse file:///…/page.html   # anything else
+```
+
+A window with the page in it and a mouse that works. A click goes through the
+same `pointer_down`/`pointer_up` the automation protocols drive, so a link
+followed by hand is followed the way a script would follow it — and the window
+redraws whatever came next. The wheel moves the band on show, because nothing in
+this browser scrolls: the page is laid out at its full height and the window
+looks at part of it.
+
+## Reading what a page refers to
+
+`blitz/net.rs`. Live Hacker News, cold, from 34 seconds to 2.1:
+
+| | |
+| --- | --- |
+| fetching on demand, no cache | 33.9s |
+| read once and remembered | 3.4s |
+| each read on its own thread | 2.4s |
+| through the shared cache and one pooled connection | **2.1s** |
+
+Of that 2.1s, 0.3s is work. The rest is three stages that genuinely depend on
+each other — the document, then the stylesheet it names, then the pictures that
+stylesheet names — at about half a second each from that host.
+
+The first number is the one worth keeping in mind. A page is laid out twice for
+every frame, once to measure and once to draw, and again each time something it
+asked for arrives. Nothing was cached, so five files were read about sixty
+times.
+
+A preload scan was tried and removed; `blitz/net.rs` records why.

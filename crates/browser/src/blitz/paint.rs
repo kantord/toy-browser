@@ -27,6 +27,7 @@ use crate::pipeline::Viewport;
 
 /// The page, as one self-contained SVG.
 pub fn svg(page: &LaidOut, viewport: Viewport) -> String {
+    let wide = viewport.width.max(1);
     let mut marks = String::new();
     let mut height = 0.0f32;
     page.walk(&mut |node, x, y| {
@@ -35,11 +36,12 @@ pub fn svg(page: &LaidOut, viewport: Viewport) -> String {
         picture(page, node, x, y, &mut marks);
         text(page, node, x, y, &mut marks);
     });
-    let tall = viewport.height.map_or(height.ceil() as u32, |given| given);
+    // Never nothing: a rasterizer refuses a picture with no area, and a page
+    // that has not loaded yet is a real thing to be asked to draw.
+    let tall = viewport.height.map_or(height.ceil() as u32, |given| given).max(1);
     format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{tall}\" \
-         viewBox=\"0 0 {} {tall}\">\n{marks}</svg>\n",
-        viewport.width, viewport.width,
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{wide}\" height=\"{tall}\" \
+         viewBox=\"0 0 {wide} {tall}\">\n{marks}</svg>\n",
     )
 }
 

@@ -73,7 +73,7 @@ impl Browser {
                 .base_url(page)
                 .map(|url| url.to_string())
                 .unwrap_or_else(|| "about:blank".to_owned());
-            let laid_out = crate::blitz::lay_out(&html, &[], viewport, &base)?;
+            let laid_out = crate::blitz::lay_out(&html, &[], viewport, &base, &self.resources)?;
             let svg = crate::blitz::paint::svg(&laid_out, viewport);
             return pipeline::rasterized(svg);
         }
@@ -168,7 +168,7 @@ impl Browser {
             .base_url(page)
             .map(|url| url.to_string())
             .unwrap_or_else(|| "about:blank".to_owned());
-        let laid_out = crate::blitz::lay_out(keyed, &[], viewport, &base)?;
+        let laid_out = crate::blitz::lay_out(keyed, &[], viewport, &base, &self.resources)?;
         if let Some(page) = self.pages.get_mut(page) {
             page.measured = Some(Measured {
                 revision,
