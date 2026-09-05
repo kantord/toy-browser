@@ -85,3 +85,46 @@ fn redrawing_the_host_leaves_a_followed_link_alone() {
 
     assert!(browser.url(&second).unwrap().ends_with("webview-elsewhere.html"));
 }
+
+/// A webview with no height of its own is as tall as what is inside it — the
+/// page is laid out first, and what came of it measures the element. That is
+/// how an image behaves, and it is the reason the host is laid out twice.
+#[test]
+fn a_webview_is_as_tall_as_the_page_inside_it() {
+    let mut browser = browser();
+    let page = browser.new_page().unwrap();
+    browser
+        .navigate(&page, fixture("webview-unsized.html").as_str())
+        .unwrap();
+    browser.render(&page).unwrap();
+
+    // The page inside is a 250px block, and nothing in the host says otherwise.
+    let found = browser.query(&page, "webview").unwrap();
+    let element = found.first().expect("the host holds one").clone();
+    let frame = browser
+        .bounding_box(&page, &element)
+        .unwrap()
+        .expect("the frame has a box");
+    assert_eq!(frame.height, 250.0);
+}
+
+/// A page with no background of its own is on white paper, not on whatever it
+/// happens to be mounted in.
+///
+/// Everything is drawn into one picture, so a frame that paints nothing lets
+/// the host show through — a webview over a dark page went black the moment a
+/// link inside it was followed to somewhere that sets no background.
+#[test]
+fn a_page_with_no_background_is_not_the_colour_of_its_host() {
+    let mut browser = browser();
+    let page = browser.new_page().unwrap();
+    browser
+        .navigate(&page, fixture("webview-dark.html").as_str())
+        .unwrap();
+
+    let svg = browser.render(&page).unwrap().svg;
+    let host = svg.matches("fill=\"rgb(0, 0, 0)\"").count();
+    let paper = svg.matches("fill=\"rgb(255, 255, 255)\"").count();
+    assert!(host >= 1, "the host paints its own black:\n{svg}");
+    assert!(paper >= 1, "the frame paints its own white:\n{svg}");
+}

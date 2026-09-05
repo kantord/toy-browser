@@ -121,23 +121,62 @@ An `<iframe>` is a browsing context *inside* the document holding it: same
 engine, same event loop, reachable across the boundary when the origins agree.
 A `<webview>` is a separate browser — its own session, its own DOM, its own
 JavaScript realm — sharing nothing with its host but the rectangle it is drawn
-into. That separation is not new work here: every `PageId` already is one. The
-element is what says where to put one.
+into. That separation is not new work: every `PageId` already is one. The
+element says where to put one.
 
 ```html
 <webview src="https://news.ycombinator.com/"></webview>
 <webview src="https://news.ycombinator.com/newest"></webview>
 ```
 
-- **Drawn** as a nested `<svg>` with its own `viewBox`, so the child clips to
-  its frame the way a window shows part of a page, and its marks stay as
-  readable and as traceable as the host's — `data-node` inside the child still
-  names the child's elements.
-- **Clicked** through `Browser::routed`, which says which page a Point belongs
-  to and where in it. A click inside a webview is not the host's to handle; it
-  goes to the page mounted there, at coordinates measured from that page's own
-  corner, and recurses if a webview holds one.
-- **Kept.** The page behind a webview is opened once and remembered. Drawing the
-  host again does not send it back to its `src` — otherwise every link followed
-  inside one would be undone by the next frame, which `crates/browser/tests/
-  webview.rs` pins.
+### What is inside measures the element
+
+A webview is sized the way an image is. The page inside is laid out **first**,
+and what came of it is what the host is told the element is worth — so a webview
+that is given no height is as tall as what it holds. That is why the host is
+laid out twice: once to find how wide each frame is, since a block fills the
+width it is given, and again knowing how tall the pages inside turned out.
+
+The height is handed over as a rule with no specificity, so a host that gave its
+webview a height of its own keeps it. That is what an intrinsic size is: what
+the thing would like to be, not what it must be.
+
+### One render unit, not a picture each
+
+Everything in the unit is laid out before anything is drawn, and then drawn in
+one pass. A `<webview>` becomes a clip and a shift — `<clipPath>` and a `<g>` —
+rather than a picture inside a picture. Every mark in the document is in one
+coordinate space, so paint order is one order and a Point means one thing.
+
+The first version nested an `<svg>` per browser, which meant cutting a finished
+document apart with string surgery to get at its marks, and a coordinate space
+per browser to reconcile. In the window, a window is one render unit however
+many browsers are showing in it.
+
+### The paper a page is on
+
+A document's background is not just another element's: the root's propagates to
+the canvas and covers the whole viewport, and when the root sets none the body's
+is used. That was missing, and nothing noticed while a page was the only thing
+being drawn — transparent looked like white because there was nothing behind it.
+
+Putting one page behind another made it visible immediately. A webview over a
+dark host went **black** the moment a link inside it was followed somewhere that
+sets no background of its own, because the host was showing through. The same
+bug rendered `example.com` at 76% black on its own.
+
+Every unit now paints its own paper first, as wide and as tall as the page —
+which for a page in a frame is the frame.
+
+### Clicked
+
+`Browser::routed` says which page a Point belongs to and where in it. A click
+inside a webview is not the host's to handle; it goes to the page mounted there,
+at coordinates measured from that page's own corner, and recurses if a webview
+holds one.
+
+The page behind a webview is opened once and kept. Drawing the host again does
+not send it back to its `src` — otherwise every link followed inside one would
+be undone by the next frame. `crates/browser/tests/webview.rs` pins that, along
+with a click landing in the right browser and a frame taking its height from
+what it holds.

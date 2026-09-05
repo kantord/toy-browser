@@ -18,7 +18,9 @@ use blitz_html::HtmlDocument;
 use blitz_traits::shell::{ColorScheme, Viewport as BlitzViewport};
 
 
-use toy_browser_engine::key_of;
+use std::collections::HashMap;
+
+use toy_browser_engine::{ElementBox, key_of};
 
 use crate::pipeline::Viewport;
 
@@ -101,6 +103,21 @@ pub fn lay_out(
     Ok(LaidOut { document, base: base.to_owned() })
 }
 
+/// One thing to draw: a page, and the pages mounted inside it.
+///
+/// A window is one of these, however many browsers are showing in it. The
+/// alternative was a picture each, nested — and a nested picture has its own
+/// coordinate space, its own scale and its own edges to reconcile, all to
+/// describe marks that end up on one surface anyway. Composing first and
+/// drawing once means one coordinate space, one paint order, and one document
+/// to read.
+pub struct Composed {
+    pub laid_out: LaidOut,
+    /// What is mounted in it, by the element holding it: where the box is, and
+    /// what is inside.
+    pub mounted: HashMap<usize, (ElementBox, Composed)>,
+}
+
 /// One `<webview>` in a document: a rectangle the host lays out, holding a page
 /// the host has nothing to do with.
 ///
@@ -114,6 +131,10 @@ pub fn lay_out(
 pub struct Webview {
     /// The element, so the page behind it can be remembered against it.
     pub node: usize,
+    /// The engine's own id for it, which survives being laid out again — the
+    /// same document parsed twice gives the same nodes, but nothing promises
+    /// that, and a measurement attached to the wrong frame is worse than none.
+    pub key: Option<usize>,
     pub src: String,
     pub x: f32,
     pub y: f32,
@@ -161,12 +182,13 @@ impl LaidOut {
             let Some(src) = element.attr(blitz_dom::local_name!("src")) else {
                 return;
             };
+            // No size test. A frame with no height yet is the one that most
+            // needs finding: what gives it a height is the page inside it, and
+            // that page cannot be laid out until this has been noticed.
             let size = node.final_layout.size;
-            if size.width <= 0.0 || size.height <= 0.0 {
-                return;
-            }
             found.push(Webview {
                 node: node.id,
+                key: keyed(node),
                 src: src.to_owned(),
                 x,
                 y,
@@ -175,6 +197,46 @@ impl LaidOut {
             });
         });
         found
+    }
+
+    /// What colour the page is behind everything on it.
+    ///
+    /// A document's background is not just another element's: the root's
+    /// propagates to the canvas and covers the whole viewport, and when the
+    /// root has none the body's is used instead. Paper is white when neither
+    /// says.
+    ///
+    /// Without this a page that sets no background is transparent, which used
+    /// to mean "white" only because nothing was ever behind it. Now that a
+    /// `<webview>` puts one page behind another, transparent means the host
+    /// shows through — a page with no background of its own came out the colour
+    /// of whatever it was mounted in.
+    pub fn canvas(&self) -> [f32; 4] {
+        let root = self.document.root_element();
+        let body = root
+            .children
+            .iter()
+            .filter_map(|child| self.document.get_node(*child))
+            .find(|child| {
+                child.element_data().is_some_and(|it| it.name.local.as_ref() == "body")
+            });
+        [Some(root), body]
+            .into_iter()
+            .flatten()
+            .filter_map(painted_with)
+            .next()
+            .unwrap_or([255.0, 255.0, 255.0, 1.0])
+    }
+
+    /// How tall the document came out.
+    pub fn height(&self) -> f32 {
+        self.root().1
+    }
+
+    /// How big the document came out.
+    pub fn root(&self) -> (f32, f32) {
+        let size = self.document.root_element().final_layout.size;
+        (size.width, size.height)
     }
 
     /// Every element, with the absolute position layout gave it.
@@ -199,6 +261,14 @@ impl LaidOut {
             self.descend(*child, visit);
         }
     }
+}
+
+/// What an element paints behind itself, if it paints anything at all.
+fn painted_with(node: &Node) -> Option<[f32; 4]> {
+    let style = node.primary_styles()?;
+    let colour = style.resolve_color(&style.get_background().background_color);
+    let [red, green, blue, alpha] = *colour.raw_components();
+    (alpha > 0.0).then_some([red * 255.0, green * 255.0, blue * 255.0, alpha])
 }
 
 /// The engine's node id for an element, read off the marker class it carries.

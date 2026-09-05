@@ -15,6 +15,7 @@ mod css;
 mod tables;
 mod dom;
 mod fonts;
+mod frames;
 mod images;
 mod measure;
 mod navigate;

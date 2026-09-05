@@ -28,15 +28,17 @@ pub fn layout(args: LayoutArgs) -> Result<()> {
     }
     let export = laid_out.export(&url);
     std::fs::write(&args.out, serde_json::to_vec_pretty(&export)?)?;
+    let count = export["nodes"].as_array().map_or(0, Vec::len);
     if let Some(into) = &args.paint {
         let viewport = Viewport { width: args.width, height: None };
-        let svg = toy_browser::blitz::paint::svg(&laid_out, viewport, &Default::default());
+        let alone = toy_browser::blitz::Composed { laid_out, mounted: Default::default() };
+        let svg = toy_browser::blitz::paint::svg(&alone, viewport);
         std::fs::write(into, &svg)?;
         let png = into.with_extension("png");
         std::fs::write(&png, toy_browser::rasterize(&svg)?)?;
         println!("painted {} ({} bytes) and {}", into.display(), svg.len(), png.display());
     }
-    println!("laid out {} elements into {}", export["nodes"].as_array().map_or(0, Vec::len), args.out.display());
+    println!("laid out {count} elements into {}", args.out.display());
     Ok(())
 }
 

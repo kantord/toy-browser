@@ -88,78 +88,11 @@ impl Browser {
         )
     }
 
-    /// The page as SVG, with whatever is mounted in it drawn inside it.
-    ///
-    /// Recursive, because a page in a `<webview>` may hold one of its own — and
-    /// each is a separate browser, so "recursive" here means one page asking
-    /// another to describe itself, not a tree of frames sharing an engine.
+    /// The page as SVG, with whatever is mounted in it drawn in the same
+    /// picture.
     pub(crate) fn painted(&mut self, page: &PageId, viewport: Viewport) -> Result<String> {
-        let session = self.session(page)?;
-        let html = self.engine.html(&session, Keyed::Yes)?;
-        let base = self
-            .base_url(page)
-            .map(|url| url.to_string())
-            .unwrap_or_else(|| "about:blank".to_owned());
-        let laid_out = crate::blitz::lay_out(&html, &[], viewport, &base, &self.resources)?;
-        let mounted = self.mount(page, &laid_out)?;
-        Ok(crate::blitz::paint::svg(&laid_out, viewport, &mounted))
-    }
-
-    /// Opens a page behind every `<webview>` the document holds, and paints
-    /// each one at the size of the box it was given.
-    ///
-    /// The page is opened once and kept: a webview that reloaded on every frame
-    /// would throw away whatever the person using it had done in it.
-    fn mount(
-        &mut self,
-        page: &PageId,
-        laid_out: &crate::blitz::LaidOut,
-    ) -> Result<std::collections::HashMap<usize, String>> {
-        let mut painted = std::collections::HashMap::new();
-        let base = self.base_url(page);
-        for webview in laid_out.webviews() {
-            // A webview names where to go the way everything else in a document
-            // does — relative to the page holding it.
-            let src = base
-                .as_ref()
-                .and_then(|base| base.join(&webview.src).ok())
-                .map_or_else(|| webview.src.clone(), |url| url.to_string());
-            let held = self
-                .pages
-                .get(page)
-                .and_then(|held| held.mounted.get(&webview.node))
-                .map(|held| (held.page.clone(), held.src.clone()));
-            let (child, sent) = match held {
-                Some(held) => held,
-                None => (self.new_page()?, String::new()),
-            };
-            let inner = Viewport { width: webview.width.max(1.0) as u32, height: None };
-            self.set_viewport(&child, inner);
-            // Only when the element asks for somewhere else, not whenever the
-            // page is somewhere else: it is somewhere else because a link in it
-            // was followed, which is the whole point of it.
-            if sent != src {
-                self.navigate(&child, &src)
-                    .map_err(|error| anyhow::anyhow!("{error}"))?;
-            }
-            painted.insert(webview.node, self.painted(&child, inner)?);
-            if let Some(held) = self.pages.get_mut(page) {
-                held.mounted.insert(
-                    webview.node,
-                    crate::Mounted {
-                        page: child,
-                        src: src.clone(),
-                        area: crate::ElementBox {
-                            x: webview.x,
-                            y: webview.y,
-                            width: webview.width,
-                            height: webview.height,
-                        },
-                    },
-                );
-            }
-        }
-        Ok(painted)
+        let unit = self.compose(page, viewport)?;
+        Ok(crate::blitz::paint::svg(&unit, viewport))
     }
 
     /// Every picture the page refers to, read once.
@@ -182,7 +115,7 @@ impl Browser {
 
 impl Browser {
     /// What the page's own relative references resolve against.
-    fn base_url(&self, page: &PageId) -> Option<toy_browser_fetch::Url> {
+    pub(crate) fn base_url(&self, page: &PageId) -> Option<toy_browser_fetch::Url> {
         toy_browser_fetch::Url::parse(self.url(page)?).ok()
     }
 
@@ -228,15 +161,14 @@ impl Browser {
     fn remeasure_with_blitz(
         &mut self,
         page: &PageId,
-        keyed: &str,
         revision: u64,
         viewport: Viewport,
     ) -> Result<()> {
-        let base = self
-            .base_url(page)
-            .map(|url| url.to_string())
-            .unwrap_or_else(|| "about:blank".to_owned());
-        let laid_out = crate::blitz::lay_out(keyed, &[], viewport, &base, &self.resources)?;
+        // The same composition the picture is drawn from, so what the document
+        // says about a box is what was drawn. A measure that laid the page out
+        // on its own would report a `<webview>` as nothing at all, because what
+        // gives one its size is the page inside it.
+        let laid_out = self.compose(page, viewport)?.laid_out;
         if let Some(page) = self.pages.get_mut(page) {
             page.measured = Some(Measured {
                 revision,
@@ -275,7 +207,7 @@ impl Browser {
 
         let keyed = self.engine.html(session, Keyed::Yes)?;
         if crate::blitz::chosen() {
-            return self.remeasure_with_blitz(page, &keyed, revision, viewport);
+            return self.remeasure_with_blitz(page, revision, viewport);
         }
         let base = self.base_url(page);
         let sheets = crate::css::sheets(
