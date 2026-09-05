@@ -135,6 +135,10 @@ fn spelled(
     origin: f32,
 ) -> Option<Laid> {
     let (mut seen, mut start, mut end) = (0usize, None, 0usize);
+    // Where this piece begins, not where the run does. `visual_clusters` walks
+    // the whole underlying run — several glyph runs share one, a span at a time
+    // — so the clusters before this piece are somebody else's and their
+    // advances must not move this pen.
     let mut pen = origin + run.offset();
     let mut places = Vec::new();
     for cluster in run.run().visual_clusters() {
@@ -148,10 +152,8 @@ fn spelled(
                 .map_or(1, |text| text.chars().count().max(1));
             let step = cluster.advance() / letters as f32;
             places.extend((0..letters).map(|nth| pen + nth as f32 * step));
+            pen += cluster.advance();
         }
-        // Always, including clusters before the window: the pen walks the whole
-        // run, and where this piece of it starts depends on all of them.
-        pen += cluster.advance();
         seen += glyphs;
     }
     start.map(|start| Laid {

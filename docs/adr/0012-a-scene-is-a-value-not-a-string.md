@@ -59,14 +59,22 @@ consequence visible on the first render: Noto Serif turns `fi` into one glyph,
 and "filled" came out as "f illed". Positions are now computed per character
 from clusters.
 
-The corpus records a second consequence, and it is not obviously an improvement.
-On Hacker News the geometry is unchanged to the pixel, but colour disagreement
-with Chromium rose from 44 elements to 100. The cause is real and correct: the
-page's bold text is laid out in Liberation Sans **Bold**, and that is now the
-face it is painted in, where before every run was painted in Regular regardless
-of what layout measured. We are drawing the right face and disagreeing more.
-Whether Chromium's bold is lighter than ours, or the metric is reacting to ink
-rather than to error, is not yet known.
+The second thing it revealed was a mistake in this change rather than in the old
+one. Computing positions per character means walking clusters, and
+`visual_clusters` walks the *whole* underlying run — several glyph runs share
+one, a span at a time. Anchoring the pen at the piece's own offset and then
+accumulating advances from the run's beginning shifted every piece after the
+first. It showed up as colour disagreement on Hacker News rising from 44
+elements to 100, which read at first like a cost of painting the real face; it
+was not. The pen now advances only within the piece it belongs to, and the
+corpus is back where it was.
+
+That is worth recording because the first explanation was wrong in a
+particular way: the change had a plausible story attached to it — bold is now
+painted bold, so of course the ink moved — and the story was good enough to
+have been believed. The corpus is a ratchet precisely so that a number moving
+has to be explained rather than accepted, and this is the case it was built
+for.
 
 ## Alternatives
 
