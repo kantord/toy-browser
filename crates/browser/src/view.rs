@@ -69,7 +69,7 @@ impl Browser {
         let session = self.session(page)?;
         let html = self.engine.html(&session, Keyed::Yes)?;
         if crate::blitz::chosen() {
-            return pipeline::rasterized(self.painted(page, viewport)?);
+            return pipeline::from_scene(&self.painted(page, viewport)?);
         }
         let base = self.base_url(page);
         let measured = self.pages.get(page).and_then(|page| page.measured.as_ref());
@@ -88,11 +88,15 @@ impl Browser {
         )
     }
 
-    /// The page as SVG, with whatever is mounted in it drawn in the same
+    /// The page as a Scene, with whatever is mounted in it drawn in the same
     /// picture.
-    pub(crate) fn painted(&mut self, page: &PageId, viewport: Viewport) -> Result<String> {
+    pub(crate) fn painted(
+        &mut self,
+        page: &PageId,
+        viewport: Viewport,
+    ) -> Result<crate::scene::Scene> {
         let unit = self.compose(page, viewport)?;
-        Ok(crate::blitz::paint::svg(&unit, viewport))
+        Ok(crate::blitz::paint::scene(&unit, viewport, &self.resources))
     }
 
     /// Every picture the page refers to, read once.

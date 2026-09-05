@@ -32,18 +32,3 @@ pub(super) fn context() -> parley::FontContext {
 
 /// What `sans-serif` resolves to, in the order a browser would try them.
 const SANS_SERIF: &[&str] = &["Liberation Sans", "Arimo", "DejaVu Sans"];
-
-/// The same list, for the painter to hand the rasterizer.
-///
-/// A page asking for a font nobody has gets whatever `sans-serif` means, and
-/// layout has already decided that. Writing only what the page asked for leaves
-/// the rasterizer to decide again, and it does not decide the same way: Hacker
-/// News came out in Greek letters, because the only thing on this machine
-/// claiming to be Verdana was a symbol face.
-pub(crate) fn fallback() -> String {
-    SANS_SERIF
-        .iter()
-        .map(|name| format!("'{name}'"))
-        .collect::<Vec<_>>()
-        .join(", ")
-}

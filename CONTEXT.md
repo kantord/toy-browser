@@ -37,6 +37,36 @@ One element's rectangle after a Measure, in CSS pixels from the top-left of the
 document. Elements the layout produced no box for have none, not an empty one.
 _Avoid_: rect, bounds, geometry
 
+**Scene**:
+Everything one picture is made of, as a value rather than as text: the Marks to
+draw, and the Pictures and Faces they name. What a Render produces before there
+are any pixels. SVG is one way of writing a Scene down, never the Scene itself.
+_Avoid_: SVG, display list, canvas, output
+
+**Mark**:
+One thing drawn: an Area filled, glyphs set, a Picture placed, or a group of
+Marks clipped. The set of kinds is closed, so what can be drawn is a decision
+somebody made rather than whatever the last edit happened to emit.
+_Avoid_: element, shape, primitive, instruction
+
+**Area**:
+The rectangle a Mark covers, in the same coordinates as a Box. Distinct from a
+Box because a Mark need not belong to an element — the paper a page is drawn on
+belongs to none.
+_Avoid_: rect, box, frame
+
+**Picture**:
+An image a Scene draws, held as the bytes that were fetched and the format they
+are in. Named by its Digest, so the same image referred to twice is carried
+once.
+_Avoid_: asset, bitmap, texture
+
+**Face**:
+The exact font a Scene draws glyphs with, held as bytes. Named by its Digest,
+because a Scene that named a family would be asking to be resolved a second
+time — and two resolutions of one name are two chances to disagree.
+_Avoid_: font, family, typeface
+
 ### Scripting
 
 **Entry point**:
@@ -61,6 +91,12 @@ _Avoid_: empty page, failed render
 Bytes named by a URL. The same URL is the same Resource to every Session, which
 is what makes one cache worth having.
 _Avoid_: asset, file, subresource, response
+
+**Digest**:
+Bytes named by their own content rather than by where they came from. What a
+Scene calls a Picture or a Face, so that the same bytes are the same thing
+whether they arrived over http, from a file, or inside a data URL.
+_Avoid_: hash, id, key, handle — a Handle is a retained JavaScript value
 
 **Resources**:
 The one place bytes are fetched and remembered, shared by every Session in the

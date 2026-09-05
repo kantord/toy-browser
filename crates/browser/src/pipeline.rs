@@ -125,9 +125,15 @@ pub fn rasterize(svg: &str) -> Result<Vec<u8>> {
     Ok(to_png(svg.to_owned())?.png)
 }
 
-/// The same, keeping every artifact the caller might want.
-pub fn rasterized(svg: String) -> Result<Raster> {
-    to_png(svg)
+/// The same, for a Scene — which carries its own images and fonts, so nothing
+/// here has to find any.
+pub fn from_scene(scene: &crate::scene::Scene) -> Result<Raster> {
+    let rendered = crate::scene::render(scene)?;
+    Ok(Raster {
+        svg: rendered.svg,
+        png: rendered.png,
+        uniform_color: rendered.uniform_color,
+    })
 }
 
 /// The single color filling the pixmap, if there is one.

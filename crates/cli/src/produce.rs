@@ -16,6 +16,7 @@ use crate::{LayoutArgs, RenderArgs};
 pub fn layout(args: LayoutArgs) -> Result<()> {
     let source = std::fs::read_to_string(&args.input)?;
     let url = format!("file://{}", args.input.canonicalize()?.display());
+    let resources = Resources::new();
     let laid_out = toy_browser::lay_out(
         &source,
         &[],
@@ -24,7 +25,7 @@ pub fn layout(args: LayoutArgs) -> Result<()> {
             height: Some(args.height),
         },
         &url,
-        &Resources::new(),
+        &resources,
     )?;
     if let Some(parent) = args.out.parent() {
         std::fs::create_dir_all(parent)?;
@@ -33,26 +34,41 @@ pub fn layout(args: LayoutArgs) -> Result<()> {
     std::fs::write(&args.out, serde_json::to_vec_pretty(&export)?)?;
     let count = export["nodes"].as_array().map_or(0, Vec::len);
     if let Some(into) = &args.paint {
-        let viewport = Viewport {
-            width: args.width,
-            height: None,
-        };
-        let alone = toy_browser::blitz::Composed {
-            laid_out,
-            mounted: Default::default(),
-        };
-        let svg = toy_browser::blitz::paint::svg(&alone, viewport);
-        std::fs::write(into, &svg)?;
-        let png = into.with_extension("png");
-        std::fs::write(&png, toy_browser::rasterize(&svg)?)?;
-        println!(
-            "painted {} ({} bytes) and {}",
-            into.display(),
-            svg.len(),
-            png.display()
-        );
+        painted(laid_out, into, args.width, &resources)?;
     }
     println!("laid out {count} elements into {}", args.out.display());
+    Ok(())
+}
+
+/// Paints one laid-out page on its own, for a reader rather than for a Browser.
+///
+/// The export, not the normal form: this file is written to be opened, and what
+/// a reader wants is the page rather than a list of Digests.
+fn painted(
+    laid_out: toy_browser::LaidOut,
+    into: &std::path::Path,
+    width: u32,
+    resources: &Resources,
+) -> Result<()> {
+    let viewport = Viewport {
+        width,
+        height: None,
+    };
+    let alone = toy_browser::blitz::Composed {
+        laid_out,
+        mounted: Default::default(),
+    };
+    let scene = toy_browser::blitz::paint::scene(&alone, viewport, resources);
+    let rendered = toy_browser::render_scene(&scene)?;
+    std::fs::write(into, &rendered.svg)?;
+    let png = into.with_extension("png");
+    std::fs::write(&png, &rendered.png)?;
+    println!(
+        "painted {} ({} bytes) and {}",
+        into.display(),
+        rendered.svg.len(),
+        png.display()
+    );
     Ok(())
 }
 

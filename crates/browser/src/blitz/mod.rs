@@ -38,8 +38,13 @@ pub mod paint;
 /// The browser engine, unless asked for the other one. It was the other way
 /// round while the two were being compared, and the corpus settled it: across
 /// every case the total disagreement with Chromium went from 262,120px to
-/// 36,748px. `TOY_BROWSER_ENGINE=takumi` still gets the old path, because a
-/// number that large deserves to stay checkable.
+/// 36,748px.
+///
+/// **`TOY_BROWSER_ENGINE=takumi` is deprecated and is being removed.** It still
+/// works today so that the number above stays checkable while the Scene work
+/// lands, but it cannot follow: takumi produces SVG text of its own, and a
+/// Scene is a value that SVG is only one writing of. An engine that emits
+/// finished markup has nowhere to put a Picture that is named by its Digest.
 pub fn chosen() -> bool {
     !std::env::var("TOY_BROWSER_ENGINE").is_ok_and(|which| which == "takumi")
 }

@@ -4,6 +4,13 @@ This browser lays a page out with `blitz-dom` and paints it itself, to SVG.
 `TOY_BROWSER_ENGINE=takumi` still gets the renderer that came before, because the
 change was large enough that being able to check it matters.
 
+> **takumi is deprecated and is being removed.** It works today, and the corpus
+> comparison below still runs, but it will not survive the move to a Scene —
+> see `docs/adr/0012-a-scene-is-a-value-not-a-string.md`. A Scene names its
+> images and fonts by content and hands the bytes to the rasterizer; takumi
+> emits finished SVG text instead, which is exactly the arrangement being
+> removed. Nothing new should be built against it, and `--font` goes with it.
+
 ## Why it changed
 
 `TAKUMI-ISSUES.md` lists fourteen findings. Eight are one of two sentences:

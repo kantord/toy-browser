@@ -4643,6 +4643,7 @@ name = "toy-browser"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "blitz-dom",
  "blitz-html",
  "blitz-traits",
@@ -4657,6 +4658,7 @@ dependencies = [
  "toy-browser-fetch",
  "ureq",
  "url",
+ "xxhash-rust",
 ]
 
 [[package]]

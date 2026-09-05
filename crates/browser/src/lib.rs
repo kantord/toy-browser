@@ -20,6 +20,8 @@ mod measure;
 mod navigate;
 mod pipeline;
 mod pointer;
+mod scene;
+
 mod script;
 mod tables;
 mod view;
@@ -33,6 +35,7 @@ use toy_browser_engine::{Engine, Handle, SessionId};
 pub use blitz::{LaidOut, lay_out};
 pub use navigate::{Loaded, NavigationError};
 pub use pipeline::{Raster, Viewport, rasterize};
+pub use scene::{Rendered, render as render_scene};
 pub use toy_browser_engine::{Budget, ElementBox, NodeId, Point, ScriptSurvey};
 pub use toy_browser_fetch::{Resources, Url};
 
