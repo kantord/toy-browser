@@ -8,8 +8,8 @@ Where it stood when this was written:
 
 | | tests |
 |---|---|
-| pass | 353 |
-| fail | 436 |
+| pass | 362 |
+| fail | 427 |
 | error | 24 |
 | timeout | 1 |
 
@@ -25,6 +25,9 @@ reason, and it is not the border: an `<iframe>` has no intrinsic size here, so
 `width: auto` fills the parent instead of falling back to 300×150. The scoreboard
 went down by two and the suite started measuring something real. `GAPS.md` 2
 records it.
+
+Installing Ahem then took it to **362**. All nine gained tests use it, which is
+as clean an attribution as this suite gives.
 
 ## How this was worked out
 
@@ -135,7 +138,10 @@ Around 80 tests across the `block-in-inline-*` families. This is real layout
 work rather than a missing paint call, and it is the largest of the categories
 that is.
 
-## 4. The Ahem font is not installed
+## 4. The Ahem font is not installed — *fixed*
+
+> `--install-fonts`, plus `fonts` in the sparse checkout. 353 → 362.
+
 
 Ahem is the suite's instrument: every glyph is a solid square, the ascent is
 exactly 0.8em and the descent 0.2em, so a test can state a position in glyphs
@@ -144,9 +150,10 @@ asking for it gets Liberation Sans — different shapes and, worse, different
 metrics. Tests written against Ahem are then wrong in *layout*, not only in
 appearance.
 
-- 74 failures use Ahem, against 42 passes — a **64%** failure rate.
-- Cheapest fix here by a distance: install it in the image, the way the suite
-  expects. It is not a code change at all.
+- 74 failures used Ahem, against 42 passes — a **64%** failure rate. Now 65
+  against 51, a 56% rate: still the hardest tests in the directory, because what
+  remains wrong in them is layout.
+- Cheapest fix here by a distance, and not a code change at all.
 
 ## 5. Line box geometry drifts vertically
 

@@ -93,8 +93,9 @@ runs:
 
 # --- the web platform tests ---
 
-# Build the image the suite runs in. Once, and again when the Containerfile
-# changes.
+# Build the image the suite runs in. `wpt` depends on this, so it is rebuilt
+# whenever the Containerfile or the entrypoint changes — podman does nothing
+# when neither has. Running it by hand is only for forcing the issue.
 wpt-image:
     podman build -t toy-browser-wpt {{ justfile_directory() }}/tests/wpt
 
@@ -107,7 +108,11 @@ wpt-image:
 #
 # The suite and the build cache live in named volumes, so a second run does not
 # fetch 135MB or compile from scratch again.
-wpt tests="css/CSS2/normal-flow":
+#
+# Depends on the image, because the entrypoint lives inside it: editing that
+# script and running this without a rebuild gives a full, clean, wrong answer
+# from the previous version of it.
+wpt tests="css/CSS2/normal-flow": wpt-image
     podman run --rm -it \
         -v {{ justfile_directory() }}:/repo:Z \
         -v toy-browser-wpt-suite:/wpt \

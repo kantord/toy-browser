@@ -86,22 +86,26 @@ is the first question to answer.
 
 ---
 
-## 4. The Ahem font is not installed
+## 4. The Ahem font — *installed*
 
-**What happens.** Ahem is the suite's measuring instrument: every glyph is a
-solid square, the ascent is exactly 0.8em and the descent 0.2em, so a test can
-state a position in glyphs and mean it in pixels. `fc-list` finds no Ahem in the
-container, so a page asking for it is given Liberation Sans — different shapes
-and, worse, different metrics. Tests written against Ahem come out wrong in
-*layout*, not merely in appearance.
+**Done.** `tests/wpt/entrypoint.sh` now checks out the suite's `fonts` directory
+and passes `--install-fonts`, which puts Ahem where fontconfig will find it for
+the length of a run. 353 → 362, and every one of the nine gained tests uses
+Ahem: its failure rate went 64% → 56%.
 
-**Size.** 74 failures use Ahem against 42 passes: a 64% failure rate.
+Still above the 32% baseline, which is the useful part of the number. Ahem tests
+state a position in glyphs and mean it in pixels, so what is left failing is
+layout — gaps 3 and 5 — measured honestly for the first time rather than against
+a substituted face.
 
-**What it needs.** Installing the font in `tests/wpt/Containerfile`, which is
-what the suite expects of a browser under test. Not a code change, and the
-cheapest item here by a distance.
+Two things this cost, both now fixed:
 
----
+- The suite's checkout is sparse, and `sparse-checkout set` used to run only on
+  the first fetch. A path added later stayed missing, silently.
+- `just wpt` did not depend on `just wpt-image`, and the entrypoint lives inside
+  the image. Editing that script and running the suite gave a complete, clean,
+  wrong answer from the previous version of it — which is exactly what happened
+  here, and read as "Ahem changed nothing".
 
 ## 5. Line box geometry drifts vertically
 
@@ -170,9 +174,9 @@ input fails saying so.
 
 ## Order worth taking them in
 
-1. **Install Ahem** — not a code change, and it corrects layout rather than
-   only paint.
-2. **Block-in-inline** — the largest piece of genuine layout work.
+1. **Block-in-inline** — the largest piece of genuine layout work, and now the
+   biggest bucket left.
+2. **A replaced element's intrinsic size** — 15 tests, precisely diagnosed.
 3. **Line height from font metrics** — removes a tuned constant.
 4. **Outlines**, whenever a directory that uses them is being measured.
 
