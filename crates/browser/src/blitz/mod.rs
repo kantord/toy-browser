@@ -18,7 +18,7 @@ use anyhow::Result;
 use blitz_dom::{BaseDocument, DocumentConfig, Node};
 use blitz_traits::shell::{ColorScheme, Viewport as BlitzViewport};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use toy_browser_engine::{ElementBox, key_of};
 
@@ -251,17 +251,52 @@ impl LaidOut {
     /// under them in the wrong place.
     pub fn walk(&self, visit: &mut impl FnMut(&Node, f32, f32)) {
         let root = self.document.root_element().id;
-        self.descend(root, visit);
+        self.descend(root, &mut HashSet::new(), visit);
     }
 
-    fn descend(&self, id: usize, visit: &mut impl FnMut(&Node, f32, f32)) {
+    /// Down the *paint* tree, not the DOM.
+    ///
+    /// They are not the same tree. A block inside an inline splits it, and the
+    /// pieces either side become anonymous blocks that hold the inline content
+    /// — boxes with no element, which no DOM child list mentions. Walking
+    /// `children` visits the block and neither piece, which is why
+    /// `<span>one<div>two</div>three</span>` drew "two" and lost "one" and
+    /// "three": the space for them was laid out correctly and nothing looked in
+    /// the box that held them.
+    ///
+    /// `paint_children` is also z-sorted, which is the order marks belong in
+    /// anyway.
+    ///
+    /// Both lists, because neither contains the other. An inline root keeps its
+    /// inline elements inside its own text layout rather than in
+    /// `paint_children`, and those elements are where an inline `<span>`'s box
+    /// and computed style get recovered from. Walking only the paint tree loses
+    /// them; walking only the DOM loses the anonymous blocks. Paint order
+    /// first, then whatever the DOM has that it did not mention.
+    ///
+    /// `seen` is what makes taking both safe. Comparing the two child lists is
+    /// not enough: an element can sit in the DOM list here *and* somewhere under
+    /// an anonymous box in the paint list, which is two paths to one node rather
+    /// than two nodes. On Hacker News that drew 484 of 1904 pieces of text
+    /// twice — invisible in a screenshot, and plain in the ink.
+    fn descend(
+        &self,
+        id: usize,
+        seen: &mut HashSet<usize>,
+        visit: &mut impl FnMut(&Node, f32, f32),
+    ) {
+        if !seen.insert(id) {
+            return;
+        }
         let Some(node) = self.document.get_node(id) else {
             return;
         };
         let at = node.absolute_position(0.0, 0.0);
         visit(node, at.x, at.y);
-        for child in &node.children {
-            self.descend(*child, visit);
+        let painted = node.paint_children.borrow();
+        let painted = painted.as_deref().unwrap_or_default();
+        for child in painted.iter().chain(&node.children) {
+            self.descend(*child, seen, visit);
         }
     }
 }

@@ -8,8 +8,8 @@ Where it stood when this was written:
 
 | | tests |
 |---|---|
-| pass | 362 |
-| fail | 427 |
+| pass | 371 |
+| fail | 418 |
 | error | 24 |
 | timeout | 1 |
 
@@ -28,6 +28,10 @@ records it.
 
 Installing Ahem then took it to **362**. All nine gained tests use it, which is
 as clean an attribution as this suite gives.
+
+Block-in-inline took it to **371** — nine won, none lost. That one turned out
+not to be a layout bug at all: the anonymous boxes existed and were laid out
+correctly, and the painter walked the DOM, which does not mention them.
 
 ## How this was worked out
 
@@ -118,7 +122,12 @@ geometry, and it still fails.
 The fix was to stop naming and start carrying: a Scene holds the bytes, and the
 rasterizer is handed them rather than sent to find them.
 
-## 3. A block inside an inline does not split it
+## 3. A block inside an inline does not split it — *fixed, and misdiagnosed*
+
+> It splits fine. The painter walked `node.children`, and the anonymous boxes
+> that hold the split pieces belong to no element. Walking `paint_children` too
+> fixed it. Kept as written: the evidence was right and the conclusion drawn
+> from it was wrong, which is worth remembering.
 
 When an inline box contains a block box, the inline must be broken around it and
 anonymous block boxes created either side. This does not happen.

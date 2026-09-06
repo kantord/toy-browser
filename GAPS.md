@@ -63,28 +63,25 @@ sheets in these tests set `width: auto` explicitly, which would beat it.
 
 ---
 
-## 3. A block inside an inline does not split it
+## 3. A block inside an inline — *fixed*
 
-**What happens.** When an inline box contains a block box, the inline must be
-broken around it and anonymous block boxes generated either side. It is not.
-`block-in-inline-insert-001a` is a `<span>` holding a mixture of spans and
-divs, and we draw only the divs — every inline sibling disappears.
-`block-in-inline-empty-001` shows the same cause more quietly: the one glyph is
-in the right column and five pixels too low.
+**Done, and it was never a layout bug.** blitz splits the inline and builds the
+anonymous blocks correctly; the painter walked `node.children` and those boxes
+belong to no element, so no DOM child list mentions them. The space was reserved
+and nothing looked in it. `LaidOut::descend` now walks `paint_children` — which
+is also z-sorted, the order marks belong in — as well as the DOM.
 
-**Size.** Around 80 tests.
+362 → 371 in `css/CSS2/normal-flow`, **9 won and 0 lost**. On Hacker News the
+footer nav links went from no box at all, 234–525px out, to 6.66px out, and the
+page's total disagreement fell 36,383px → 33,121px.
 
-| family | fail | pass |
-|---|---|---|
-| `block-in-inline-remove` | 17 | 0 |
-| `block-in-inline-insert` | 46 | 22 |
-| `block-formatting-contexts` | 12 | 1 |
-
-**What it needs.** Real layout work in the box tree, not a paint call — the
-largest genuine layout item on this list. Whether it belongs to us or to blitz
-is the first question to answer.
-
----
+**What it cost to get right.** Taking both trees means a node can be reached
+twice — directly, and again under an anonymous box. The first attempt compared
+the two child lists, which only catches an immediate repeat, and drew 484 of
+Hacker News's 1,904 pieces of text twice. Invisible in a screenshot; plain in
+the ink, where colour disagreement jumped 44 elements to 66. The walk now
+remembers what it has visited. `crates/browser/tests/block_in_inline.rs` pins
+all three properties, including that one.
 
 ## 4. The Ahem font — *installed*
 
@@ -174,10 +171,10 @@ input fails saying so.
 
 ## Order worth taking them in
 
-1. **Block-in-inline** — the largest piece of genuine layout work, and now the
-   biggest bucket left.
-2. **A replaced element's intrinsic size** — 15 tests, precisely diagnosed.
-3. **Line height from font metrics** — removes a tuned constant.
+1. **A replaced element's intrinsic size** — 15 tests, precisely diagnosed.
+2. **Line height from font metrics** — removes a tuned constant, and now that
+   Ahem is installed the effect is measurable.
+3. **Tables**, the largest bucket left with a known cause.
 4. **Outlines**, whenever a directory that uses them is being measured.
 
 Then the rest as they start blocking whatever is being measured next.
