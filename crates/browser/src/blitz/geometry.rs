@@ -81,7 +81,13 @@ impl LaidOut {
                     let parley::layout::PositionedLayoutItem::GlyphRun(run) = item else {
                         continue;
                     };
-                    let metrics = line.metrics();
+                    // The run's own metrics, not the line's. A line is as tall
+                    // as the tallest thing on it; an inline element is as tall
+                    // as *its* font's ascent and descent, whatever it shares a
+                    // line with. Taking the line's gave every `(bbc.com)` on
+                    // Hacker News the height of the headline beside it — 14.9px
+                    // against Chromium's 12, on 60 elements at once.
+                    let metrics = run.run().metrics();
                     let around = Around::of(
                         x + run.offset(),
                         y + run.baseline() - metrics.ascent,

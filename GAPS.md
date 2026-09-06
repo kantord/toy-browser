@@ -108,41 +108,47 @@ Two things this cost, both now fixed:
   wrong answer from the previous version of it — which is exactly what happened
   here, and read as "Ahem changed nothing".
 
-## 5. Line box geometry drifts vertically — *investigated, not fixed*
+## 5. Line box geometry — *understood*
 
-**The cause is known and is one line upstream.** A browser computes
-`line-height: normal` from the font's own metrics. parley offers exactly that as
-`LineHeight::MetricsRelative`; blitz maps `normal` to `FontSizeRelative(1.2)`
-instead, in `stylo_to_parley.rs`. From outside blitz the only lever is a CSS
-number, and CSS cannot vary one by the face an element resolved to.
+**The constant was never tuned.** `1.08` is Liberation Sans's OS/2 **sTypo**
+line spacing, 1.0884. Nobody had written down which of a font's three answers it
+came from, so it read as a magic number for as long as it has existed:
 
-**Both alternatives were measured, and neither is better.**
-
-Liberation Sans's own metrics give 1.1499 where the tuned constant says 1.08.
-Substituting it moves the corpus like this:
-
-| case | 1.08 | 1.15 |
+| table | Liberation Sans | at 13.33px |
 |---|---|---|
-| `044-center-block` | 5.00px | **0** |
-| `074-font-liberation` | 3.00px | **0** |
-| `0820-lineheight-20px` | 15.00px | 12.00px |
-| `070`/`071-font-size` | 6.00px | 3.00px |
-| `900-hackernews` | 33,120px | **37,290px** |
+| `hhea` (ascent − descent + gap) | 1.1499 | 15.33 |
+| `OS/2` usWin (ascent + descent) | **1.1172** | 14.90 |
+| `OS/2` sTypo | **1.0884** | 14.51 |
 
-Ten cases improve, several to exact agreement, and the one real page gets 4,169px
-worse — which dominates. WPT is indifferent: 371 either way. Why Hacker News
-prefers the wrong number is not understood, and is the thread to pull next.
+**Chromium uses usWin for plain text.** `074-font-liberation` — Liberation Sans
+at 13.333px — goes from 3.00px out to **exactly 0** when the factor is 1.1172,
+as do `044-center-block` and, at 16px, everything else in the corpus that is a
+paragraph of text. That is the principled value and it is measurable.
 
-**A second theory, tested and wrong.** `fc-match` reports that both `Verdana`
-and `sans-serif` resolve to Noto Sans on this machine, so `fonts.rs` pinning
-`sans-serif` to Liberation Sans looked like the reason our line boxes disagree.
-Removing the pin made the corpus nearly twice as bad — Hacker News 33,120px to
-59,954px. Playwright's Chromium does not resolve the way the system fontconfig
-does, and the pin is right.
+**Hacker News prefers 1.08 because of a different bug.** Per element, 38 of the
+49 it affects match sTypo and 11 match usWin — so the page really does want the
+smaller number. It wants it for the wrong reason. Six of its `<td>`s are badly
+mis-sized in a way line-height cannot touch:
 
-**What it needs.** `MetricsRelative` upstream. Nothing worth changing here until
-then: every single number is wrong somewhere, and 1.08 is wrong in the fewest
-places we can measure.
+```
+ours [32, 10, 557, 10]     theirs [34, 10, 708.19, 20]
+ours [589, 10, 213, 20]    theirs [742.19, 10, 59.81, 20]
+```
+
+That is gap 6 — blitz's distribution of a table's spare width. A shorter line
+partly cancels it, so the corpus total prefers a line-height we can prove is
+wrong for the very same font at the very same size in isolation. **It is a
+compensating error**, which is precisely what a ratchet on one aggregate number
+cannot see and what comparing a case in isolation can.
+
+**What it needs.** Fix the table columns first; then 1.1172 should win
+everywhere and the corpus will be able to say so. Changing the number before
+that trades ten cases that go exactly right for one page that goes 1,552px
+wrong, and hides the table bug deeper.
+
+Upstream, the real fix stays what it was: parley offers
+`LineHeight::MetricsRelative` and blitz maps `normal` to `FontSizeRelative(1.2)`
+in `stylo_to_parley.rs`, so no per-face answer is reachable from out here at all.
 
 ---
 
@@ -192,10 +198,11 @@ input fails saying so.
 
 ## Order worth taking them in
 
-1. **Find out why Hacker News prefers the wrong line-height number.** It is the
-   loose thread from gap 5, it is the one real page in the corpus, and until it
-   is understood the corpus cannot arbitrate a change that helps ten other cases.
-2. **Tables** — the largest bucket left with a known cause, 31 fail / 23 pass.
+1. **Tables** — 31 fail / 23 pass, and now known to be holding two things
+   hostage: its own bucket, and the line-height constant that cannot be
+   corrected until the compensating error is gone.
+2. **Then set line-height to the face's usWin metric**, which is provably right
+   for plain text and blocked only by the above.
 3. **Outlines**, whenever a directory that uses them is being measured.
 4. **Upstream**: `LineHeight::MetricsRelative` and the replaced-element tag list
    are both one-line fixes in blitz that we cannot make from here.
