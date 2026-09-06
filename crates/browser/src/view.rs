@@ -6,11 +6,8 @@
 //! has moved on.
 
 use anyhow::Result;
-use toy_browser_engine::Keyed;
 
-use crate::{
-    Browser, Measured, NodeId, PageId, Point, Remote, Viewport, css::Linked, measure, pipeline,
-};
+use crate::{Browser, Measured, NodeId, PageId, Point, Remote, Rendered, Viewport};
 
 impl Browser {
     /// Where an element sits, measured at the page's current viewport.
@@ -52,40 +49,15 @@ impl Browser {
     }
 
     /// Renders the page and keeps every intermediate artifact.
-    pub fn render(&mut self, page: &PageId) -> Result<pipeline::Raster> {
+    pub fn render(&mut self, page: &PageId) -> Result<Rendered> {
         self.sync(page)?;
         let viewport = self.viewport(page);
         self.draw(page, viewport)
     }
 
-    /// Renders with the rules the last Measure worked out, so the picture is
-    /// laid out the way the geometry says it is.
-    ///
-    /// From the **keyed** markup, because those rules name elements by their
-    /// marker class. Rendering the unkeyed form instead leaves every one of them
-    /// matching nothing: the measurement moves and the picture does not, which
-    /// looks exactly like a change that had no effect.
-    fn draw(&mut self, page: &PageId, viewport: Viewport) -> Result<pipeline::Raster> {
-        let session = self.session(page)?;
-        let html = self.engine.html(&session, Keyed::Yes)?;
-        if crate::blitz::chosen() {
-            return pipeline::from_scene(&self.painted(page, viewport)?);
-        }
-        let base = self.base_url(page);
-        let measured = self.pages.get(page).and_then(|page| page.measured.as_ref());
-        let tables = measured.map(|it| it.tables.clone()).unwrap_or_default();
-        let pictures = measured.map(|it| it.pictures.clone()).unwrap_or_default();
-        pipeline::render(
-            &html,
-            &self.fonts,
-            viewport,
-            Linked {
-                base: base.as_ref(),
-                resources: &self.resources,
-            },
-            &tables,
-            pictures,
-        )
+    /// Renders the page as a Scene and rasterizes it.
+    fn draw(&mut self, page: &PageId, viewport: Viewport) -> Result<Rendered> {
+        crate::scene::render(&self.painted(page, viewport)?)
     }
 
     /// The page as a Scene, with whatever is mounted in it drawn in the same
@@ -97,23 +69,6 @@ impl Browser {
     ) -> Result<crate::scene::Scene> {
         let unit = self.compose(page, viewport)?;
         Ok(crate::blitz::paint::scene(&unit, viewport, &self.resources))
-    }
-
-    /// Every picture the page refers to, read once.
-    fn pictures(
-        &mut self,
-        session: &toy_browser_engine::SessionId,
-        base: Option<&toy_browser_fetch::Url>,
-        sheets: &[String],
-    ) -> Result<crate::images::Pictures> {
-        let mut sources = Vec::new();
-        for image in self.engine.query(session, "img[src]")? {
-            if let Some(src) = self.engine.attribute(session, image, "src")? {
-                sources.push(src);
-            }
-        }
-        sources.extend(crate::css::referenced(sheets));
-        Ok(crate::images::load(&sources, base, &self.resources))
     }
 }
 
@@ -139,7 +94,7 @@ impl Browser {
             return Ok(());
         };
 
-        self.remeasure_if_stale(page, &session, revision, viewport)?;
+        self.remeasure_if_stale(page, revision, viewport)?;
 
         let measured = self.pages.get(page).and_then(|page| page.measured.as_ref());
         let boxes = measured.map(|it| it.boxes.clone()).unwrap_or_default();
@@ -180,8 +135,6 @@ impl Browser {
                 height: viewport.height,
                 boxes: laid_out.boxes(),
                 styles: laid_out.styles(),
-                tables: String::new(),
-                pictures: crate::images::Pictures::default(),
             });
         }
         Ok(())
@@ -192,7 +145,6 @@ impl Browser {
     fn remeasure_if_stale(
         &mut self,
         page: &PageId,
-        session: &toy_browser_engine::SessionId,
         revision: u64,
         viewport: Viewport,
     ) -> Result<()> {
@@ -209,32 +161,6 @@ impl Browser {
             return Ok(());
         }
 
-        let keyed = self.engine.html(session, Keyed::Yes)?;
-        if crate::blitz::chosen() {
-            return self.remeasure_with_blitz(page, revision, viewport);
-        }
-        let base = self.base_url(page);
-        let sheets = crate::css::sheets(
-            &keyed,
-            Linked {
-                base: base.as_ref(),
-                resources: &self.resources,
-            },
-        );
-        let said = self.table_attributes(session)?;
-        let pictures = self.pictures(session, base.as_ref(), &sheets)?;
-        let measured = measure::boxes(&keyed, &sheets, &self.fonts, viewport, &said, &pictures)?;
-        if let Some(page) = self.pages.get_mut(page) {
-            page.measured = Some(Measured {
-                revision,
-                width: viewport.width,
-                height: viewport.height,
-                boxes: measured.boxes,
-                styles: measured.styles,
-                tables: measured.tables,
-                pictures,
-            });
-        }
-        Ok(())
+        self.remeasure_with_blitz(page, revision, viewport)
     }
 }

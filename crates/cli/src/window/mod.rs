@@ -25,7 +25,7 @@ const NOTCH: f32 = 60.0;
 
 /// Opens a window showing `url`, and does not return until it is closed.
 pub fn open(url: &str, width: u32, height: u32) -> Result<()> {
-    let mut browser = Browser::new(Resources::new(), &[])?;
+    let mut browser = Browser::new(Resources::new())?;
     let page = browser.new_page()?;
     browser.set_viewport(
         &page,

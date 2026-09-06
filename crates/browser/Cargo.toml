@@ -17,9 +17,6 @@ serde_json.workspace = true
 toy-browser-engine.workspace = true
 toy-browser-fetch.workspace = true
 resvg = "0.48.1"
-takumi-core = "0.21.0"
-takumi-html = "0.2.1"
-takumi-svg = "0.3.17"
 url = "2.5.8"
 xxhash-rust = { version = "0.8.18", features = ["xxh3"] }
 base64 = "0.22"

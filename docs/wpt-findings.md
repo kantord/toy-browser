@@ -8,16 +8,23 @@ Where it stood when this was written:
 
 | | tests |
 |---|---|
-| pass | 355 |
-| fail | 434 |
+| pass | 353 |
+| fail | 436 |
 | error | 24 |
 | timeout | 1 |
 
-It started this session at 82 passing. Three fixes account for the rest: the
-canvas being painted at the root box's size rather than the picture's
-(82 → 333), the XHTML parse dropping everything after the first `</script>`
-(333 → 355, and 46 timeouts → 1), and the WebDriver window commands a runner
-needs.
+It started this session at 82 passing. The canvas being painted at the root
+box's size rather than the picture's took it to 333; the XHTML parse dropping
+everything after the first `</script>` took it to 355 and 46 timeouts to 1.
+
+Then borders took it **down** to 353, which is the more interesting number.
+Painting them won 13 tests that could not have passed without them and lost 15
+that had been passing *vacuously* — "test passes if there is no red" cases that
+passed because we painted no red, and no anything. Those 15 now fail for a true
+reason, and it is not the border: an `<iframe>` has no intrinsic size here, so
+`width: auto` fills the parent instead of falling back to 300×150. The scoreboard
+went down by two and the suite started measuring something real. `GAPS.md` 2
+records it.
 
 ## How this was worked out
 
@@ -43,9 +50,12 @@ never by correlation alone.
 The categories overlap. A test can use a border, an image and Ahem at once, so
 the counts do not add to 434 and fixing one does not recover its full count.
 
-## 1. Borders and outlines are never painted
+## 1. Borders and outlines are never painted — *borders now are*
 
-The painter emits three things: background rectangles, images, and text. There
+> Fixed for borders in `blitz/paint/edges.rs`; outlines are still missing. Kept
+> as written because the reasoning is what made it the first thing to do.
+
+The painter emitted three things: background rectangles, images, and text. There
 is no border in `paint/mod.rs` at all, and no outline.
 
 ```
@@ -68,12 +78,15 @@ we do paint. One side is blank, the other is not.
   Baseline: 32%.
 - 132 failures (30%) are "the test paints fewer boxes than its reference".
 
-The largest single category, and the one whose fix is most contained: borders
+The largest single category, and the one whose fix was most contained: borders
 are a layout output blitz already computes, and drawing them is four rectangles.
 
-## 2. Images on an http page are dropped when rasterizing
+## 2. Images on an http page are dropped when rasterizing — *fixed*
 
-The painter writes `<image href="...">` with the reference the page used,
+> Fixed by making a Scene carry its own pictures and faces; see
+> `docs/adr/0012-a-scene-is-a-value-not-a-string.md`.
+
+The painter wrote `<image href="...">` with the reference the page used,
 deliberately, so the SVG stays small and readable. resvg is then expected to
 resolve it. It cannot:
 
@@ -99,8 +112,8 @@ geometry, and it still fails.
   confined to tests that are *about* images.
 - It also affects any render of a live site, not only the suite.
 
-The fix is an `ImageHrefResolver` that reads through `toy_browser_fetch`, which
-already has the bytes cached from layout.
+The fix was to stop naming and start carrying: a Scene holds the bytes, and the
+rasterizer is handed them rather than sent to find them.
 
 ## 3. A block inside an inline does not split it
 

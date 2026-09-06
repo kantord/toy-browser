@@ -200,7 +200,7 @@ carelessly would make things worse: it reads only `display`, `visibility` and
 `cursor`, and it calls `element.checkVisibility()` *only if that exists*, so
 defining either badly turns a passing check into a failing one.
 
-There is a path when it is wanted. takumi computes a `ComputedStyle` per node
+There is a path when it is wanted. The cascade computes a style per node
 and `measure.rs` already walks those nodes, so style could ride the same
 marker-class join the boxes do — `Environment` gaining a `styles` map beside
 `boxes`.

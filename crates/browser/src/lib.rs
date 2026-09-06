@@ -9,32 +9,23 @@
 //! [`navigate`] loads a document, [`script`] runs JavaScript, [`dom`] reads the
 //! document, [`view`] measures and renders it.
 
-mod asked;
 pub mod blitz;
-mod css;
 mod dom;
-mod fonts;
 mod frames;
-mod images;
-mod measure;
 mod navigate;
-mod pipeline;
 mod pointer;
 mod scene;
 
 mod script;
-mod tables;
 mod view;
 
 use std::collections::HashMap;
 
 use anyhow::Result;
-use takumi_core::Fonts;
 use toy_browser_engine::{Engine, Handle, SessionId};
 
 pub use blitz::{LaidOut, lay_out};
 pub use navigate::{Loaded, NavigationError};
-pub use pipeline::{Raster, Viewport, rasterize};
 pub use scene::{Rendered, render as render_scene};
 pub use toy_browser_engine::{Budget, ElementBox, NodeId, Point, ScriptSurvey};
 pub use toy_browser_fetch::{Resources, Url};
@@ -116,15 +107,9 @@ struct Measured {
     revision: u64,
     width: u32,
     height: Option<u32>,
-    boxes: measure::Boxes,
+    boxes: toy_browser_engine::Boxes,
     /// What each element's style computed to, published with the boxes.
-    styles: measure::Styles,
-    /// What measuring worked out that the markup did not say. The render is
-    /// given the same ones.
-    tables: String,
-    /// The pictures the page refers to, read once and used by both the measure
-    /// and the render.
-    pictures: images::Pictures,
+    styles: toy_browser_engine::Styles,
 }
 
 /// Pages, and everything needed to drive them.
@@ -135,27 +120,17 @@ struct Measured {
 pub struct Browser {
     engine: Engine,
     resources: Resources,
-    fonts: Fonts,
     pages: HashMap<PageId, Page>,
     next_id: u32,
 }
 
 impl Browser {
-    /// `font_files` are registered for layout; empty auto-detects a system
-    /// sans-serif, because takumi loads no fonts of its own.
-    pub fn new(resources: Resources, font_files: &[std::path::PathBuf]) -> Result<Self> {
+    pub fn new(resources: Resources) -> Result<Self> {
         Ok(Self {
             // The same cache, not another one: the engine reads scripts and
             // modules, which is most of what a page pulls.
             engine: Engine::with_resources(resources.clone()),
             resources,
-            // Only the older renderer reads these, and finding a system font
-            // means scanning for one. A browser that is not going to lay
-            // anything out with it should not pay for that at startup.
-            fonts: match blitz::chosen() {
-                true => Fonts::default(),
-                false => fonts::load(font_files)?,
-            },
             pages: HashMap::new(),
             next_id: 0,
         })
@@ -235,5 +210,26 @@ impl Browser {
             .get(page)
             .map(|page| page.session.clone())
             .ok_or_else(|| anyhow::anyhow!("no such page"))
+    }
+}
+
+/// The size a document is laid out and rendered at.
+#[derive(Clone, Copy)]
+pub struct Viewport {
+    pub width: u32,
+    /// Height in px; `None` lets the layout size the output to its content.
+    pub height: Option<u32>,
+}
+
+impl Viewport {
+    pub const DEFAULT_WIDTH: u32 = 800;
+}
+
+impl Default for Viewport {
+    fn default() -> Self {
+        Self {
+            width: Self::DEFAULT_WIDTH,
+            height: None,
+        }
     }
 }

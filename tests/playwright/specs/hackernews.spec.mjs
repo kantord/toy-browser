@@ -68,7 +68,7 @@ test("clicking the logo goes back to the front page", async () => {
 });
 
 // The nav bar — new, past, comments, ask, show, jobs — is text links, and an
-// inline element has no box in this browser: takumi's paint items are nodes and
+// inline element has no box in this browser: paint items are nodes and
 // nested contexts with nothing for a text run, so `getBoundingClientRect` on
 // one of these `<a>`s reports 0x0 and there is nowhere to aim.
 //

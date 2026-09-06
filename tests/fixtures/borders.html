@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body { margin: 0 }
+      /* One colour per side, so a mark can be traced to the side that made it. */
+      #four {
+        width: 100px;
+        height: 50px;
+        border-top: 4px solid rgb(255, 0, 0);
+        border-right: 6px solid rgb(0, 255, 0);
+        border-bottom: 8px solid rgb(0, 0, 255);
+        border-left: 10px solid rgb(255, 255, 0);
+      }
+      /* A width with nothing to draw: the box still reserves nothing for it. */
+      #none { width: 100px; height: 20px; border: 5px none rgb(255, 0, 0) }
+      /* Explicitly hidden, which is not the same declaration as none. */
+      #hidden { width: 100px; height: 20px; border: 5px hidden rgb(255, 0, 0) }
+    </style>
+  </head>
+  <body>
+    <div id="four"></div>
+    <div id="none"></div>
+    <div id="hidden"></div>
+  </body>
+</html>

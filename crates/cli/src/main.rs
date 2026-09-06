@@ -116,10 +116,6 @@ pub struct RenderArgs {
     #[arg(long)]
     height: Option<u32>,
 
-    /// Font files to register. Defaults to an auto-detected system sans-serif.
-    #[arg(long = "font", value_name = "PATH")]
-    fonts: Vec<PathBuf>,
-
     /// Render the markup as parsed, without running the page's scripts.
     #[arg(long)]
     no_scripts: bool,
@@ -130,10 +126,6 @@ struct WebdriverArgs {
     /// Port to listen on. Point a client at `http://127.0.0.1:<port>`.
     #[arg(long, default_value_t = 4444)]
     port: u16,
-
-    /// Font files to register. Defaults to an auto-detected system sans-serif.
-    #[arg(long = "font", value_name = "PATH")]
-    fonts: Vec<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -141,10 +133,6 @@ struct ServeArgs {
     /// Port to listen on. Connect with `chromium.connectOverCDP("ws://127.0.0.1:<port>/")`.
     #[arg(long, default_value_t = 9222)]
     port: u16,
-
-    /// Font files to register. Defaults to an auto-detected system sans-serif.
-    #[arg(long = "font", value_name = "PATH")]
-    fonts: Vec<PathBuf>,
 }
 
 fn main() -> Result<()> {
@@ -153,11 +141,11 @@ fn main() -> Result<()> {
         Command::Serve(args) => {
             // One cache for the process. Every page every client opens reads
             // through it.
-            let browser = Browser::new(Resources::new(), &args.fonts)?;
+            let browser = Browser::new(Resources::new())?;
             cdp::serve(args.port, browser)
         }
         Command::Webdriver(args) => {
-            let browser = Browser::new(Resources::new(), &args.fonts)?;
+            let browser = Browser::new(Resources::new())?;
             webdriver::serve(args.port, browser)
         }
         Command::Browse(args) => window::open(&args.url, args.width, args.height),

@@ -1,6 +1,6 @@
 //! What every browser test needs before it can ask anything.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use toy_browser::{Browser, Resources, Url};
 
@@ -12,5 +12,5 @@ pub fn fixture(name: &str) -> Url {
 }
 
 pub fn browser() -> Browser {
-    Browser::new(Resources::new(), &[] as &[PathBuf]).expect("a browser")
+    Browser::new(Resources::new()).expect("a browser")
 }

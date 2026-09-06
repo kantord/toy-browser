@@ -1,14 +1,16 @@
-//! Laying a page out with a browser engine rather than a screenshot library.
+//! Laying a page out.
 //!
 //! `blitz-dom` is Servo's style system (Stylo) over Taffy and Parley: a real
 //! cascade with a real user-agent stylesheet, and formatting contexts for
 //! blocks, inline content, flexbox, grid, lists and **tables**. The engine
 //! already parses every document with it; this lays that same document out.
 //!
-//! What it replaces is not one library but a stack of workarounds. Everything
-//! in `tables/` exists because the previous renderer had no table formatting
-//! context; most of the user-agent stylesheet exists because it had no
-//! user-agent stylesheet. Neither is needed here.
+//! It replaced a screenshot library, and what went with that library was not
+//! one file but a stack of workarounds — a hand-written table layout, a
+//! hand-written user-agent stylesheet, a font loader, an image table. All of it
+//! existed to supply something a browser engine has already. `docs/adr/0012`
+//! records why the renderer that needed them could not follow the move to a
+//! Scene.
 
 use std::sync::Arc;
 
@@ -20,7 +22,7 @@ use std::collections::HashMap;
 
 use toy_browser_engine::{ElementBox, key_of};
 
-use crate::pipeline::Viewport;
+use crate::Viewport;
 
 mod export;
 pub(crate) mod fonts;
@@ -31,23 +33,6 @@ use fonts::context;
 
 use export::{colour, font_size};
 pub mod paint;
-
-/// Whether to lay pages out with the browser engine rather than the screenshot
-/// library.
-///
-/// The browser engine, unless asked for the other one. It was the other way
-/// round while the two were being compared, and the corpus settled it: across
-/// every case the total disagreement with Chromium went from 262,120px to
-/// 36,748px.
-///
-/// **`TOY_BROWSER_ENGINE=takumi` is deprecated and is being removed.** It still
-/// works today so that the number above stays checkable while the Scene work
-/// lands, but it cannot follow: takumi produces SVG text of its own, and a
-/// Scene is a value that SVG is only one writing of. An engine that emits
-/// finished markup has nowhere to put a Picture that is named by its Digest.
-pub fn chosen() -> bool {
-    !std::env::var("TOY_BROWSER_ENGINE").is_ok_and(|which| which == "takumi")
-}
 
 /// A document, laid out.
 pub struct LaidOut {

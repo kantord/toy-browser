@@ -7,8 +7,8 @@ A toy "browser": point it at an HTML file, get a PNG.
 ```
 Load                              Render
   HTML file                         Document
-  -> blitz-dom   parse into a DOM   -> takumi-html   node tree
-  -> scripts     find entry points  -> takumi-svg    layout, vector SVG
+  -> blitz-dom   parse into a DOM   -> blitz-dom     cascade and layout
+  -> scripts     find entry points  -> Scene         marks, pictures, faces
   -> QuickJS     run the scripts    -> resvg         rasterize to PNG
   -> HTML        serialize back out
   = Document
@@ -39,7 +39,7 @@ CONTEXT.md         the vocabulary this project uses
 ```
 
 Each crate can only name what its dependency list allows: `cli` cannot say
-`Engine` or `Resources`, and `engine` cannot say `takumi`. `crates/engine` is
+`Engine` or `Resources`, and `engine` cannot say `Scene`. `crates/engine` is
 the smallest set of operations a browser automation API can be built on — open
 a session, load a page, evaluate JavaScript, read HTML and elements back. It
 performs no I/O and knows nothing about fonts, pixels or any wire protocol.
@@ -83,8 +83,6 @@ Flags:
 - `--out-dir <DIR>` — artifact directory (default `out`)
 - `--width <PX>` — viewport width (default `800`)
 - `--height <PX>` — viewport height; omitted, the page is sized to its content
-- `--font <PATH>` — register a font file; repeatable. Defaults to an
-  auto-detected system sans-serif, because takumi does not load system fonts.
 - `--no-scripts` — render the markup as parsed, without running any JavaScript
 
 ## Real websites

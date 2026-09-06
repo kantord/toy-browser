@@ -45,46 +45,9 @@ and so a limit is not mistaken for a bug.
   so re-parsing that output swallowed the following siblings — four colored
   boxes collapsed into one nested stack. `crates/engine/src/serialize.rs` walks
   the DOM and emits `<div></div>` instead.
-- **takumi-html drops `<style>` elements**, so the CSS is extracted from the
-  serialized HTML and handed to takumi separately as a stylesheet.
 - **List markers are missing.** `<ul>`/`<li>` lay out with the right
-  indentation but takumi draws no bullets.
-- **Inline elements have no box, so they cannot be aimed at.** Measured on
-  Hacker News: 229 links, **31 with a box, and every one of those contains an
-  image** — the logo and the thirty upvote arrows.
-
-  Not a hard limit, and an earlier version of this entry was wrong to call it
-  one. takumi lays inline content out in full and `resolve_inline_runs` is
-  public — takumi-svg, another crate, enumerates it from outside. What is
-  reachable splits in two:
-
-  - **Inline boxes** — `inline-block`, `inline-flex`, images, floats —
-    are readable today: `InlineRunLayout::inline_boxes` gives public geometry
-    and `ProcessedInlineSpan::Box` carries a `pub render_node`, which is the
-    marker class this browser already reads. Work, not a wall.
-  - **`display: inline` spans** are walled off twice over:
-    `InlineOutlineRect`'s coordinates are `pub(crate)`, and neither
-    `ProcessedInlineSpan::Text` nor `RenderContext` keeps a link to the element
-    the text came from. The geometry could be computed from public glyph
-    positions, but nothing says which `<span>` a glyph belongs to.
-
-- **Tables are approximated with flexbox, not laid out.** takumi's `Display` has
-  no table variants at all — `None, Flex, InlineFlex, Grid, InlineGrid, Inline,
-  Block, InlineBlock, ListItem` — so `display: table` means nothing to it. The
-  user-agent stylesheet maps rows to flex containers, which puts cells side by
-  side, and gives a row's last cell the slack. Columns do not line up with the
-  columns above them, because each row sizes its own — and a table with no width
-  cannot shrink to fit, so a page built of content-width tables comes out wider
-  than it should.
-
-  Compiling the columns into `grid-template-columns` was built and removed. It
-  works on a small table — a case whose columns only align because of it went
-  exact — and destroys a real one: the measuring pass sizes cells under flex,
-  where they shrink to min-content, so a column of prose measures one word wide
-  and the tracks pin it there. Hacker News rendered one word per line. The
-  weighted pixel score **preferred** that version, 0.0118 against 0.0136, which
-  says more about the score than about the layout.
-
+  indentation and no bullet is painted. The Scene has no mark for a disc yet;
+  see `GAPS.md`.
 - **`line-height: normal` is a pixel too tall.** Given an explicit
   `line-height` the two agree exactly. Given `normal` and the same face, this
   rounds a line up where Chromium rounds it down: Noto Sans at 13.3px is
@@ -118,12 +81,15 @@ and so a limit is not mistaken for a bug.
   leaves their text alone; there is no way to say that here, so it is done with
   a flex column, which centres blocks but cannot centre an inline-level child
   the way the real thing does.
-- **Images are fetched, `<img src>` and CSS `url()` alike** — takumi is handed
-  images rather than fetching them, and the map it was handed used to be empty.
-  A picture that will not load is absent, so the element keeps the room its
-  `width`/`height` claim.
+- **A picture that will not load is absent**, so the element keeps the room its
+  `width`/`height` claim — which is what a browser leaves too. The bytes
+  themselves travel in the Scene rather than being fetched again at paint time;
+  `docs/adr/0012` says why.
 - **`el.onclick = fn` does nothing.** An `on*` *attribute* in the markup is run,
   and `addEventListener` works, but assigning the property is neither stored nor
   called — a page that registers a handler that way is silently ignored.
-- Blitz's own style resolution and layout are not used at all yet — only its
-  parser and tree. Everything visual comes from takumi.
+Entries about the screenshot library this browser used to paint with are gone,
+because it is: the table approximation, the missing inline boxes and the
+extracted stylesheet were all properties of that renderer. `TAKUMI-ISSUES.md`
+keeps the findings as a record, and `docs/adr/0012` says why it could not follow
+the move to a Scene.

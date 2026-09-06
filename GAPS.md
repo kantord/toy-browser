@@ -4,50 +4,66 @@ What this browser does not do yet, and what each one would take. A gap is
 something we mean to build; a *limit* is something we have decided not to, or
 cannot — those live in `docs/limits.md` and are not repeated here.
 
-Sizes are measured against `css/CSS2/normal-flow` (814 tests, 355 passing).
+Sizes are measured against `css/CSS2/normal-flow` (814 tests), and were taken
+when 355 of them passed.
 `docs/wpt-findings.md` records how they were measured and why each is believed
 rather than merely correlated. The categories overlap — a test can want borders,
 Ahem and an image at once — so the counts do not add up and fixing one does not
 recover its whole count.
 
-The image gap is deliberately absent: it is not a missing feature but a
-misplaced responsibility, and it is being designed rather than listed.
+Two entries have left this file. Images are no longer a gap: they were a
+misplaced responsibility, and `docs/adr/0012` records where it went instead.
+Borders are done — what is left of gap 1 is outlines.
 
 ---
 
-## 1. Borders and outlines are never painted
+## 1. Outlines are never painted
 
-**What happens.** `crates/browser/src/blitz/paint/mod.rs` emits background
-rectangles, images and text. It has no border code and no outline code, so
+**Borders are done.** `crates/browser/src/blitz/paint/edges.rs` draws four
+fills per box, between the border box and the padding box, from the widths
+taffy resolved and the styles and colours the cascade computed. Three corpus
+cases went from disagreeing about paint to agreeing exactly.
 
-```css
-div { width: 60px; height: 60px; border: 5px solid blue }
-```
+Two things about it are approximations rather than omissions, and both are
+recorded in that file:
 
-produces no marks at all — the element has no background, so nothing is drawn
-for it whatsoever.
+- **Corners are square, not mitred.** A real browser cuts the join between two
+  sides diagonally. That shows only where adjacent sides are different colours,
+  and is wrong in two triangles the size of the border width.
+- **`dashed`, `dotted` and `double` are drawn solid.** They need a mark a Scene
+  does not have. Drawing them solid puts the line where the page asked for it in
+  the colour it asked for and gets only the texture wrong; leaving them out
+  would move the box instead.
 
-**Why it costs so much.** A reftest draws its shape with a border and its
-reference draws the same shape with a background, so that a browser which agrees
-about layout agrees about pixels. We paint one side and not the other.
-`block-formatting-contexts-005` is the pattern exactly: the test's entire
-visible content is two borders, and the reference's is a background.
+**Outlines are still missing.** Same shape of work, drawn outside the border box
+and not affecting layout. `style.get_outline()` carries width, style, colour and
+offset.
 
-**Size.** 220 of 434 failures use a visible border. Failure rate with a border
-is 79%, against a 32% baseline; with positioning as well, 92%.
+## 2. A replaced element has no intrinsic size
 
-**What it needs.** blitz already computes border widths, styles and colours as
-part of layout, and `final_layout` carries the box. Painting a solid border is
-four rectangles between the border box and the padding box. `dashed`, `dotted`
-and `double` need stroke patterns; `groove`/`ridge`/`inset`/`outset` need the
-light/dark derivation. Solid alone is most of the value.
+**What happens.** `<iframe>`, `<object>` and `<embed>` are laid out as ordinary
+boxes. CSS says a replaced element with no intrinsic dimensions falls back to
+300×150 when its width or height is `auto`; here `auto` means what it means for
+a `<div>`, so an `<iframe width: auto>` fills its parent.
 
-Outlines are the same shape of work, drawn outside the border box and not
-affecting layout.
+**How it surfaced.** Painting borders exposed it. `block-replaced-height-004`
+puts a green-bordered box exactly over a red-bordered `<iframe>` and passes if
+no red shows. It used to pass because we painted no borders at all — vacuously,
+on a page we were laying out wrongly. Now the green box is pixel-identical to
+its reference and a 784px red line runs out from under it, which is the true
+answer.
+
+**Size.** 15 tests, all of which were passing for no reason before:
+`block-replaced-height-*`, `inline-block-replaced-height-*`,
+`inline-replaced-height-*`, `min-height-09*`.
+
+**What it needs.** An intrinsic size for replaced elements that have none, used
+when the computed value is `auto`. A user-agent rule cannot do it: the author
+sheets in these tests set `width: auto` explicitly, which would beat it.
 
 ---
 
-## 2. A block inside an inline does not split it
+## 3. A block inside an inline does not split it
 
 **What happens.** When an inline box contains a block box, the inline must be
 broken around it and anonymous block boxes generated either side. It is not.
@@ -70,7 +86,7 @@ is the first question to answer.
 
 ---
 
-## 3. The Ahem font is not installed
+## 4. The Ahem font is not installed
 
 **What happens.** Ahem is the suite's measuring instrument: every glyph is a
 solid square, the ascent is exactly 0.8em and the descent 0.2em, so a test can
@@ -87,10 +103,10 @@ cheapest item here by a distance.
 
 ---
 
-## 4. Line box geometry drifts vertically
+## 5. Line box geometry drifts vertically
 
 **What happens.** 65 failures (15%) paint the right text with the right content
-at the wrong height. Some of that is gap 2. The rest is the drift the corpus
+at the wrong height. Some of that is gap 3. The rest is the drift the corpus
 already records against Chromium, and the standing suspect is the compensation
 in `crates/browser/src/blitz/mod.rs`:
 
@@ -108,7 +124,7 @@ states a height in lines currently pays for it.
 
 ---
 
-## 5. Tables
+## 6. Tables
 
 **What happens.** blitz distributes a table's leftover width between its columns
 differently from Chromium. Recorded in the corpus as case `052`, where the
@@ -123,7 +139,7 @@ Worth doing after everything above: smaller bucket, harder fix.
 
 ---
 
-## 6. Painted nowhere, but small in this directory
+## 7. Painted nowhere, but small in this directory
 
 Each is confirmed missing by direct probe and each is a real gap. None is worth
 more than a handful of tests *here*, so the reason to do them is the next
@@ -140,7 +156,7 @@ directory rather than this one.
 
 ---
 
-## 7. The WebDriver surface, where a runner needs more of it
+## 8. The WebDriver surface, where a runner needs more of it
 
 Not a rendering gap: it changes what can be *run*, not what is drawn. 24 tests
 currently error rather than fail, stopping at an element response shape the
@@ -154,10 +170,10 @@ input fails saying so.
 
 ## Order worth taking them in
 
-1. **Borders and outlines** — biggest, and contained.
-2. **Install Ahem** — not a code change, and it corrects layout rather than
+1. **Install Ahem** — not a code change, and it corrects layout rather than
    only paint.
-3. **Block-in-inline** — the largest piece of genuine layout work.
-4. **Line height from font metrics** — removes a tuned constant.
+2. **Block-in-inline** — the largest piece of genuine layout work.
+3. **Line height from font metrics** — removes a tuned constant.
+4. **Outlines**, whenever a directory that uses them is being measured.
 
-Then 5, 6 and 7 as they start blocking whatever is being measured next.
+Then the rest as they start blocking whatever is being measured next.

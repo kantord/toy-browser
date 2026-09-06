@@ -21,10 +21,11 @@
 
 use blitz_dom::Node;
 
+use crate::Viewport;
 use crate::blitz::{Composed, LaidOut};
-use crate::pipeline::Viewport;
 use crate::scene::{Area, Mark, Paint, Scene};
 
+mod edges;
 mod pictures;
 mod words;
 
@@ -105,6 +106,7 @@ fn compose(
         let (x, y) = (x + across, y + down);
         *height = height.max(y + node.final_layout.size.height);
         marks.extend(background(node, x, y));
+        marks.extend(edges::of(node, x, y));
         marks.extend(pictures::of(&unit.laid_out, node, x, y, scene, resources));
         marks.extend(words::of(&unit.laid_out, node, x, y, scene));
     });

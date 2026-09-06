@@ -2,8 +2,6 @@
 
 mod common;
 
-use std::path::PathBuf;
-
 use common::{browser, fixture};
 use toy_browser::{Browser, ElementBox, NavigationError, Point, Remote, Resources, Viewport};
 
@@ -119,7 +117,7 @@ fn an_unsupported_scheme_is_refused_by_reason() {
 #[test]
 fn one_cache_serves_every_page() {
     let resources = Resources::new();
-    let mut browser = Browser::new(resources.clone(), &[] as &[PathBuf]).unwrap();
+    let mut browser = Browser::new(resources.clone()).unwrap();
     let target = fixture("js/js-module.html");
 
     let first = browser.new_page().unwrap();

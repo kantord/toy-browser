@@ -1,15 +1,18 @@
 # How a page is laid out
 
-This browser lays a page out with `blitz-dom` and paints it itself, to SVG.
-`TOY_BROWSER_ENGINE=takumi` still gets the renderer that came before, because the
-change was large enough that being able to check it matters.
+This browser lays a page out with `blitz-dom` and paints it itself, into a
+Scene.
 
-> **takumi is deprecated and is being removed.** It works today, and the corpus
-> comparison below still runs, but it will not survive the move to a Scene —
-> see `docs/adr/0012-a-scene-is-a-value-not-a-string.md`. A Scene names its
-> images and fonts by content and hands the bytes to the rasterizer; takumi
-> emits finished SVG text instead, which is exactly the arrangement being
-> removed. Nothing new should be built against it, and `--font` goes with it.
+There used to be a second renderer, reachable with `TOY_BROWSER_ENGINE=takumi`,
+kept for a while so that the change to this one stayed checkable. It is gone.
+It could not follow the move to a Scene — a Scene names its images and fonts by
+content and hands the bytes to the rasterizer, while that renderer emitted
+finished SVG text, which is the arrangement being removed.
+`docs/adr/0012-a-scene-is-a-value-not-a-string.md` records the decision. Going
+with it: a hand-written table layout, a hand-written user-agent stylesheet, a
+font loader, an image table and the `--font` flag, all of which existed to
+supply something a browser engine already has. The findings that justified the
+move are kept in `TAKUMI-ISSUES.md`.
 
 ## Why it changed
 
@@ -39,7 +42,7 @@ against Chromium's 1,181.
 
 Three table cases got worse — `050` 8 to 24px, `051` 12 to 46px, `052` 18 to
 191px — because blitz shares a table's spare width between columns differently
-from Chromium. That is the same fault the old renderer had until it was fixed by
+from Chromium. That is the same fault takumi had until it was fixed by
 hand, and it is the largest thing left.
 
 ## What it does
@@ -53,10 +56,12 @@ hand, and it is the largest thing left.
   368 before.
 - **Resources** — a provider reads what the page refers to, and the page is laid
   out again when they arrive, because a page reflows when its images land.
-- **Paint** — `blitz/paint.rs`, to SVG, text as `<text>` with a position per
-  glyph. 114,508 bytes against takumi's 315,029, and 15,746 gzipped against
-  39,271 — and readable, where takumi's was 218 glyph outlines and no text.
-- **Raster** — resvg, unchanged, and only when somebody asks for pixels.
+- **Paint** — `blitz/paint/`, into a Scene: marks, and the pictures and faces
+  they name. Written down as SVG, text as `<text>` with a position per glyph.
+  114,508 bytes against takumi's 315,029, and 15,746 gzipped against 39,271 —
+  and readable, where takumi's was 218 glyph outlines and no text.
+- **Raster** — resvg, handed the Scene's own pictures and faces so it resolves
+  nothing, and only when somebody asks for pixels. See `crates/browser/src/scene/`.
 
 ## Two workarounds it needs, and why
 

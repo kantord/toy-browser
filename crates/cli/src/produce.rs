@@ -74,7 +74,7 @@ fn painted(
 
 pub fn render(args: RenderArgs) -> Result<()> {
     let resources = Resources::new();
-    let mut browser = Browser::new(resources.clone(), &args.fonts)?;
+    let mut browser = Browser::new(resources.clone())?;
     let page = browser.new_page()?;
     browser.set_viewport(
         &page,
@@ -115,7 +115,7 @@ pub fn render(args: RenderArgs) -> Result<()> {
 fn write_artifacts(
     html: &str,
     loaded: &Loaded,
-    raster: &toy_browser::Raster,
+    raster: &toy_browser::Rendered,
     out_dir: &std::path::Path,
     stem: &str,
 ) -> Result<PathBuf> {
@@ -141,7 +141,7 @@ fn write_artifacts(
 }
 
 /// One indented line per thing worth knowing about the render.
-fn report(loaded: &Loaded, raster: &toy_browser::Raster, ran_scripts: bool) {
+fn report(loaded: &Loaded, raster: &toy_browser::Rendered, ran_scripts: bool) {
     report_scripts(loaded, ran_scripts);
     report_output(loaded);
     report_raster(raster);
@@ -179,7 +179,7 @@ fn report_output(loaded: &Loaded) {
 
 /// What came out the other end. A page that needed script it did not get
 /// renders as one flat color.
-fn report_raster(raster: &toy_browser::Raster) {
+fn report_raster(raster: &toy_browser::Rendered) {
     if let Some([r, g, b, a]) = raster.uniform_color {
         println!("  blank: every pixel is rgba({r}, {g}, {b}, {a})");
     }

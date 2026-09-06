@@ -9,7 +9,7 @@ crates/fetch     shared remembered bytes         deps: ureq
 ```
 
 Each crate can only name what its dependency list allows. `cli` cannot say
-`Engine`, `Realm` or `Resources`; `engine` cannot say `takumi`. That is what
+`Engine`, `Realm` or `Resources`; `engine` cannot say `Scene`. That is what
 enforces the layering — not convention, and not module boundaries.
 
 ## fetch — one remembered place, every byte

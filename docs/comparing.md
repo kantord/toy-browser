@@ -143,10 +143,10 @@ sits beside `Boxes` in `Environment` for that reason.
 A 0/1/0/0/0/0/0/0/0/0/1/0/0/0  color: rgb(130, 130, 130), theirs rgb(0, 0, 0)
 ```
 
-Two properties so far — `color` and `font-size` — chosen because takumi resolves
-both to a value with one obvious serialization, so the two accounts compare as
-strings rather than approximately. `line-height` is deliberately left out: takumi
-always has a number and a browser answers `normal` when nothing set one, and
+Two properties so far — `color` and `font-size` — chosen because both resolve
+to a value with one obvious serialization, so the two accounts compare as
+strings rather than approximately. `line-height` is deliberately left out: we
+always have a number and a browser answers `normal` when nothing set one, and
 comparing those would report every element on every page.
 
 **This is the only account of an inline element.** Of the 812 elements on the

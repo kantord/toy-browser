@@ -1,0 +1,143 @@
+//! The lines around a box.
+//!
+//! Four fills, one per side, between the border box and the padding box. There
+//! is no border primitive in a Scene and there does not need to be: a solid
+//! border is rectangles, and rectangles are what a Scene already draws.
+//!
+//! This was the single largest thing missing. Not because a border is
+//! important in itself, but because of how a reference test is written: the
+//! test draws its shape with a border and the reference draws the same shape
+//! with a background, so that a browser which agrees about layout agrees about
+//! pixels. Painting one and not the other fails the comparison every time, on
+//! pages whose layout was already right. 220 of 434 failures in
+//! `css/CSS2/normal-flow` used a visible border, and they failed at 79% against
+//! a 32% baseline for everything else.
+//!
+//! **Corners are square, not mitred.** A real browser cuts the join between two
+//! sides diagonally, which shows only where the two are different colours. Here
+//! the top and bottom run the full width and the sides fill what is left
+//! between them. For one colour — which is almost every border — the result is
+//! identical; for two it is wrong in two triangles the size of the border
+//! width.
+
+use blitz_dom::Node;
+use style::values::computed::BorderStyle;
+
+use crate::scene::{Area, Mark};
+
+use super::channels;
+
+/// Every side of this element's border that paints something.
+pub(super) fn of(node: &Node, x: f32, y: f32) -> Vec<Mark> {
+    let Some(style) = node.primary_styles() else {
+        return Vec::new();
+    };
+    let laid = &node.final_layout;
+    if laid.size.width <= 0.0 || laid.size.height <= 0.0 {
+        return Vec::new();
+    }
+    let border = style.get_border();
+    sides(node, x, y)
+        .into_iter()
+        .filter(|side| side.thickness > 0.0 && side.area.width > 0.0 && side.area.height > 0.0)
+        .filter(|side| paints(side.kind(border)))
+        .map(|side| {
+            let [red, green, blue, alpha] =
+                *style.resolve_color(side.colour(border)).raw_components();
+            Mark::Fill {
+                area: side.area,
+                paint: channels(red, green, blue, alpha),
+                node: Some(node.id),
+            }
+        })
+        .collect()
+}
+
+/// Which edge of the box this is, and the strip it covers.
+struct Side {
+    edge: Edge,
+    thickness: f32,
+    area: Area,
+}
+
+#[derive(Clone, Copy)]
+enum Edge {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+impl Side {
+    fn kind(&self, border: &style::properties::style_structs::Border) -> BorderStyle {
+        match self.edge {
+            Edge::Top => border.border_top_style,
+            Edge::Bottom => border.border_bottom_style,
+            Edge::Left => border.border_left_style,
+            Edge::Right => border.border_right_style,
+        }
+    }
+
+    fn colour<'a>(
+        &self,
+        border: &'a style::properties::style_structs::Border,
+    ) -> &'a style::values::computed::Color {
+        match self.edge {
+            Edge::Top => &border.border_top_color,
+            Edge::Bottom => &border.border_bottom_color,
+            Edge::Left => &border.border_left_color,
+            Edge::Right => &border.border_right_color,
+        }
+    }
+}
+
+/// The four strips, in paint order.
+///
+/// Top and bottom take the full width and the sides take what is left between
+/// them, which is the square-corner approximation this file's header describes.
+fn sides(node: &Node, x: f32, y: f32) -> [Side; 4] {
+    let laid = &node.final_layout;
+    let (width, height) = (laid.size.width, laid.size.height);
+    let edges = laid.border;
+    let between = height - edges.top - edges.bottom;
+    let strip = |edge, thickness, area| Side {
+        edge,
+        thickness,
+        area,
+    };
+    let at = |x, y, width, height| Area {
+        x,
+        y,
+        width,
+        height,
+    };
+    [
+        strip(Edge::Top, edges.top, at(x, y, width, edges.top)),
+        strip(
+            Edge::Bottom,
+            edges.bottom,
+            at(x, y + height - edges.bottom, width, edges.bottom),
+        ),
+        strip(
+            Edge::Left,
+            edges.left,
+            at(x, y + edges.top, edges.left, between),
+        ),
+        strip(
+            Edge::Right,
+            edges.right,
+            at(x + width - edges.right, y + edges.top, edges.right, between),
+        ),
+    ]
+}
+
+/// Whether a side of this style puts ink down at all.
+///
+/// Everything that is not `none` or `hidden` is drawn as though it were solid.
+/// `dashed`, `dotted` and `double` need a mark a Scene does not have yet, and
+/// drawing them solid is wrong in the right place — the line is where the page
+/// asked for it, in the colour it asked for, and only its texture is missing.
+/// Leaving them out would move the box instead.
+fn paints(kind: BorderStyle) -> bool {
+    !matches!(kind, BorderStyle::None | BorderStyle::Hidden)
+}
