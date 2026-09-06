@@ -6,7 +6,7 @@
 //! nearly vanish and large ones dominate.
 
 use anyhow::{Context, Result};
-use tiny_skia::Pixmap;
+use toy_browser::tiny_skia::{self, Pixmap};
 
 /// How sharply a difference is punished.
 ///

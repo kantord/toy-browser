@@ -50,6 +50,64 @@ impl Browser {
     /// Composed before anything is drawn, so drawing is one pass over one
     /// coordinate space rather than a picture per browser to be fitted together
     /// afterwards.
+    /// The composition for this page at this viewport, laid out again only if
+    /// what it described has moved on.
+    ///
+    /// Both halves of a render ask for this — measuring, to publish the boxes,
+    /// and painting, to draw them — and each used to lay the whole unit out
+    /// afresh. Two full parse-and-cascade passes per frame, of which one was
+    /// always redundant and, when nothing had changed at all, both were.
+    pub(crate) fn laid_out(&mut self, page: &PageId, viewport: Viewport) -> Result<&crate::Laid> {
+        if self.stale(page, viewport) {
+            let unit = self.compose(page, viewport)?;
+            let revisions = self.revisions(page)?;
+            if let Some(held) = self.pages.get_mut(page) {
+                held.composed = Some(crate::Laid {
+                    unit,
+                    width: viewport.width,
+                    height: viewport.height,
+                    revisions,
+                });
+            }
+        }
+        self.pages
+            .get(page)
+            .and_then(|held| held.composed.as_ref())
+            .ok_or_else(|| anyhow::anyhow!("no such page"))
+    }
+
+    /// Whether the composition held for this page still describes it.
+    fn stale(&mut self, page: &PageId, viewport: Viewport) -> bool {
+        let Ok(now) = self.revisions(page) else {
+            return true;
+        };
+        let Some(held) = self.pages.get(page).and_then(|held| held.composed.as_ref()) else {
+            return true;
+        };
+        held.width != viewport.width || held.height != viewport.height || held.revisions != now
+    }
+
+    /// Every page in the unit and how many times its document has changed.
+    ///
+    /// The whole unit, because a `<webview>` is drawn into this picture: its
+    /// document moving on makes this composition stale even though nothing in
+    /// the host did.
+    fn revisions(&mut self, page: &PageId) -> Result<Vec<(PageId, u64)>> {
+        let mut found = vec![(page.clone(), {
+            let session = self.session(page)?;
+            self.engine.revision(&session)?
+        })];
+        let mounted: Vec<PageId> = self
+            .pages
+            .get(page)
+            .map(|held| held.mounted.values().map(|it| it.page.clone()).collect())
+            .unwrap_or_default();
+        for child in mounted {
+            found.extend(self.revisions(&child)?);
+        }
+        Ok(found)
+    }
+
     pub(crate) fn compose(
         &mut self,
         page: &PageId,

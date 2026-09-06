@@ -192,3 +192,35 @@ not send it back to its `src` — otherwise every link followed inside one would
 be undone by the next frame. `crates/browser/tests/webview.rs` pins that, along
 with a click landing in the right browser and a frame taking its height from
 what it holds.
+
+## What a frame costs
+
+Measured on the frozen Hacker News page at 1458px — the width the window opens
+at — which rasterizes to 1458×1185, 1.73M pixels.
+
+| | before | after |
+|---|---|---|
+| `render` on the command line | 254.5 ms | **203.8 ms** |
+| a repeat frame, pixels only | ~122 ms | **74.3 ms** |
+
+Two things were being done for nothing.
+
+**The layout ran twice.** A render measures and then draws, and each composed
+the whole unit from scratch — two full parse-and-cascade passes for one frame,
+of which one was always redundant. `Browser::laid_out` now keeps the
+composition against the state it described: the viewport, and the revision of
+every page in the unit. Every page, because a `<webview>` is drawn into this
+picture and its document moving on makes the picture stale even though nothing
+in the host changed. Worth 48 ms.
+
+**The window round-tripped through PNG.** It asked for a render, got a PNG,
+and decoded it back into the pixmap the rasterizer had already produced —
+because `crates/cli` named its own version of `tiny-skia` and got a different
+type for the same thing. The browser now re-exports the one it rasterizes into
+and offers `Browser::pixels`, which stops before the encode. Worth 27.8 ms of
+encoding, and the decode on top of it.
+
+The 74.3 ms that is left is a warm frame with the composition cached: walk the
+tree into a Scene, write the Scene as SVG, hand it to resvg to parse, rasterize.
+That is the number to beat, and the first thing to know about it is which of
+those four steps it is in. Nobody has measured that yet.

@@ -34,7 +34,7 @@
 //! box comparison cannot see at all, having no box here to compare.
 
 use anyhow::Result;
-use tiny_skia::Pixmap;
+use toy_browser::tiny_skia::Pixmap;
 
 use crate::compare::{blame, pixels::distance, pixels::over_white, tree::Export, tree::Node};
 
@@ -244,7 +244,7 @@ mod tests {
                 false => ground,
             };
             *pixel =
-                tiny_skia::PremultipliedColorU8::from_rgba(rgb[0], rgb[1], rgb[2], 255).unwrap();
+                toy_browser::tiny_skia::PremultipliedColorU8::from_rgba(rgb[0], rgb[1], rgb[2], 255).unwrap();
         }
         pixmap
     }

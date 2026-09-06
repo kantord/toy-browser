@@ -26,7 +26,14 @@ use toy_browser_engine::{Engine, Handle, SessionId};
 
 pub use blitz::{LaidOut, lay_out};
 pub use navigate::{Loaded, NavigationError};
-pub use scene::{Rendered, render as render_scene};
+pub use scene::{Rendered, pixels as scene_pixels, render as render_scene};
+/// The pixel buffer this browser rasterizes into.
+///
+/// Re-exported rather than left for a caller to depend on: it comes in through
+/// resvg, and a caller that named its own version got a different type for the
+/// same thing. Bridging those meant encoding a PNG and decoding it straight
+/// back, which is a lot of work to change one name into another.
+pub use resvg::tiny_skia;
 pub use toy_browser_engine::{Budget, ElementBox, NodeId, Point, ScriptSurvey};
 pub use toy_browser_fetch::{Resources, Url};
 
@@ -67,6 +74,13 @@ struct Page {
     /// The last measurement, and the state it described. Re-measuring is a full
     /// layout pass, so it happens only when that state has moved on.
     measured: Option<Measured>,
+    /// The last composition, and the state it described.
+    ///
+    /// Separate from `measured` because it holds far more — every page in the
+    /// unit, laid out — and because both halves of a render want it. Measuring
+    /// composed the page and then drawing composed it again, which is two full
+    /// parse-and-cascade passes for one frame.
+    composed: Option<Laid>,
     /// Where the mouse is and whether it is pressed. A setting of the Page, so
     /// it outlives each event the way a real pointer does.
     pointer: Pointer,
@@ -112,6 +126,18 @@ struct Measured {
     styles: toy_browser_engine::Styles,
 }
 
+/// A composition, and the state it is only good for.
+///
+/// The revisions are every page in the unit, not just this one: a `<webview>`
+/// whose own document moved on makes the picture around it stale even though
+/// nothing in the host changed.
+struct Laid {
+    unit: blitz::Composed,
+    width: u32,
+    height: Option<u32>,
+    revisions: Vec<(PageId, u64)>,
+}
+
 /// Pages, and everything needed to drive them.
 ///
 /// Single-threaded, because the engine is. A caller wanting many browsers in
@@ -152,6 +178,7 @@ impl Browser {
                 viewport: Viewport::default(),
                 run_scripts: true,
                 measured: None,
+                composed: None,
                 pointer: Pointer::default(),
                 visited: Vec::new(),
                 mounted: HashMap::new(),

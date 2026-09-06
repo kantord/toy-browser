@@ -13,7 +13,7 @@ use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use anyhow::{Context as _, Result};
-use tiny_skia::Pixmap;
+use toy_browser::tiny_skia::Pixmap;
 use toy_browser::{Browser, PageId, Point, Resources, Viewport};
 use winit::application::ApplicationHandler;
 use winit::event::{MouseButton, WindowEvent};
@@ -79,8 +79,7 @@ impl Open {
     /// The page as pixels, laying it out again only if something has changed it.
     fn pixels(&mut self) -> Result<&Pixmap> {
         if self.painted.is_none() {
-            let png = self.browser.render(&self.page)?.png;
-            self.painted = Some(Pixmap::decode_png(&png).context("decoding the render")?);
+            self.painted = Some(self.browser.pixels(&self.page)?);
         }
         Ok(self.painted.as_ref().expect("just filled in"))
     }

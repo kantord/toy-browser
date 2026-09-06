@@ -27,15 +27,23 @@ pub struct Rendered {
     pub uniform_color: Option<[u8; 4]>,
 }
 
-pub fn render(scene: &Scene) -> Result<Rendered> {
+/// The Scene as pixels, and nothing else.
+///
+/// What a window wants. Asking for a [`Rendered`] instead costs a PNG encode of
+/// the whole page, and the caller then decodes it back to arrive where this
+/// already is.
+pub fn pixels(scene: &Scene) -> Result<tiny_skia::Pixmap> {
     let tree = usvg::Tree::from_str(&super::normal_form(scene), &options(scene))
         .context("parsing the scene")?;
     let size = tree.size().to_int_size();
     let mut pixmap = tiny_skia::Pixmap::new(size.width(), size.height())
         .with_context(|| format!("allocating {}x{} pixmap", size.width(), size.height()))?;
-
     resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
+    Ok(pixmap)
+}
 
+pub fn render(scene: &Scene) -> Result<Rendered> {
+    let pixmap = pixels(scene)?;
     let png = pixmap.encode_png().context("encoding PNG")?;
     Ok(Rendered {
         uniform_color: uniform_color(&pixmap),

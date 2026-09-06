@@ -110,8 +110,12 @@ impl Browser {
                 page.visited.push(std::mem::take(&mut page.url));
             }
             page.url = url.to_owned();
-            // The old document's geometry describes nothing now.
+            // The old document's geometry describes nothing now. Both caches,
+            // and by hand rather than by revision: a load replaces the Realm and
+            // the count starts again, so a fresh document can wear a number the
+            // previous one already used.
             page.measured = None;
+            page.composed = None;
         }
 
         Ok(Loaded {

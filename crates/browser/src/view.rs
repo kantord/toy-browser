@@ -48,6 +48,17 @@ impl Browser {
         Ok(self.draw(page, viewport)?.png)
     }
 
+    /// The page as pixels, and nothing else.
+    ///
+    /// What a window asks for. [`Self::render`] would do as well and costs a
+    /// PNG encode of the whole page on the way, which the caller then has to
+    /// decode to get back here.
+    pub fn pixels(&mut self, page: &PageId) -> Result<crate::tiny_skia::Pixmap> {
+        self.sync(page)?;
+        let viewport = self.viewport(page);
+        crate::scene::pixels(&self.painted(page, viewport)?)
+    }
+
     /// Renders the page and keeps every intermediate artifact.
     pub fn render(&mut self, page: &PageId) -> Result<Rendered> {
         self.sync(page)?;
@@ -67,8 +78,15 @@ impl Browser {
         page: &PageId,
         viewport: Viewport,
     ) -> Result<crate::scene::Scene> {
-        let unit = self.compose(page, viewport)?;
-        Ok(crate::blitz::paint::scene(&unit, viewport, &self.resources))
+        // The same composition measuring used, not a second one.
+        self.laid_out(page, viewport)?;
+        let unit = self
+            .pages
+            .get(page)
+            .and_then(|held| held.composed.as_ref())
+            .map(|held| &held.unit)
+            .ok_or_else(|| anyhow::anyhow!("no such page"))?;
+        Ok(crate::blitz::paint::scene(unit, viewport, &self.resources))
     }
 }
 
@@ -127,14 +145,20 @@ impl Browser {
         // says about a box is what was drawn. A measure that laid the page out
         // on its own would report a `<webview>` as nothing at all, because what
         // gives one its size is the page inside it.
-        let laid_out = self.compose(page, viewport)?.laid_out;
+        self.laid_out(page, viewport)?;
+        let (boxes, styles) = self
+            .pages
+            .get(page)
+            .and_then(|held| held.composed.as_ref())
+            .map(|held| (held.unit.laid_out.boxes(), held.unit.laid_out.styles()))
+            .unwrap_or_default();
         if let Some(page) = self.pages.get_mut(page) {
             page.measured = Some(Measured {
                 revision,
                 width: viewport.width,
                 height: viewport.height,
-                boxes: laid_out.boxes(),
-                styles: laid_out.styles(),
+                boxes,
+                styles,
             });
         }
         Ok(())

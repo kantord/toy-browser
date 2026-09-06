@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use serde_json::json;
-use tiny_skia::Pixmap;
+use toy_browser::tiny_skia::Pixmap;
 
 /// What each side is called on disk, and in the report.
 const OURS: &str = "toy";

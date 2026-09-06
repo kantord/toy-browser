@@ -28,7 +28,7 @@ use std::collections::BTreeMap;
 mod raster;
 mod svg;
 
-pub use raster::{Rendered, render};
+pub use raster::{Rendered, pixels, render};
 pub use svg::{export, family, normal_form};
 
 /// Bytes named by their own content.

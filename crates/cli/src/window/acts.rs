@@ -4,7 +4,7 @@
 //! `mod.rs` moves when the windowing stack does, this moves when the chrome
 //! does — the back button, the URL field, what a click is allowed to mean.
 
-use tiny_skia::Pixmap;
+use toy_browser::tiny_skia::Pixmap;
 use toy_browser::{Browser, PageId, Point, Viewport};
 use winit::event::{ElementState, MouseScrollDelta};
 

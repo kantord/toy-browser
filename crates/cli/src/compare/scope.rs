@@ -19,7 +19,7 @@
 //! and two boxes half apart hold one that mostly measures the gap.
 
 use anyhow::{Context, Result};
-use tiny_skia::Pixmap;
+use toy_browser::tiny_skia::{self, Pixmap};
 
 use crate::compare::tree::{Export, Node};
 
