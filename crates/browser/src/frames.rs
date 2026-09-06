@@ -59,6 +59,7 @@ impl Browser {
     /// always redundant and, when nothing had changed at all, both were.
     pub(crate) fn laid_out(&mut self, page: &PageId, viewport: Viewport) -> Result<&crate::Laid> {
         if self.stale(page, viewport) {
+            self.laid += 1;
             let unit = self.compose(page, viewport)?;
             let revisions = self.revisions(page)?;
             if let Some(held) = self.pages.get_mut(page) {

@@ -106,7 +106,11 @@ pub fn render(args: RenderArgs) -> Result<()> {
         report(&loaded, &raster, !args.no_scripts);
     }
 
-    println!("{} resource(s) read", resources.len());
+    println!(
+        "{} resource(s) read, {} full layout(s)",
+        resources.len(),
+        browser.layouts()
+    );
     Ok(())
 }
 

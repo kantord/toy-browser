@@ -148,6 +148,13 @@ pub struct Browser {
     resources: Resources,
     pages: HashMap<PageId, Page>,
     next_id: u32,
+    /// How many times a page has been laid out from nothing.
+    ///
+    /// Counted because it is the expensive thing and it is otherwise invisible:
+    /// a render that reuses the last composition and one that parses and
+    /// cascades the whole document again look identical from outside, and cost
+    /// about 48ms apart on a real page.
+    laid: usize,
 }
 
 impl Browser {
@@ -159,11 +166,21 @@ impl Browser {
             resources,
             pages: HashMap::new(),
             next_id: 0,
+            laid: 0,
         })
     }
 
     pub fn resources(&self) -> &Resources {
         &self.resources
+    }
+
+    /// How many full layouts this browser has done.
+    ///
+    /// Every one is a parse and a cascade of the whole document and of every
+    /// page mounted in it. A render that did none reused what the last one
+    /// worked out.
+    pub fn layouts(&self) -> usize {
+        self.laid
     }
 
     /// Opens a page showing `about:blank`, as a fresh tab does.

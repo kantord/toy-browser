@@ -4285,10 +4285,12 @@ name = "toy-browser"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "app_units",
  "base64 0.22.1",
  "blitz-dom",
  "blitz-html",
  "blitz-traits",
+ "euclid",
  "image",
  "parley",
  "resvg",

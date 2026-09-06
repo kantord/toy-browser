@@ -17,7 +17,8 @@ use std::fmt::Write as _;
 
 use base64::Engine as _;
 
-use super::{Area, Face, Mark, Paint, Picture, Scene};
+use super::shapes::{cast_by, colour, opacity, poured, rounded};
+use super::{Area, Corners, Face, Ink, Mark, Picture, Scene, Shadow};
 
 /// How a resource is mentioned.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -78,7 +79,13 @@ fn faces(scene: &Scene, out: &mut String) {
 
 fn write_mark(scene: &Scene, mark: &Mark, refer: Refer, out: &mut String) {
     match mark {
-        Mark::Fill { area, paint, node } => fill(area, paint, *node, out),
+        Mark::Fill {
+            area,
+            ink,
+            corners,
+            shadow,
+            node,
+        } => fill(area, ink, *corners, *shadow, *node, out),
         Mark::Glyphs { .. } => glyphs(mark, out),
         Mark::Image {
             area,
@@ -86,6 +93,12 @@ fn write_mark(scene: &Scene, mark: &Mark, refer: Refer, out: &mut String) {
             node,
         } => image(scene, area, picture, *node, refer, out),
         Mark::Clip { to, marks, node } => clip(scene, to, marks, *node, refer, out),
+        Mark::Moved {
+            by,
+            about,
+            marks,
+            node,
+        } => moved(scene, *by, *about, marks, *node, refer, out),
     }
 }
 
@@ -142,6 +155,37 @@ fn image(
     );
 }
 
+/// A group with a matrix on it, applied about the transform origin.
+///
+/// Written as three transforms because SVG applies a matrix about the origin of
+/// the coordinate system and CSS applies it about a point in the box: move that
+/// point to the origin, turn, and move it back.
+fn moved(
+    scene: &Scene,
+    by: [f32; 6],
+    about: (f32, f32),
+    marks: &[Mark],
+    node: Option<usize>,
+    refer: Refer,
+    out: &mut String,
+) {
+    let [a, b, c, d, e, f] = by;
+    let _ = writeln!(
+        out,
+        "<g transform=\"translate({:.2} {:.2}) matrix({a:.4} {b:.4} {c:.4} {d:.4} {e:.2} {f:.2}) \
+         translate({:.2} {:.2})\"{}>",
+        about.0,
+        about.1,
+        -about.0,
+        -about.1,
+        named(node),
+    );
+    for inner in marks {
+        write_mark(scene, inner, refer, out);
+    }
+    out.push_str("</g>\n");
+}
+
 fn clip(
     scene: &Scene,
     to: &Area,
@@ -172,19 +216,50 @@ fn clip(
     out.push_str("</g>\n");
 }
 
-fn fill(area: &Area, paint: &Paint, node: Option<usize>, out: &mut String) {
+fn fill(
+    area: &Area,
+    ink: &Ink,
+    corners: Corners,
+    shadow: Option<Shadow>,
+    node: Option<usize>,
+    out: &mut String,
+) {
+    // The filter is defined beside the shape rather than gathered into a
+    // `<defs>`: a Scene is written once and read once, and keeping the two next
+    // to each other means a reader never has to go looking.
+    let cast = shadow.map(|it| cast_by(&it, area, out)).unwrap_or_default();
+    let (paint, alpha) = match ink {
+        Ink::Flat(flat) => (colour(flat), opacity(flat)),
+        Ink::Linear { angle, stops } => (poured(*angle, stops, area, out), String::new()),
+    };
+    if corners.any() {
+        let _ = writeln!(
+            out,
+            "<path d=\"{}\" fill=\"{}\"{}{}{}/>",
+            rounded(area, corners.fitted(area)),
+            paint,
+            alpha,
+            cast,
+            named(node),
+        );
+        return;
+    }
     let _ = writeln!(
         out,
-        "<rect x=\"{:.2}\" y=\"{:.2}\" width=\"{:.2}\" height=\"{:.2}\" fill=\"{}\"{}{}/>",
+        "<rect x=\"{:.2}\" y=\"{:.2}\" width=\"{:.2}\" height=\"{:.2}\" fill=\"{}\"{}{}{}/>",
         area.x,
         area.y,
         area.width,
         area.height,
-        colour(paint),
-        opacity(paint),
+        paint,
+        alpha,
+        cast,
         named(node),
     );
 }
+
+
+
 
 /// What a Picture is called, in whichever of the two writings this is.
 fn reference(digest: &super::Digest, picture: &Picture, refer: Refer) -> String {
@@ -204,16 +279,7 @@ pub fn family(digest: &super::Digest) -> String {
     format!("tb-face-{digest}")
 }
 
-fn colour(paint: &Paint) -> String {
-    format!("rgb({}, {}, {})", paint.red, paint.green, paint.blue)
-}
 
-fn opacity(paint: &Paint) -> String {
-    match paint.alpha >= 1.0 {
-        true => String::new(),
-        false => format!(" fill-opacity=\"{:.3}\"", paint.alpha),
-    }
-}
 
 fn named(node: Option<usize>) -> String {
     node.map(|id| format!(" data-node=\"{id}\""))

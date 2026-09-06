@@ -19,12 +19,15 @@
 //! — which is settled here twice over: a position per glyph, and the exact Face
 //! layout used, carried in the Scene so there is no family name to resolve.
 
+use std::collections::HashSet;
+
 use blitz_dom::Node;
 
 use crate::Viewport;
 use crate::blitz::{Composed, LaidOut};
-use crate::scene::{Area, Mark, Paint, Scene};
+use crate::scene::{Area, Corners, Ink, Mark, Paint, Scene};
 
+mod boxes;
 mod edges;
 mod pictures;
 mod words;
@@ -77,12 +80,14 @@ fn paper(page: &LaidOut, area: Area) -> Mark {
     let [red, green, blue, alpha] = page.canvas();
     Mark::Fill {
         area,
-        paint: Paint {
+        corners: Corners::NONE,
+        shadow: None,
+        ink: Ink::Flat(Paint {
             red: red.round() as u8,
             green: green.round() as u8,
             blue: blue.round() as u8,
             alpha,
-        },
+        }),
         node: None,
     }
 }
@@ -101,15 +106,16 @@ fn compose(
     height: &mut f32,
     resources: &toy_browser_fetch::Resources,
 ) -> Vec<Mark> {
-    let mut marks = Vec::new();
-    unit.laid_out.walk(&mut |node, x, y| {
-        let (x, y) = (x + across, y + down);
-        *height = height.max(y + node.final_layout.size.height);
-        marks.extend(background(node, x, y));
-        marks.extend(edges::of(node, x, y));
-        marks.extend(pictures::of(&unit.laid_out, node, x, y, scene, resources));
-        marks.extend(words::of(&unit.laid_out, node, x, y, scene));
-    });
+    let mut seen = HashSet::new();
+    let mut marks = subtree(
+        unit,
+        unit.laid_out.root_id(),
+        (across, down),
+        scene,
+        height,
+        resources,
+        &mut seen,
+    );
 
     for (node, (area, child)) in &unit.mounted {
         let to = Area {
@@ -140,28 +146,152 @@ fn compose(
     marks
 }
 
-/// An element's own background, if it paints one.
-fn background(node: &Node, x: f32, y: f32) -> Option<Mark> {
-    let style = node.primary_styles()?;
-    // `background-color` may be `currentcolor`, which only means something once
-    // the element's own colour is known — so it is resolved rather than read.
-    let colour = style.resolve_color(&style.get_background().background_color);
-    let [red, green, blue, alpha] = *colour.raw_components();
-    let size = node.final_layout.size;
-    if alpha <= 0.0 || size.width <= 0.0 || size.height <= 0.0 {
-        return None;
+/// One node and everything painted inside it.
+///
+/// Recursive rather than flat, because two of the things a box can say are
+/// about its whole subtree rather than about itself: `overflow: hidden` cuts
+/// what is inside it off at its own edge, and `opacity` fades all of it
+/// together. Neither can be said about a list of marks that has forgotten which
+/// of them belong to whom.
+fn subtree(
+    unit: &Composed,
+    id: usize,
+    at: (f32, f32),
+    scene: &mut Scene,
+    height: &mut f32,
+    resources: &toy_browser_fetch::Resources,
+    seen: &mut HashSet<usize>,
+) -> Vec<Mark> {
+    if !seen.insert(id) {
+        return Vec::new();
     }
-    Some(Mark::Fill {
-        area: Area {
-            x,
-            y,
-            width: size.width,
-            height: size.height,
-        },
-        paint: channels(red, green, blue, alpha),
-        node: Some(node.id),
-    })
+    let Some(node) = unit.laid_out.document.get_node(id) else {
+        return Vec::new();
+    };
+    let placed = node.absolute_position(0.0, 0.0);
+    let (x, y) = (placed.x + at.0, placed.y + at.1);
+    *height = height.max(y + node.final_layout.size.height);
+
+    // The box itself — what it is drawn *as*. Never clipped: a box does not
+    // cut off its own edge.
+    let mut marks = Vec::new();
+    marks.extend(boxes::background(node, x, y));
+    marks.extend(edges::of(node, x, y));
+
+    // Its content — what is drawn *in* it. This is what `overflow` cuts, and it
+    // includes the element's own text: an inline root holds the words of
+    // everything inside it, so leaving them out here would let the one thing
+    // most likely to overflow escape the clip.
+    let mut inside = Vec::new();
+    inside.extend(pictures::of(&unit.laid_out, node, x, y, scene, resources));
+    inside.extend(words::of(&unit.laid_out, node, x, y, scene));
+    for child in unit.laid_out.paint_order(id) {
+        inside.extend(subtree(unit, child, at, scene, height, resources, seen));
+    }
+
+    match boxes::clips(node) {
+        Some(to) => marks.push(Mark::Clip {
+            to: Area { x, y, ..to },
+            marks: inside,
+            node: Some(id),
+        }),
+        None => marks.extend(inside),
+    }
+    turned(node, x, y, faded(node, marks))
 }
+
+
+/// The same marks, moved, if this element carries a transform.
+///
+/// About the centre of the border box, which is what `transform-origin`
+/// defaults to. A page that sets its own origin is not read yet, and turns
+/// about the middle instead.
+fn turned(node: &Node, x: f32, y: f32, marks: Vec<Mark>) -> Vec<Mark> {
+    if marks.is_empty() {
+        return marks;
+    }
+    let Some(style) = node.primary_styles() else {
+        return marks;
+    };
+    let size = node.final_layout.size;
+    let box_ = style.get_box();
+    if box_.transform.0.is_empty() {
+        return marks;
+    }
+    let reference = euclid::Rect::new(
+        euclid::Point2D::new(style::values::computed::Length::new(0.0), style::values::computed::Length::new(0.0)),
+        euclid::Size2D::new(
+            style::values::computed::Length::new(size.width),
+            style::values::computed::Length::new(size.height),
+        ),
+    );
+    let Ok((matrix, _)) = box_.transform.to_transform_3d_matrix(Some(&reference)) else {
+        return marks;
+    };
+    vec![Mark::Moved {
+        by: [
+            matrix.m11, matrix.m12, matrix.m21, matrix.m22, matrix.m41, matrix.m42,
+        ],
+        about: (x + size.width / 2.0, y + size.height / 2.0),
+        marks,
+        node: Some(node.id),
+    }]
+}
+
+/// The same marks, faded, if this element asks to be.
+///
+/// Applied to the colours rather than as a group, because a Scene has no mark
+/// for a group and one alpha per mark says the same thing for a subtree that
+/// does not overlap itself. Where it does overlap, a real browser composites
+/// the group once and this fades each piece separately, which shows anywhere
+/// two faded things sit on top of each other.
+fn faded(node: &Node, marks: Vec<Mark>) -> Vec<Mark> {
+    let Some(style) = node.primary_styles() else {
+        return marks;
+    };
+    let alpha = style.get_effects().opacity;
+    if alpha >= 1.0 {
+        return marks;
+    }
+    marks.into_iter().map(|mark| dimmed(mark, alpha)).collect()
+}
+
+fn dimmed(mark: Mark, by: f32) -> Mark {
+    match mark {
+        Mark::Fill { area, mut ink, corners, shadow, node } => {
+            match &mut ink {
+                Ink::Flat(paint) => paint.alpha *= by,
+                Ink::Linear { stops, .. } => {
+                    for stop in stops.iter_mut() {
+                        stop.paint.alpha *= by;
+                    }
+                }
+            }
+            Mark::Fill { area, ink, corners, shadow, node }
+        }
+        Mark::Glyphs { places, text, baseline, size, mut paint, face, node } => {
+            paint.alpha *= by;
+            Mark::Glyphs { places, text, baseline, size, paint, face, node }
+        }
+        Mark::Clip { to, marks, node } => Mark::Clip {
+            to,
+            marks: marks.into_iter().map(|it| dimmed(it, by)).collect(),
+            node,
+        },
+        Mark::Moved { by: matrix, about, marks, node } => Mark::Moved {
+            by: matrix,
+            about,
+            marks: marks.into_iter().map(|it| dimmed(it, by)).collect(),
+            node,
+        },
+        other => other,
+    }
+}
+
+
+
+
+
 
 /// A colour as the Scene holds one, from the floats a style system deals in.
 pub(super) fn channels(red: f32, green: f32, blue: f32, alpha: f32) -> Paint {

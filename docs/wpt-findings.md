@@ -8,8 +8,8 @@ Where it stood when this was written:
 
 | | tests |
 |---|---|
-| pass | 449 |
-| fail | 340 |
+| pass | 455 |
+| fail | 334 |
 | error | 24 |
 | timeout | 1 |
 
@@ -33,7 +33,12 @@ Block-in-inline took it to **371** — nine won, none lost. Then one line of
 `Cargo.toml` took it to **449**: blitz depends on the `image` crate with
 `default-features = false`, so it could decode no format at all, and every
 `<img>` without explicit dimensions measured 0×0 and was never drawn. See
-`GAPS.md` 0. That one turned out
+`GAPS.md` 0.
+
+Painting what a page actually asks for — rounded corners, shadows, gradients,
+opacity, transforms, clipping — then took it to **455**, which is the smaller
+half of that change. The larger half is that a modern page stops looking like a
+wireframe; `docs/what-real-pages-need.md` measures that axis instead. That one turned out
 not to be a layout bug at all: the anonymous boxes existed and were laid out
 correctly, and the painter walked the DOM, which does not mention them.
 

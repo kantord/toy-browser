@@ -23,7 +23,7 @@
 use blitz_dom::Node;
 use style::values::computed::BorderStyle;
 
-use crate::scene::{Area, Mark};
+use crate::scene::{Area, Corners, Ink, Mark};
 
 use super::channels;
 
@@ -45,8 +45,12 @@ pub(super) fn of(node: &Node, x: f32, y: f32) -> Vec<Mark> {
             let [red, green, blue, alpha] =
                 *style.resolve_color(side.colour(border)).raw_components();
             Mark::Fill {
+                // Square: a rounded border is drawn as a ring, not four
+                // rounded strips, and that needs a mark this Scene has not got.
+                corners: Corners::NONE,
+                shadow: None,
                 area: side.area,
-                paint: channels(red, green, blue, alpha),
+                ink: Ink::Flat(channels(red, green, blue, alpha)),
                 node: Some(node.id),
             }
         })

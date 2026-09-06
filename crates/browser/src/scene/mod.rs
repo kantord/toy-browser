@@ -26,10 +26,13 @@
 use std::collections::BTreeMap;
 
 mod raster;
+mod shapes;
+mod values;
 mod svg;
 
 pub use raster::{Rendered, pixels, render};
 pub use svg::{export, family, normal_form};
+pub use values::{Area, Corners, Ink, Paint, Shadow, Stop};
 
 /// Bytes named by their own content.
 ///
@@ -49,38 +52,6 @@ impl std::fmt::Display for Digest {
     fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(out, "{:032x}", self.0)
     }
-}
-
-/// The rectangle a Mark covers, in the same coordinates as a Box.
-///
-/// Not a Box: a Box is one element's rectangle after a Measure, and a Mark need
-/// not belong to an element at all — the paper a page is drawn on belongs to
-/// none.
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct Area {
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-}
-
-impl Area {
-    pub fn shifted(self, across: f32, down: f32) -> Self {
-        Self {
-            x: self.x + across,
-            y: self.y + down,
-            ..self
-        }
-    }
-}
-
-/// A colour to fill with.
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct Paint {
-    pub red: u8,
-    pub green: u8,
-    pub blue: u8,
-    pub alpha: f32,
 }
 
 /// An image a Scene draws, as the bytes that were fetched.
@@ -160,9 +131,16 @@ pub struct Face {
 #[derive(Clone, PartialEq, Debug)]
 pub enum Mark {
     /// An area of flat colour: a background, a side of a border, an underline.
+    ///
+    /// `corners` are the four radii, clockwise from the top left. All zero is
+    /// the ordinary case and writes as a plain rectangle; anything else writes
+    /// as a path, which is why a rounded box needs no new kind of Mark.
     Fill {
         area: Area,
-        paint: Paint,
+        ink: Ink,
+        corners: Corners,
+        /// Cast behind the shape, if the element asks for one.
+        shadow: Option<Shadow>,
         node: Option<usize>,
     },
     /// Text, positioned glyph by glyph, in a named Face.
@@ -193,6 +171,20 @@ pub enum Mark {
     /// page in the unit shares one coordinate space.
     Clip {
         to: Area,
+        marks: Vec<Mark>,
+        node: Option<usize>,
+    },
+    /// Marks moved by a matrix, about a point.
+    ///
+    /// A group rather than a property of each mark, because a transform is
+    /// about a subtree: the whole of it moves together, and a rotation applied
+    /// to each piece separately about its own centre is a different picture.
+    Moved {
+        /// `a b c d e f`, as CSS and SVG both write a 2D matrix.
+        by: [f32; 6],
+        /// What the matrix is applied about — the transform origin, already in
+        /// document coordinates.
+        about: (f32, f32),
         marks: Vec<Mark>,
         node: Option<usize>,
     },

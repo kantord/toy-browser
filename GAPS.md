@@ -4,8 +4,8 @@ What this browser does not do yet, and what each one would take. A gap is
 something we mean to build; a *limit* is something we have decided not to, or
 cannot — those live in `docs/limits.md` and are not repeated here.
 
-Sizes are measured against `css/CSS2/normal-flow` (814 tests), and were taken
-when 355 of them passed.
+Sizes are measured against `css/CSS2/normal-flow` (814 tests), most recently
+with 449 of them passing. Where an entry quotes an older total it says so.
 `docs/wpt-findings.md` records how they were measured and why each is believed
 rather than merely correlated. The categories overlap — a test can want borders,
 Ahem and an image at once — so the counts do not add up and fixing one does not
@@ -14,6 +14,20 @@ recover its whole count.
 Two entries have left this file. Images are no longer a gap: they were a
 misplaced responsibility, and `docs/adr/0012` records where it went instead.
 Borders are done — what is left of gap 1 is outlines.
+
+---
+
+## Which order
+
+There are two, and they disagree. The suite counts every test the same; a real
+page does not. `docs/what-real-pages-need.md` measures the second axis with
+`tests/probes/` — one feature per page, drawn plainly, against Chromium — and
+the short version is that **modern layout works and paint does not**: flexbox,
+grid, custom properties, `calc()`, `z-index`, `text-align` and `::before` are
+all correct, while `border-radius`, `box-shadow`, gradients, `opacity`,
+`transform` and `overflow` clipping are missing or ignored.
+
+Both orders are at the end of this file.
 
 ---
 
@@ -196,24 +210,70 @@ Worth doing after everything above: smaller bucket, harder fix.
 
 ---
 
-## 7. Painted nowhere, but small in this directory
+## 7. Paint — *the five worst are done*
 
-Each is confirmed missing by direct probe and each is a real gap. None is worth
-more than a handful of tests *here*, so the reason to do them is the next
-directory rather than this one.
+`border-radius`, `box-shadow`, gradients, `opacity` and `transform` all now
+match Chromium exactly on their probe, and `overflow: hidden` clips. See
+`docs/what-real-pages-need.md` for the before and after.
 
-- **`background-image` and gradients.** `background: linear-gradient(red, blue)`
-  paints nothing. 2 failures here — and the cause of Hacker News's missing
-  upvote arrows, so it is more visible in real pages than in the suite.
-- **`overflow: hidden` does not clip.** A 50×20 box holding more text than fits
-  spills three lines past its edge with no clip emitted. 9 failures. The painter
-  already emits `clipPath` for a `<webview>`, so the mechanism exists.
-- **List markers.** `<ul><li>` indents correctly and draws no bullet.
-- **`text-decoration`.** `underline` produces no line.
+What it cost the Scene, which is the part worth knowing:
+
+- `Fill` gained **corner radii** — written as a plain `<rect>` when square and
+  as a path when not, so a box rounded only at the top is sayable. No new Mark.
+- `Fill`'s colour became an **`Ink`**, flat or a linear gradient. On the Fill
+  rather than in `Paint`, because text is always flat and a list of stops on
+  every glyph would be a list nothing ever reads.
+- `Fill` gained a **shadow**, written as `feDropShadow`.
+- **`Clip` was already the mark `overflow` needed.** Nothing was added for it;
+  what was needed was for the painter to walk the tree rather than a flat list,
+  since clipping is about a subtree and a flat list has forgotten which marks
+  belong to whom.
+- **`Moved`** was added as a fifth kind of Mark: a group with a matrix, applied
+  about the transform origin. This is the general transform the closed set was
+  always going to need, and adding it was the deliberate act the set exists to
+  make deliberate.
+
+**What is still missing here:**
+
+- **`background-image: url()`** — a gradient paints, an image does not.
+  `background-size`, `-position` and `-repeat` are a sublanguage of their own,
+  and this is the cause of Hacker News's missing upvote arrows.
+- **`text-decoration`** — no underline is drawn.
+- **List markers** — indented correctly, no bullet.
+- **`text-overflow: ellipsis`** — wraps instead of truncating.
+- **Known approximations**: one shadow where CSS allows a list, `inset` shadows
+  not drawn, `transform-origin` not read (the centre is assumed), and `opacity`
+  applied per mark rather than to a composited group — which differs only where
+  two faded things overlap.
 
 ---
 
-## 8. The WebDriver surface, where a runner needs more of it
+## 8. Shrink-to-fit width
+
+**What happens.** An element sized to its content — an `inline-block`, a float,
+a table cell, an absolutely positioned box with `width: auto` — comes out too
+narrow. One confirmed mechanism: a child's horizontal **margins** do not
+contribute, though its padding does.
+
+```
+inline-block holding a child with padding: 0 10px   ->  100px   correct
+inline-block holding a child with margin:  0 10px   ->   80px   should be 100
+```
+
+In the second case the child starts at x=10 and runs to x=90, overflowing a
+parent that ends at 80.
+
+**Size.** Tests using a shrink-to-fit context fail at **67%** (104 fail, 50
+pass) against **36%** for tests using none. The margin part specifically is 13
+of those, so most of the 104 is something else in the same area and is not yet
+diagnosed.
+
+**Whose.** Layout is entirely blitz and taffy, so probably theirs. Worth
+reading `stylo_taffy`'s intrinsic-size path before assuming.
+
+---
+
+## 9. The WebDriver surface, where a runner needs more of it
 
 Not a rendering gap: it changes what can be *run*, not what is drawn. 24 tests
 currently error rather than fail, stopping at an element response shape the
@@ -227,13 +287,28 @@ input fails saying so.
 
 ## Order worth taking them in
 
-1. **Tables** — 31 fail / 23 pass, and now known to be holding two things
-   hostage: its own bucket, and the line-height constant that cannot be
-   corrected until the compensating error is gone.
-2. **Then set line-height to the face's usWin metric**, which is provably right
-   for plain text and blocked only by the above.
-3. **Outlines**, whenever a directory that uses them is being measured.
-4. **Upstream**: `LineHeight::MetricsRelative` and the replaced-element tag list
-   are both one-line fixes in blitz that we cannot make from here.
+Two orders, because they disagree, and it is worth being honest that they do.
+
+**If the goal is a browser that renders the web** — the five worst are done and
+match Chromium exactly. What is left of gap 7, in order:
+
+1. **`background-image: url()`**. Gradients paint now; images do not, and this
+   is the visible hole in the one real page measured.
+2. **`text-decoration`** and **list markers**. Small, and on every page.
+3. **The approximations**: shadow lists, `inset`, `transform-origin`, and
+   opacity applied per mark rather than to a composited group.
+
+**If the goal is the suite score** — take gap 8 and gap 6:
+
+1. **Shrink-to-fit width** — 104 failures at 67% against a 36% baseline, the
+   largest bucket with a real mechanism behind it.
+2. **Tables** — 32 fail / 28 pass, and holding the line-height constant hostage:
+   its compensating error is why the corpus prefers a number that is provably
+   wrong for the same font at the same size in isolation.
+3. **Then line-height to the face's usWin metric**, blocked only by the above.
+
+**Upstream either way**: `LineHeight::MetricsRelative`, the replaced-element tag
+list, and the `image` decoders are all one-line fixes in blitz that cannot be
+made from here.
 
 Then the rest as they start blocking whatever is being measured next.
