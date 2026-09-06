@@ -39,27 +39,31 @@ recorded in that file:
 and not affecting layout. `style.get_outline()` carries width, style, colour and
 offset.
 
-## 2. A replaced element has no intrinsic size
+## 2. A replaced element has no intrinsic size — *blitz's to fix*
 
 **What happens.** `<iframe>`, `<object>` and `<embed>` are laid out as ordinary
-boxes. CSS says a replaced element with no intrinsic dimensions falls back to
-300×150 when its width or height is `auto`; here `auto` means what it means for
-a `<div>`, so an `<iframe width: auto>` fills its parent.
+boxes with no size. CSS says a replaced element with no intrinsic dimensions
+falls back to 300×150 when its width or height is `auto`.
 
-**How it surfaced.** Painting borders exposed it. `block-replaced-height-004`
-puts a green-bordered box exactly over a red-bordered `<iframe>` and passes if
-no red shows. It used to pass because we painted no borders at all — vacuously,
-on a page we were laying out wrongly. Now the green box is pixel-identical to
-its reference and a 784px red line runs out from under it, which is the true
-answer.
+**Why we cannot fix it here.** blitz has a replaced-element path with exactly
+the right shape — `replaced_measure_function`, fed an inherent size — and enters
+it on a hardcoded tag list:
 
-**Size.** 15 tests, all of which were passing for no reason before:
-`block-replaced-height-*`, `inline-block-replaced-height-*`,
-`inline-replaced-height-*`, `min-height-09*`.
+```rust
+// blitz-dom-0.2.4/src/layout/mod.rs
+if *element_data.name.local == *"img"
+    || *element_data.name.local == *"canvas"
+    || (cfg!(feature = "svg") && *element_data.name.local == *"svg")
+```
 
-**What it needs.** An intrinsic size for replaced elements that have none, used
-when the computed value is `auto`. A user-agent rule cannot do it: the author
-sheets in these tests set `width: auto` explicitly, which would beat it.
+An `<iframe>` never reaches it and there is no extension point. A user-agent
+rule cannot stand in: 8 of the 13 failing tests write `width: auto` explicitly,
+which beats any UA declaration, and the spec means an *intrinsic* size rather
+than a CSS width. So the rule would fix at most 5 and be wrong on the rest.
+
+**Size.** 13 failures, 4 passes.
+
+**What it needs.** A tag list that includes the replaced elements, upstream.
 
 ---
 
@@ -104,24 +108,41 @@ Two things this cost, both now fixed:
   wrong answer from the previous version of it — which is exactly what happened
   here, and read as "Ahem changed nothing".
 
-## 5. Line box geometry drifts vertically
+## 5. Line box geometry drifts vertically — *investigated, not fixed*
 
-**What happens.** 65 failures (15%) paint the right text with the right content
-at the wrong height. Some of that is gap 3. The rest is the drift the corpus
-already records against Chromium, and the standing suspect is the compensation
-in `crates/browser/src/blitz/mod.rs`:
+**The cause is known and is one line upstream.** A browser computes
+`line-height: normal` from the font's own metrics. parley offers exactly that as
+`LineHeight::MetricsRelative`; blitz maps `normal` to `FontSizeRelative(1.2)`
+instead, in `stylo_to_parley.rs`. From outside blitz the only lever is a CSS
+number, and CSS cannot vary one by the face an element resolved to.
 
-```rust
-const LINE_HEIGHT: &str = "html { line-height: 1.08 }…";
-```
+**Both alternatives were measured, and neither is better.**
 
-blitz maps `line-height: normal` to a flat 1.2 of the font size; a browser uses
-the font's own metrics — about 1.15 for Liberation Sans. 1.08 was tuned to make
-one real page line up.
+Liberation Sans's own metrics give 1.1499 where the tuned constant says 1.08.
+Substituting it moves the corpus like this:
 
-**What it needs.** Reading ascent, descent and line gap from the resolved face
-and computing `normal` from those, so the constant can go. Every test that
-states a height in lines currently pays for it.
+| case | 1.08 | 1.15 |
+|---|---|---|
+| `044-center-block` | 5.00px | **0** |
+| `074-font-liberation` | 3.00px | **0** |
+| `0820-lineheight-20px` | 15.00px | 12.00px |
+| `070`/`071-font-size` | 6.00px | 3.00px |
+| `900-hackernews` | 33,120px | **37,290px** |
+
+Ten cases improve, several to exact agreement, and the one real page gets 4,169px
+worse — which dominates. WPT is indifferent: 371 either way. Why Hacker News
+prefers the wrong number is not understood, and is the thread to pull next.
+
+**A second theory, tested and wrong.** `fc-match` reports that both `Verdana`
+and `sans-serif` resolve to Noto Sans on this machine, so `fonts.rs` pinning
+`sans-serif` to Liberation Sans looked like the reason our line boxes disagree.
+Removing the pin made the corpus nearly twice as bad — Hacker News 33,120px to
+59,954px. Playwright's Chromium does not resolve the way the system fontconfig
+does, and the pin is right.
+
+**What it needs.** `MetricsRelative` upstream. Nothing worth changing here until
+then: every single number is wrong somewhere, and 1.08 is wrong in the fewest
+places we can measure.
 
 ---
 
@@ -171,10 +192,12 @@ input fails saying so.
 
 ## Order worth taking them in
 
-1. **A replaced element's intrinsic size** — 15 tests, precisely diagnosed.
-2. **Line height from font metrics** — removes a tuned constant, and now that
-   Ahem is installed the effect is measurable.
-3. **Tables**, the largest bucket left with a known cause.
-4. **Outlines**, whenever a directory that uses them is being measured.
+1. **Find out why Hacker News prefers the wrong line-height number.** It is the
+   loose thread from gap 5, it is the one real page in the corpus, and until it
+   is understood the corpus cannot arbitrate a change that helps ten other cases.
+2. **Tables** — the largest bucket left with a known cause, 31 fail / 23 pass.
+3. **Outlines**, whenever a directory that uses them is being measured.
+4. **Upstream**: `LineHeight::MetricsRelative` and the replaced-element tag list
+   are both one-line fixes in blitz that we cannot make from here.
 
 Then the rest as they start blocking whatever is being measured next.
