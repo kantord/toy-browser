@@ -17,6 +17,35 @@ Borders are done — what is left of gap 1 is outlines.
 
 ---
 
+## 0. Raster images did not decode — *fixed, and it was one line*
+
+**blitz could not decode any image format at all.** Its `Cargo.toml` asks for
+the `image` crate with `default-features = false`, which turns off every
+decoder, so `image::ImageReader` failed on an ordinary PNG. An `<img>` then
+measured 0×0 and was never drawn.
+
+It hid because it only bites when the size has to come from the *file*. Hacker
+News's logo carries `width` and `height` attributes and drew fine, so images
+looked like they worked. Every WPT reference writes
+`<img src="support/black96x96.png" alt="…">` with no dimensions, and those drew
+nothing.
+
+**371 → 449.** Tests whose test or reference used a bare `<img>` were failing at
+**92%** against a 53% baseline — 204 of them.
+
+The fix is a dependency this crate never names:
+
+```toml
+image = { version = "0.25.6", default-features = false,
+          features = ["png", "jpeg", "gif", "webp"] }
+```
+
+Cargo unifies features across the graph, so asking for the decoders here is what
+gives blitz one. Worth reporting upstream — a DOM library that cannot decode a
+PNG is surprising, and the failure is silent.
+
+---
+
 ## 1. Outlines are never painted
 
 **Borders are done.** `crates/browser/src/blitz/paint/edges.rs` draws four

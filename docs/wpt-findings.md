@@ -8,8 +8,8 @@ Where it stood when this was written:
 
 | | tests |
 |---|---|
-| pass | 371 |
-| fail | 418 |
+| pass | 449 |
+| fail | 340 |
 | error | 24 |
 | timeout | 1 |
 
@@ -29,7 +29,11 @@ records it.
 Installing Ahem then took it to **362**. All nine gained tests use it, which is
 as clean an attribution as this suite gives.
 
-Block-in-inline took it to **371** — nine won, none lost. That one turned out
+Block-in-inline took it to **371** — nine won, none lost. Then one line of
+`Cargo.toml` took it to **449**: blitz depends on the `image` crate with
+`default-features = false`, so it could decode no format at all, and every
+`<img>` without explicit dimensions measured 0×0 and was never drawn. See
+`GAPS.md` 0. That one turned out
 not to be a layout bug at all: the anonymous boxes existed and were laid out
 correctly, and the painter walked the DOM, which does not mention them.
 

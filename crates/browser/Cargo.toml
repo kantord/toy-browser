@@ -20,6 +20,12 @@ resvg = "0.48.1"
 url = "2.5.8"
 xxhash-rust = { version = "0.8.18", features = ["xxh3"] }
 base64 = "0.22"
+# Never named in this crate's code. It is here to turn decoders on for
+# blitz-dom, which depends on `image` with `default-features = false` and so
+# cannot decode any format at all — an `<img>` with no width or height then
+# measures 0x0 and is never drawn. Cargo unifies features across the graph, so
+# asking for them here is what gives blitz a decoder.
+image = { version = "0.25.6", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 
 [lints]
 workspace = true
