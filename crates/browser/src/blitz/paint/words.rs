@@ -18,7 +18,7 @@ use std::sync::Arc;
 use blitz_dom::Node;
 
 use crate::blitz::LaidOut;
-use crate::scene::{Digest, Mark, Paint, Scene};
+use crate::scene::{Area, Corners, Digest, Ink, Mark, Paint, Scene};
 
 /// Every run of text an element lays out, positioned glyph by glyph.
 pub(super) fn of(page: &LaidOut, node: &Node, x: f32, y: f32, scene: &mut Scene) -> Vec<Mark> {
@@ -44,17 +44,15 @@ pub(super) fn of(page: &LaidOut, node: &Node, x: f32, y: f32, scene: &mut Scene)
             let from = consumed.get(&key).copied().unwrap_or(0);
             let count = run.glyphs().count();
             consumed.insert(key, from + count);
-            marks.extend(mark(
-                page,
-                &Placed {
-                    run,
-                    from,
-                    count,
-                    origin: (x, y),
-                },
-                &inline.text,
-                scene,
-            ));
+            let placed = Placed {
+                run,
+                from,
+                count,
+                origin: (x, y),
+            };
+            let drawn = mark(page, &placed, &inline.text, scene);
+            marks.extend(lines_over(page, &placed, drawn.as_ref()));
+            marks.extend(drawn);
         }
     }
     marks
@@ -178,4 +176,63 @@ fn colour(page: &LaidOut, owner: usize) -> Paint {
     };
     let [red, green, blue, _] = *style.clone_color().raw_components();
     super::channels(red, green, blue, 1.0)
+}
+
+/// The lines a run is struck with — underline, overline, line-through.
+///
+/// Drawn from the face's own metrics, which say where an underline sits and how
+/// thick it is, so a line under 10pt text is not the same line as one under
+/// 30pt.
+///
+/// Read from the element the run belongs to. CSS *propagates* a decoration to
+/// everything inside the element that set it, rather than inheriting it, so a
+/// `<span>` inside an underlined `<a>` should be underlined and here is not —
+/// the span has no decoration of its own to report.
+fn lines_over(page: &LaidOut, placed: &Placed<'_>, drawn: Option<&Mark>) -> Vec<Mark> {
+    use style::values::computed::TextDecorationLine as Line;
+    let Some(Mark::Glyphs { places, baseline, paint, .. }) = drawn else {
+        return Vec::new();
+    };
+    let owner = placed.run.style().brush.id;
+    let Some(style) = page.document.get_node(owner).and_then(Node::primary_styles) else {
+        return Vec::new();
+    };
+    let lines = style.get_text().text_decoration_line;
+    if lines.is_empty() {
+        return Vec::new();
+    }
+    // From where the run starts to where it ends, not from the first glyph to
+    // the last plus a run's width — the last glyph is already inside the run,
+    // and adding the whole advance to it draws a line past the end of the word.
+    let Some(from) = places.first().copied() else {
+        return Vec::new();
+    };
+    let to = placed.origin.0 + placed.run.offset() + placed.run.advance();
+    let metrics = placed.run.run().metrics();
+    let thick = metrics.underline_size.max(1.0);
+    let width = (to - from).max(0.0);
+
+    // Where each line sits relative to the baseline. The face states the
+    // underline and the strike; an overline goes at the top of the ascent,
+    // which is the only one it does not have an opinion about.
+    let mut marks = Vec::new();
+    let mut rule = |above: f32| {
+        marks.push(Mark::Fill {
+            area: Area { x: from, y: baseline - above - thick / 2.0, width, height: thick },
+            ink: Ink::Flat(*paint),
+            corners: Corners::NONE,
+            shadow: None,
+            node: Some(owner),
+        });
+    };
+    if lines.contains(Line::UNDERLINE) {
+        rule(metrics.underline_offset);
+    }
+    if lines.contains(Line::LINE_THROUGH) {
+        rule(metrics.strikethrough_offset);
+    }
+    if lines.contains(Line::OVERLINE) {
+        rule(metrics.ascent);
+    }
+    marks
 }

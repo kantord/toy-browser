@@ -17,12 +17,12 @@ use std::fmt::Write as _;
 
 use base64::Engine as _;
 
-use super::shapes::{cast_by, colour, opacity, poured, rounded};
-use super::{Area, Corners, Face, Ink, Mark, Picture, Scene, Shadow};
+use super::shapes::{cast_by, colour, opacity, poured, rounded, tiled};
+use super::{Area, Face, Ink, Mark, Picture, Scene};
 
 /// How a resource is mentioned.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Refer {
+pub(super) enum Refer {
     /// By Digest alone. Nothing to resolve, nothing to fetch.
     ByDigest,
     /// By its bytes, so the file stands on its own.
@@ -79,13 +79,7 @@ fn faces(scene: &Scene, out: &mut String) {
 
 fn write_mark(scene: &Scene, mark: &Mark, refer: Refer, out: &mut String) {
     match mark {
-        Mark::Fill {
-            area,
-            ink,
-            corners,
-            shadow,
-            node,
-        } => fill(area, ink, *corners, *shadow, *node, out),
+        Mark::Fill { .. } => fill(scene, mark, refer, out),
         Mark::Glyphs { .. } => glyphs(mark, out),
         Mark::Image {
             area,
@@ -216,53 +210,63 @@ fn clip(
     out.push_str("</g>\n");
 }
 
-fn fill(
-    area: &Area,
-    ink: &Ink,
-    corners: Corners,
-    shadow: Option<Shadow>,
-    node: Option<usize>,
-    out: &mut String,
-) {
+fn fill(scene: &Scene, mark: &Mark, refer: Refer, out: &mut String) {
+    let Mark::Fill {
+        area,
+        ink,
+        corners,
+        shadow,
+        node,
+    } = mark
+    else {
+        return;
+    };
     // The filter is defined beside the shape rather than gathered into a
     // `<defs>`: a Scene is written once and read once, and keeping the two next
     // to each other means a reader never has to go looking.
     let cast = shadow.map(|it| cast_by(&it, area, out)).unwrap_or_default();
-    let (paint, alpha) = match ink {
-        Ink::Flat(flat) => (colour(flat), opacity(flat)),
-        Ink::Linear { angle, stops } => (poured(*angle, stops, area, out), String::new()),
+    let Some((paint, alpha)) = spread(scene, ink, area, refer, out) else {
+        return;
     };
+    let rest = format!("{alpha}{cast}{}", named(*node));
     if corners.any() {
         let _ = writeln!(
             out,
-            "<path d=\"{}\" fill=\"{}\"{}{}{}/>",
+            "<path d=\"{}\" fill=\"{paint}\"{rest}/>",
             rounded(area, corners.fitted(area)),
-            paint,
-            alpha,
-            cast,
-            named(node),
         );
         return;
     }
     let _ = writeln!(
         out,
-        "<rect x=\"{:.2}\" y=\"{:.2}\" width=\"{:.2}\" height=\"{:.2}\" fill=\"{}\"{}{}{}/>",
-        area.x,
-        area.y,
-        area.width,
-        area.height,
-        paint,
-        alpha,
-        cast,
-        named(node),
+        "<rect x=\"{:.2}\" y=\"{:.2}\" width=\"{:.2}\" height=\"{:.2}\" fill=\"{paint}\"{rest}/>",
+        area.x, area.y, area.width, area.height,
     );
 }
 
-
-
+/// What to put in `fill`, and the opacity that goes with it.
+///
+/// `None` when the ink names a Picture this Scene does not carry, which is the
+/// one case where there is nothing to draw rather than something to draw badly.
+fn spread(
+    scene: &Scene,
+    ink: &Ink,
+    area: &Area,
+    refer: Refer,
+    out: &mut String,
+) -> Option<(String, String)> {
+    Some(match ink {
+        Ink::Flat(flat) => (colour(flat), opacity(flat)),
+        Ink::Linear { angle, stops } => (poured(*angle, stops, area, out), String::new()),
+        Ink::Tiled(tiles) => {
+            let held = scene.pictures.get(&tiles.picture)?;
+            (tiled(held, tiles, area, refer, out), String::new())
+        }
+    })
+}
 
 /// What a Picture is called, in whichever of the two writings this is.
-fn reference(digest: &super::Digest, picture: &Picture, refer: Refer) -> String {
+pub(super) fn reference(digest: &super::Digest, picture: &Picture, refer: Refer) -> String {
     match refer {
         Refer::ByDigest => format!("tb:{digest}"),
         Refer::Inline => format!(

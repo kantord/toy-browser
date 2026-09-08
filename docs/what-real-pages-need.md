@@ -29,9 +29,9 @@ uses.
 A page laid out with flexbox or grid comes out right. That is most of the modern
 web's structure.
 
-**All five of the worst are now fixed**, and each matches Chromium exactly on
-its probe — `0.00%` of the viewport disagreeing, where the whole point of the
-measurement is that it is against a real browser rather than against an opinion:
+**Eight of the nine are now fixed**, and each matches Chromium on its probe or
+comes within a pixel of it, where the whole point of the measurement is that it
+is against a real browser rather than against an opinion:
 
 | | before | after |
 |---|---|---|
@@ -40,6 +40,9 @@ measurement is that it is against a real browser rather than against an opinion:
 | `opacity` | 2.00% | **0.00%** |
 | gradients | 4.50% | **0.00%** |
 | `transform` | 1.42% | **0.00%** |
+| `background-image` | nothing drawn | **0.00%** |
+| list markers | no bullet | **0.09%** — the `ul` box off by 2px |
+| `text-decoration` | no line | **0.19%** — the strikethrough off by 1px |
 | `overflow: hidden` | 0.25% | 0.15% |
 
 What that took, in the Scene's own terms: a Fill gained corner radii, an `Ink`
@@ -59,15 +62,16 @@ rendering the probe and counting marks — a feature that draws nothing leaves o
 | **`border-radius`** | square corners, silently | every button, card, avatar, input |
 | **`box-shadow`** | nothing drawn | every card, dropdown, modal |
 | **gradients / `background-image`** | **nothing drawn at all** | heroes, buttons, icons, sprites |
+| **`text-decoration`** | no line | links are underlined by default nearly everywhere |
+| **list markers** | indented correctly, no bullet | any bulleted list |
 | **`opacity`** | ignored; drawn fully opaque | overlays, disabled states, fades |
 | **`transform`** | ignored; box stays at its untransformed origin | centring, icons, anything animated |
 | **`overflow: hidden`** | no clip; content escapes its box | structural — containers stop containing |
-| **`text-decoration`** | no line | links are underlined by default nearly everywhere |
-| **list markers** | indented correctly, no bullet | any bulleted list |
 | **`text-overflow: ellipsis`** | wraps instead of truncating | tables, nav, cards |
 
 The first five would garble a modern page on their own. A card with no shadow,
-square corners, a flat background and a fully opaque overlay is not a card.
+square corners, a flat background and a fully opaque overlay is not a card. Only
+`text-overflow: ellipsis` is still outstanding.
 
 **Why this is not the failure table.** Both features at the top of that table
 are markers rather than causes, and each was checked rather than assumed:
@@ -93,3 +97,16 @@ confirmed by rendering the probe and counting marks as well: a feature that
 draws nothing leaves exactly one `<rect>` in the SVG, which is the paper.
 
 `tests/probes/README.md` has the commands.
+
+## The other kind of finding
+
+Probes measure one feature at a time, which is their strength and their limit:
+they cannot find a bug that only a whole page has. Taking one real page as far
+as it goes found six, and five of them were not drawing bugs at all — a missing
+`document.cookie`, a missing `localStorage`, classic scripts run in strict mode,
+`visibility: hidden` ignored, and a zero-height box declining to clip.
+
+That is worth knowing about the instrument: a page can be wrong in ways no
+probe is shaped to ask about. `docs/wikipedia.md` records the chain, and the
+one thing left on that page — **floats** — which no probe here covers either,
+because until it was measured nobody had noticed they were missing.

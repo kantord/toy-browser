@@ -86,6 +86,31 @@ pub enum Ink {
     /// A line of colour across the area, at `angle` degrees clockwise from
     /// "up", which is how CSS states it.
     Linear { angle: f32, stops: Vec<Stop> },
+    /// A picture laid over the area, once or tiled.
+    ///
+    /// An Ink rather than an [`Image`](super::Mark::Image) mark, because a
+    /// background is a way of filling a box and not a thing sitting in it: as
+    /// an Ink it is rounded by the same corners and cast by the same shadow as
+    /// any other fill, with nothing said twice.
+    Tiled(Tiles),
+}
+
+/// How a picture is laid over an area.
+///
+/// One value rather than four fields on the variant, because they are only ever
+/// read together: every one of them is needed to say where a single tile goes,
+/// and none of them means anything without the others.
+#[derive(Clone, PartialEq, Debug)]
+pub struct Tiles {
+    pub picture: super::Digest,
+    /// Where the first tile's top-left corner sits, in document coordinates.
+    pub at: (f32, f32),
+    /// How big one tile is drawn.
+    pub tile: (f32, f32),
+    /// Whether the tile repeats across and down. A background that does not
+    /// repeat is one tile as large as the box, with the picture in the corner
+    /// the page asked for.
+    pub repeat: (bool, bool),
 }
 
 impl Ink {
@@ -94,6 +119,7 @@ impl Ink {
         match self {
             Self::Flat(paint) => paint.alpha > 0.0,
             Self::Linear { stops, .. } => stops.iter().any(|stop| stop.paint.alpha > 0.0),
+            Self::Tiled(tiles) => tiles.tile.0 > 0.0 && tiles.tile.1 > 0.0,
         }
     }
 }

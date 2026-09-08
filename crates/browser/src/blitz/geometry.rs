@@ -70,6 +70,9 @@ impl LaidOut {
     pub(super) fn implied(&self) -> HashMap<usize, Around> {
         let mut found: HashMap<usize, Around> = HashMap::new();
         self.walk(&mut |node, x, y| {
+            if !rendered(node) {
+                return;
+            }
             let Some(inline) = node
                 .element_data()
                 .and_then(|it| it.inline_layout_data.as_ref())
@@ -109,19 +112,34 @@ impl LaidOut {
     /// Gives an element with no box of its own the one around what it holds.
     fn enclose(&self, id: usize, found: &mut HashMap<usize, Around>) -> Option<Around> {
         let node = self.document.get_node(id)?;
-        let mut held: Option<Around> = found.get(&id).copied();
-        for child in &node.children {
-            if let Some(around) = self.enclose(*child, found) {
-                held = Some(held.map_or(around, |so_far| so_far.with(around)));
-            }
+        if !rendered(node) {
+            // Nothing under a box that is not drawn is drawn either, so a
+            // hidden subtree neither takes a box nor gives one to its parent.
+            return None;
         }
+        let held = self.around_contents(node, found);
         let size = node.final_layout.size;
+        // A node layout did give a box to answers with it, and keeps none of
+        // what its contents said: the box is the fact, and the contents can
+        // spill out of it.
         if size.width > 0.0 || size.height > 0.0 {
             let at = node.absolute_position(0.0, 0.0);
             return Some(Around::of(at.x, at.y, size.width, size.height));
         }
         if let Some(held) = held {
             found.insert(id, held);
+        }
+        held
+    }
+
+    /// The one box around everything a node holds, and around whatever the
+    /// node's own glyph runs already put there.
+    fn around_contents(&self, node: &Node, found: &mut HashMap<usize, Around>) -> Option<Around> {
+        let mut held: Option<Around> = found.get(&node.id).copied();
+        for child in &node.children {
+            if let Some(around) = self.enclose(*child, found) {
+                held = Some(held.map_or(around, |so_far| so_far.with(around)));
+            }
         }
         held
     }
@@ -157,6 +175,9 @@ impl LaidOut {
 /// Where an element is: the box layout gave it, or the one around what it
 /// holds when layout gave it none.
 pub(super) fn placed(node: &Node, x: f32, y: f32, implied: &HashMap<usize, Around>) -> ElementBox {
+    if !rendered(node) {
+        return NOWHERE;
+    }
     let size = node.final_layout.size;
     if size.width > 0.0 || size.height > 0.0 {
         return ElementBox {
@@ -166,13 +187,38 @@ pub(super) fn placed(node: &Node, x: f32, y: f32, implied: &HashMap<usize, Aroun
             height: size.height,
         };
     }
-    implied.get(&node.id).copied().map_or(
-        ElementBox {
-            x,
-            y,
-            width: 0.0,
-            height: 0.0,
-        },
-        Around::into_box,
-    )
+    implied
+        .get(&node.id)
+        .copied()
+        .map_or(ElementBox { x, y, ..NOWHERE }, Around::into_box)
+}
+
+/// The box a browser reports for an element it never drew.
+///
+/// Zero on all four sides, wherever the element nominally sits. This is what
+/// `getBoundingClientRect` answers for `display: none`, and it is the answer
+/// the rest of this file has to agree with.
+const NOWHERE: ElementBox = ElementBox {
+    x: 0.0,
+    y: 0.0,
+    width: 0.0,
+    height: 0.0,
+};
+
+/// Whether this element is drawn at all.
+///
+/// Two questions in one, because the cascade answers them in two places. An
+/// element **under** `display: none` has no computed style at all — stylo stops
+/// there, and `primary_styles` is how that shows. The element that *carries*
+/// the `display: none` does have one, and has to be read.
+///
+/// Without this an unrendered subtree still reported boxes, built out of inline
+/// runs left over from a layout it was in before it was hidden. On Wikipedia
+/// that was 3477 elements claiming a place on the page — a search form at
+/// x=772 running 984px wide, off the side of a 1000px window — and it made the
+/// browser disagree with itself, since the same elements correctly reported no
+/// computed style.
+fn rendered(node: &Node) -> bool {
+    node.primary_styles()
+        .is_some_and(|style| !style.get_box().display.is_none())
 }

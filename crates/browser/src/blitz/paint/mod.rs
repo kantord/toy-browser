@@ -29,6 +29,7 @@ use crate::scene::{Area, Corners, Ink, Mark, Paint, Scene};
 
 mod boxes;
 mod edges;
+mod effects;
 mod pictures;
 mod words;
 
@@ -174,17 +175,28 @@ fn subtree(
 
     // The box itself — what it is drawn *as*. Never clipped: a box does not
     // cut off its own edge.
+    // A background picture paints over the colour, so it is offered to the
+    // Fill rather than drawn beside it — one fill, one rounding, one shadow.
+    let shown = shown(node);
     let mut marks = Vec::new();
-    marks.extend(boxes::background(node, x, y));
-    marks.extend(edges::of(node, x, y));
+    if shown {
+        let backdrop = pictures::backdrop(&unit.laid_out, node, x, y, scene, resources);
+        marks.extend(boxes::background(node, x, y, backdrop));
+        marks.extend(boxes::marker(node, x, y));
+        marks.extend(edges::of(node, x, y));
+    }
 
     // Its content — what is drawn *in* it. This is what `overflow` cuts, and it
     // includes the element's own text: an inline root holds the words of
     // everything inside it, so leaving them out here would let the one thing
     // most likely to overflow escape the clip.
     let mut inside = Vec::new();
-    inside.extend(pictures::of(&unit.laid_out, node, x, y, scene, resources));
-    inside.extend(words::of(&unit.laid_out, node, x, y, scene));
+    if shown {
+        inside.extend(pictures::of(&unit.laid_out, node, x, y, scene, resources));
+        inside.extend(words::of(&unit.laid_out, node, x, y, scene));
+    }
+    // Children are walked either way: `visibility` is inherited but can be
+    // turned back on, so a hidden box is not a hidden subtree.
     for child in unit.laid_out.paint_order(id) {
         inside.extend(subtree(unit, child, at, scene, height, resources, seen));
     }
@@ -197,101 +209,27 @@ fn subtree(
         }),
         None => marks.extend(inside),
     }
-    turned(node, x, y, faded(node, marks))
+    effects::turned(node, x, y, effects::faded(node, marks))
 }
 
 
-/// The same marks, moved, if this element carries a transform.
+/// Whether this element paints itself at all.
 ///
-/// About the centre of the border box, which is what `transform-origin`
-/// defaults to. A page that sets its own origin is not read yet, and turns
-/// about the middle instead.
-fn turned(node: &Node, x: f32, y: f32, marks: Vec<Mark>) -> Vec<Mark> {
-    if marks.is_empty() {
-        return marks;
-    }
-    let Some(style) = node.primary_styles() else {
-        return marks;
-    };
-    let size = node.final_layout.size;
-    let box_ = style.get_box();
-    if box_.transform.0.is_empty() {
-        return marks;
-    }
-    let reference = euclid::Rect::new(
-        euclid::Point2D::new(style::values::computed::Length::new(0.0), style::values::computed::Length::new(0.0)),
-        euclid::Size2D::new(
-            style::values::computed::Length::new(size.width),
-            style::values::computed::Length::new(size.height),
-        ),
-    );
-    let Ok((matrix, _)) = box_.transform.to_transform_3d_matrix(Some(&reference)) else {
-        return marks;
-    };
-    vec![Mark::Moved {
-        by: [
-            matrix.m11, matrix.m12, matrix.m21, matrix.m22, matrix.m41, matrix.m42,
-        ],
-        about: (x + size.width / 2.0, y + size.height / 2.0),
-        marks,
-        node: Some(node.id),
-    }]
-}
-
-/// The same marks, faded, if this element asks to be.
+/// `visibility: hidden` keeps the box — it still takes up room and still lays
+/// out what is inside it — and draws nothing. That is what makes it different
+/// from `display: none`, and it is the difference every collapsed menu on
+/// Wikipedia is built on.
 ///
-/// Applied to the colours rather than as a group, because a Scene has no mark
-/// for a group and one alpha per mark says the same thing for a subtree that
-/// does not overlap itself. Where it does overlap, a real browser composites
-/// the group once and this fades each piece separately, which shows anywhere
-/// two faded things sit on top of each other.
-fn faded(node: &Node, marks: Vec<Mark>) -> Vec<Mark> {
-    let Some(style) = node.primary_styles() else {
-        return marks;
-    };
-    let alpha = style.get_effects().opacity;
-    if alpha >= 1.0 {
-        return marks;
-    }
-    marks.into_iter().map(|mark| dimmed(mark, alpha)).collect()
+/// Per element rather than per subtree, because the property is inherited but
+/// can be set back to `visible` further down, and a browser honours that. The
+/// one place this is approximate is an inline root: its words include those of
+/// everything inside it, so a visible span inside a hidden paragraph loses its
+/// text along with the paragraph's.
+fn shown(node: &Node) -> bool {
+    use style::computed_values::visibility::T as Visibility;
+    node.primary_styles()
+        .is_none_or(|style| style.get_inherited_box().visibility == Visibility::Visible)
 }
-
-fn dimmed(mark: Mark, by: f32) -> Mark {
-    match mark {
-        Mark::Fill { area, mut ink, corners, shadow, node } => {
-            match &mut ink {
-                Ink::Flat(paint) => paint.alpha *= by,
-                Ink::Linear { stops, .. } => {
-                    for stop in stops.iter_mut() {
-                        stop.paint.alpha *= by;
-                    }
-                }
-            }
-            Mark::Fill { area, ink, corners, shadow, node }
-        }
-        Mark::Glyphs { places, text, baseline, size, mut paint, face, node } => {
-            paint.alpha *= by;
-            Mark::Glyphs { places, text, baseline, size, paint, face, node }
-        }
-        Mark::Clip { to, marks, node } => Mark::Clip {
-            to,
-            marks: marks.into_iter().map(|it| dimmed(it, by)).collect(),
-            node,
-        },
-        Mark::Moved { by: matrix, about, marks, node } => Mark::Moved {
-            by: matrix,
-            about,
-            marks: marks.into_iter().map(|it| dimmed(it, by)).collect(),
-            node,
-        },
-        other => other,
-    }
-}
-
-
-
-
-
 
 /// A colour as the Scene holds one, from the floats a style system deals in.
 pub(super) fn channels(red: f32, green: f32, blue: f32, alpha: f32) -> Paint {

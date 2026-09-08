@@ -14,24 +14,24 @@ use crate::scene::{Area, Corners, Ink, Mark, Shadow};
 use super::channels;
 
 /// An element's own background, if it paints one.
-pub(super) fn background(node: &Node, x: f32, y: f32) -> Option<Mark> {
-    let style = node.primary_styles()?;
-    // `background-color` may be `currentcolor`, which only means something once
-    // the element's own colour is known — so it is resolved rather than read.
-    let colour = style.resolve_color(&style.get_background().background_color);
-    let [red, green, blue, alpha] = *colour.raw_components();
+pub(super) fn background(node: &Node, x: f32, y: f32, backdrop: Option<Ink>) -> Vec<Mark> {
+    let Some(style) = node.primary_styles() else {
+        return Vec::new();
+    };
     let size = node.final_layout.size;
     if size.width <= 0.0 || size.height <= 0.0 {
-        return None;
+        return Vec::new();
     }
     // A box with no background still casts its shadow, so this cannot bail on a
     // transparent colour the way it used to — only on having nowhere to draw.
     let cast = shadow(&style);
-    // `background-image` paints over `background-color`, so a gradient wins
-    // where there is one.
+    // `background-color` may be `currentcolor`, which only means something once
+    // the element's own colour is known — so it is resolved rather than read.
+    let colour = style.resolve_color(&style.get_background().background_color);
+    let [red, green, blue, alpha] = *colour.raw_components();
     let ink = gradient(&style).unwrap_or_else(|| Ink::Flat(channels(red, green, blue, alpha)));
-    if !ink.shows() && cast.is_none() {
-        return None;
+    if !ink.shows() && cast.is_none() && backdrop.is_none() {
+        return Vec::new();
     }
     let area = Area {
         x,
@@ -39,13 +39,24 @@ pub(super) fn background(node: &Node, x: f32, y: f32) -> Option<Mark> {
         width: size.width,
         height: size.height,
     };
-    Some(Mark::Fill {
-        corners: radii(&style, &area),
-        shadow: cast,
+    let corners = radii(&style, &area);
+    let fill = |ink, shadow| Mark::Fill {
+        corners,
+        shadow,
         area,
         ink,
         node: Some(node.id),
-    })
+    };
+    // The colour, then whatever is laid over it. Two fills rather than one,
+    // because CSS paints the picture *over* the colour and a single ink could
+    // only say one of them — a half-transparent PNG on a white box would lose
+    // the white. The shadow belongs to the box and is cast once, so the layer
+    // on top carries none.
+    let under = (ink.shows() || cast.is_some()).then(move || fill(ink, cast));
+    under
+        .into_iter()
+        .chain(backdrop.map(|over| fill(over, None)))
+        .collect()
 }
 
 /// The box this element cuts its contents off at, if it cuts them off.
@@ -57,8 +68,19 @@ pub(super) fn clips(node: &Node) -> Option<Area> {
     if !cut(box_.overflow_x) && !cut(box_.overflow_y) {
         return None;
     }
+    // `overflow` does not apply to a non-replaced inline box, and one has no
+    // box in the layout tree either — so its zero size is "no box measured"
+    // rather than "a box of no size", and clipping to it would erase the
+    // element's own text.
+    if style.get_box().display.is_inline_flow() {
+        return None;
+    }
+    // A box of no height is the tightest clip there is, not the absence of one.
+    // Guarding against zero here is what let every collapsed menu on Wikipedia
+    // paint in full: `.vector-dropdown-content` is `height: 0; overflow:
+    // hidden`, and the whole header came out piled on top of itself.
     let size = node.final_layout.size;
-    (size.width > 0.0 && size.height > 0.0).then_some(Area {
+    Some(Area {
         x: 0.0,
         y: 0.0,
         width: size.width,
@@ -174,4 +196,48 @@ pub(super) fn heading(direction: &style::values::computed::image::LineDirection)
             (X::Right, Y::Bottom) => 135.0,
         },
     }
+}
+
+/// The bullet a list item is marked with.
+///
+/// blitz lays a list item out as a block — taffy has no list formatting context
+/// — so nothing draws the marker and the indent it leaves stays empty. This
+/// fills it.
+///
+/// A disc only. The counters — `decimal`, `lower-roman` and the rest — need a
+/// number worked out from the item's position among its siblings, which is a
+/// piece of state this has nowhere to keep.
+pub(super) fn marker(node: &Node, x: f32, y: f32) -> Option<Mark> {
+    let style = node.primary_styles()?;
+    if !style.get_box().display.is_list_item() {
+        return None;
+    }
+    // Always outside, which is the initial value. `inside` puts the marker in
+    // the text flow, moving the words as well as the bullet, and that is a
+    // layout question rather than a painting one.
+    let em = style.get_font().font_size.computed_size().px();
+    // The proportions a browser draws a disc at: about a third of the em
+    // across, sitting a marker-box to the left of the content, and centred on
+    // the middle of the first line rather than on its baseline.
+    let wide = (em * 0.35).max(1.0);
+    let centre = (x - em * 0.5, y + em * 0.6);
+    let round = wide / 2.0;
+    let [red, green, blue, alpha] = *style.clone_color().raw_components();
+    Some(Mark::Fill {
+        area: Area {
+            x: centre.0 - round,
+            y: centre.1 - round,
+            width: wide,
+            height: wide,
+        },
+        ink: Ink::Flat(super::channels(red, green, blue, alpha)),
+        corners: Corners {
+            top_left: round,
+            top_right: round,
+            bottom_right: round,
+            bottom_left: round,
+        },
+        shadow: None,
+        node: Some(node.id),
+    })
 }

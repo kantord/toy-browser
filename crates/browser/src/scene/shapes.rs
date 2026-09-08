@@ -11,7 +11,7 @@
 
 use std::fmt::Write as _;
 
-use super::{Area, Corners, Paint, Shadow};
+use super::{Area, Corners, Paint, Picture, Shadow, Tiles};
 
 /// Writes the gradient a Fill is poured from and answers how to reference it.
 ///
@@ -112,4 +112,46 @@ pub(super) fn opacity(paint: &Paint) -> String {
         true => String::new(),
         false => format!(" fill-opacity=\"{:.3}\"", paint.alpha),
     }
+}
+
+/// Writes the pattern a picture is tiled from and answers how to reference it.
+///
+/// A pattern rather than a picture placed in the box, because `repeat` is the
+/// CSS default and a pattern is what repeats natively — laying out copies by
+/// hand would put as many marks in the Scene as there are tiles, which for a
+/// small texture on a large box is thousands.
+///
+/// A background that does not repeat is one tile the size of the whole box,
+/// with the picture drawn where the page asked for it. That is the same
+/// machinery saying "once".
+pub(super) fn tiled(
+    picture: &Picture,
+    tiles: &Tiles,
+    area: &Area,
+    refer: super::svg::Refer,
+    out: &mut String,
+) -> String {
+    let Tiles {
+        picture: digest,
+        at,
+        tile,
+        repeat,
+    } = tiles;
+    let (wide, tall) = (
+        if repeat.0 { tile.0 } else { area.width.max(tile.0) },
+        if repeat.1 { tile.1 } else { area.height.max(tile.1) },
+    );
+    let id = format!("tile-{digest}-{:.0}-{:.0}-{wide:.0}-{tall:.0}", at.0, at.1);
+    let _ = writeln!(
+        out,
+        "<pattern id=\"{id}\" patternUnits=\"userSpaceOnUse\" x=\"{:.2}\" y=\"{:.2}\" \
+         width=\"{wide:.2}\" height=\"{tall:.2}\">\
+         <image x=\"0\" y=\"0\" width=\"{:.2}\" height=\"{:.2}\" href=\"{}\"/></pattern>",
+        at.0,
+        at.1,
+        tile.0,
+        tile.1,
+        super::svg::reference(digest, picture, refer),
+    );
+    format!("url(#{id})")
 }

@@ -5,15 +5,12 @@ something we mean to build; a *limit* is something we have decided not to, or
 cannot — those live in `docs/limits.md` and are not repeated here.
 
 Sizes are measured against `css/CSS2/normal-flow` (814 tests), most recently
-with 449 of them passing. Where an entry quotes an older total it says so.
-`docs/wpt-findings.md` records how they were measured and why each is believed
-rather than merely correlated. The categories overlap — a test can want borders,
-Ahem and an image at once — so the counts do not add up and fixing one does not
-recover its whole count.
-
-Two entries have left this file. Images are no longer a gap: they were a
-misplaced responsibility, and `docs/adr/0012` records where it went instead.
-Borders are done — what is left of gap 1 is outlines.
+with 455 of them passing; where an entry quotes an older total it says so.
+`docs/wpt-findings.md` records how, and why each is believed rather than merely
+correlated. The categories overlap, so the counts do not add up and fixing one
+does not recover its whole count. Two entries have left this file: images were
+a misplaced responsibility (`docs/adr/0012`), and borders are done — what is
+left of gap 1 is outlines.
 
 ---
 
@@ -22,10 +19,12 @@ Borders are done — what is left of gap 1 is outlines.
 There are two, and they disagree. The suite counts every test the same; a real
 page does not. `docs/what-real-pages-need.md` measures the second axis with
 `tests/probes/` — one feature per page, drawn plainly, against Chromium — and
-the short version is that **modern layout works and paint does not**: flexbox,
-grid, custom properties, `calc()`, `z-index`, `text-align` and `::before` are
-all correct, while `border-radius`, `box-shadow`, gradients, `opacity`,
-`transform` and `overflow` clipping are missing or ignored.
+the short version is that **modern layout works, and paint has caught up**:
+flexbox, grid, custom properties, `calc()`, `z-index`, `text-align` and
+`::before` were always correct, and `border-radius`, `box-shadow`, gradients,
+`opacity`, `transform`, `background-image`, `text-decoration`, list markers and
+`overflow` clipping have since joined them. `text-overflow: ellipsis` is the
+one left.
 
 Both orders are at the end of this file.
 
@@ -210,41 +209,48 @@ Worth doing after everything above: smaller bucket, harder fix.
 
 ---
 
-## 7. Paint — *the five worst are done*
+## 7. Paint — *eight of the nine are done*
 
-`border-radius`, `box-shadow`, gradients, `opacity` and `transform` all now
-match Chromium exactly on their probe, and `overflow: hidden` clips. See
-`docs/what-real-pages-need.md` for the before and after.
+`border-radius`, `box-shadow`, gradients, `opacity`, `transform`,
+`background-image: url()`, `text-decoration` and list markers all now match
+Chromium on their probe or come within a pixel of it, and `overflow: hidden`
+clips. See `docs/what-real-pages-need.md` for the before and after.
 
-What it cost the Scene, which is the part worth knowing:
-
-- `Fill` gained **corner radii** — written as a plain `<rect>` when square and
-  as a path when not, so a box rounded only at the top is sayable. No new Mark.
-- `Fill`'s colour became an **`Ink`**, flat or a linear gradient. On the Fill
-  rather than in `Paint`, because text is always flat and a list of stops on
-  every glyph would be a list nothing ever reads.
-- `Fill` gained a **shadow**, written as `feDropShadow`.
-- **`Clip` was already the mark `overflow` needed.** Nothing was added for it;
-  what was needed was for the painter to walk the tree rather than a flat list,
-  since clipping is about a subtree and a flat list has forgotten which marks
-  belong to whom.
-- **`Moved`** was added as a fifth kind of Mark: a group with a matrix, applied
-  about the transform origin. This is the general transform the closed set was
-  always going to need, and adding it was the deliberate act the set exists to
-  make deliberate.
+What it cost the Scene, which is the part worth knowing: **one new kind of
+Mark**, in nine features. `Fill` gained corner radii, a shadow, and an `Ink`
+that can be a gradient or a tiled picture rather than only a flat colour;
+`Clip` turned out to already be the mark `overflow` needed; and `Moved` was
+added as the fifth Mark, which is the general transform the closed set was
+always going to need. `text-decoration` and list markers added nothing at all —
+an underline is a `Fill` the width of the run, a disc is a `Fill` whose corners
+are half its width. That the closed set absorbed seven of nine without gaining
+a variant is the argument for the closed set; that `Moved` had to be argued for
+is what the set is *for*.
 
 **What is still missing here:**
 
-- **`background-image: url()`** — a gradient paints, an image does not.
-  `background-size`, `-position` and `-repeat` are a sublanguage of their own,
-  and this is the cause of Hacker News's missing upvote arrows.
-- **`text-decoration`** — no underline is drawn.
-- **List markers** — indented correctly, no bullet.
 - **`text-overflow: ellipsis`** — wraps instead of truncating.
 - **Known approximations**: one shadow where CSS allows a list, `inset` shadows
   not drawn, `transform-origin` not read (the centre is assumed), and `opacity`
   applied per mark rather than to a composited group — which differs only where
   two faded things overlap.
+
+---
+
+## 7a. Floats — *not implemented, and upstream*
+
+**What happens.** `float: left` and `float: right` do nothing: the box is laid
+out on its own line and what should sit beside it goes underneath.
+
+**Size.** **87% of what is left on Wikipedia** — every infobox and thumbnail
+takes a full-width block, and the lead section is 2501px tall against
+Chromium's 732px. `docs/wikipedia.md` has the rest.
+
+**Whose.** Not ours to fix in place: `taffy 0.10` has no float and parley has
+no inline exclusions. **blitz-dom 0.3.0-beta.2 has both** behind a `floats`
+feature. Taking it costs a stylo bump from 0.8 to 0.20 and ~50 mechanical
+errors — `NodeId` became a newtype, `NodeData`'s variants changed shape, and
+markup5ever moved under `blitz-html`, which `dom/parse.rs` drives directly.
 
 ---
 
@@ -289,16 +295,18 @@ input fails saying so.
 
 Two orders, because they disagree, and it is worth being honest that they do.
 
-**If the goal is a browser that renders the web** — the five worst are done and
-match Chromium exactly. What is left of gap 7, in order:
+**If the goal is a browser that renders the web** — eight of the nine paint
+gaps are done and match Chromium. In order:
 
-1. **`background-image: url()`**. Gradients paint now; images do not, and this
-   is the visible hole in the one real page measured.
-2. **`text-decoration`** and **list markers**. Small, and on every page.
+1. **Floats** (gap 7a). Nothing else is close: 87% of the remaining difference
+   on the one long real page measured, and a dependency upgrade rather than a
+   feature to write.
+2. **`text-overflow: ellipsis`** — the last paint gap, and what a table or a
+   nav bar needs to stop wrapping.
 3. **The approximations**: shadow lists, `inset`, `transform-origin`, and
    opacity applied per mark rather than to a composited group.
 
-**If the goal is the suite score** — take gap 8 and gap 6:
+**If the goal is the suite score** — gaps 8 and 6:
 
 1. **Shrink-to-fit width** — 104 failures at 67% against a 36% baseline, the
    largest bucket with a real mechanism behind it.
@@ -307,8 +315,6 @@ match Chromium exactly. What is left of gap 7, in order:
    wrong for the same font at the same size in isolation.
 3. **Then line-height to the face's usWin metric**, blocked only by the above.
 
-**Upstream either way**: `LineHeight::MetricsRelative`, the replaced-element tag
-list, and the `image` decoders are all one-line fixes in blitz that cannot be
-made from here.
-
-Then the rest as they start blocking whatever is being measured next.
+**Upstream either way**: `LineHeight::MetricsRelative`, the replaced-element
+tag list and the `image` decoders are one-line fixes in blitz. Then the rest, as
+they start blocking whatever is being measured next.

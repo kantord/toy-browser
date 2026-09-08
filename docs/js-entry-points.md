@@ -175,7 +175,7 @@ What it still does not do, and why:
   hidden — and nothing here can compute it. `textContent` is not the same
   thing, so it is left undefined rather than approximated.
 - **Scrolling** is not modelled at all, so `scrollWidth`, `scrollHeight`,
-  `scrollTop` and `scrollLeft` are absent rather than zero.
+  `scrollTop`, `scrollLeft` and `window.scrollTo` are absent rather than zero.
 - **Computed style** would need the cascade. Nothing runs it, so a script
   cannot ask what a stylesheet decided.
 - **Ranges, tree walkers and selections** have no implementation.
@@ -184,7 +184,21 @@ What it still does not do, and why:
 - **`Intl`** is absent: QuickJS is built without it.
 - **Inline elements** have no layout box of their own and measure as empty.
 
-The rule for all of these: answer what the DOM or a measurement can actually
+**`document.cookie` and Web Storage** are the exception to that rule, and it is
+worth knowing why. Both are held in memory for the life of one realm and shared
+with nothing, which is not what a browser does — but pages do not usually read
+them for what is in them, they read them to find out whether they *exist*.
+MediaWiki's compatibility test is `'localStorage' in window`, and a browser
+that fails it is served the no-JavaScript site; Wikipedia's first inline script
+is `document.cookie.match(…)`, and `undefined` there threw before the next
+statement. `docs/wikipedia.md` follows what that cost.
+
+Classic scripts also run **sloppy**, which is what the web does: strict mode is
+something a script opts into. rquickjs forces it on by default, and an
+assignment to an undeclared global — how a page has published one since before
+`let` — throws under it.
+
+The rule for everything else: answer what the DOM or a measurement can actually
 support, and leave the rest undefined. A missing member usually makes a caller
 fail open; a confidently wrong one sends it down the wrong branch.
 

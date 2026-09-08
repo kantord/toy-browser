@@ -31,12 +31,16 @@ Nothing here needs a runtime, an index to rebuild, or a tool to read it.
   may live instead, and the question that usually means you do not need one.
 - [sinkhole-invalid](/.claude/skills/code-style/lints/sinkhole-invalid.md)
   — a sinkhole that broke one of the four invariants that keep it honest.
+- [too-many-lines](/.claude/skills/code-style/lints/too-many-lines.md) — a
+  function over its line budget. Says the cut goes at a topic change rather
+  than at the limit, and records that raising the budget was refused.
+- [too-many-arguments](/.claude/skills/code-style/lints/too-many-arguments.md)
+  — a signature longer than anyone holds. Usually a value nobody named yet.
 
-`too-many-lines` has no lesson on purpose. Nobody has yet had to cut a function
-for length here, and writing the node before that happens is how the
-cognitive-complexity one ended up less trustworthy than the rest — see
-[ADR-0008](/docs/adr/0008-a-budget-set-below-the-code.md). The first agent to
-trip it escalates, and writes what gets settled.
+Both of the last two were written the first time they fired, from a grilling in
+the session that tripped them — which is the arrangement
+[ADR-0008](/docs/adr/0008-a-budget-set-below-the-code.md) argues for and the
+cognitive-complexity node predates.
 
 A lesson is written only after a grilling session has settled how this repo
 handles that kind — see [the playbook](/.claude/skills/code-style/SKILL.md). An

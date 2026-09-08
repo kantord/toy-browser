@@ -38,3 +38,11 @@ A feature that draws nothing shows one `<rect>` in the SVG: the paper.
 ## What they found
 
 Recorded in `docs/what-real-pages-need.md`.
+
+## What one feature at a time cannot find
+
+A probe asks about a feature. Some bugs only a whole page has: on Wikipedia,
+five of the six things wrong were a missing `document.cookie`, a missing
+`localStorage`, classic scripts running in strict mode, `visibility: hidden`
+being ignored, and a zero-height box declining to clip. Only the last two are
+even shaped like something a probe could have asked. `docs/wikipedia.md`.

@@ -32,7 +32,7 @@ mod svg;
 
 pub use raster::{Rendered, pixels, render};
 pub use svg::{export, family, normal_form};
-pub use values::{Area, Corners, Ink, Paint, Shadow, Stop};
+pub use values::{Area, Corners, Ink, Paint, Shadow, Stop, Tiles};
 
 /// Bytes named by their own content.
 ///

@@ -6,7 +6,7 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use rquickjs::{Ctx, Module, Object, Value};
+use rquickjs::{Ctx, Module, Object, Value, context::EvalOptions};
 
 use toy_browser_fetch::Url;
 
@@ -67,7 +67,7 @@ pub(super) fn run_scripts(
         if is_module {
             evaluate_module(ctx, report, &name, &source);
         } else {
-            evaluate(ctx, report, &name, &source);
+            evaluate_classic(ctx, report, &name, &source);
         }
     }
 }
@@ -123,6 +123,31 @@ fn drain_microtasks(ctx: &Ctx<'_>) -> bool {
 
 pub(super) fn evaluate(ctx: &Ctx<'_>, report: &Rc<RefCell<Diagnostics>>, name: &str, source: &str) {
     if let Err(error) = ctx.eval::<Value, _>(source) {
+        record_error(ctx, report, name, error);
+    }
+}
+
+/// A `<script>` with no `type`, run the way the web runs one: **sloppy**.
+///
+/// Strict mode is a thing a script opts into by saying so. rquickjs forces it
+/// on by default, and the difference is not academic — assigning to a name
+/// nobody declared is how a page has published a global since before `let`
+/// existed, and in strict mode it throws instead.
+///
+/// MediaWiki's every inline script opens with `(RLQ=window.RLQ||[]).push(…)`,
+/// so on Wikipedia the first statement of each threw and the module system
+/// never started. The page still rendered, because the markup is served whole;
+/// what was missing was everything the page does to itself afterwards.
+fn evaluate_classic(
+    ctx: &Ctx<'_>,
+    report: &Rc<RefCell<Diagnostics>>,
+    name: &str,
+    source: &str,
+) {
+    let mut options = EvalOptions::default();
+    options.global = true;
+    options.strict = false;
+    if let Err(error) = ctx.eval_with_options::<Value, _>(source, options) {
         record_error(ctx, report, name, error);
     }
 }

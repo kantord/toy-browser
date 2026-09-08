@@ -15,6 +15,7 @@ use rquickjs::{
     function::Opt,
 };
 
+use super::cookies::Jar;
 use super::node::{dispatch_on, wrap_all_ids, wrap_id, wrap_maybe_id};
 use crate::dom::Dom;
 
@@ -23,6 +24,7 @@ use crate::dom::Dom;
 pub struct Document {
     dom: Rc<Dom>,
     ready_state: RefCell<String>,
+    cookies: Jar,
 }
 
 impl<'js> Trace<'js> for Document {
@@ -178,6 +180,18 @@ impl Document {
         self.dom.append_child(head, created);
     }
 
+    /// The cookies this document can see, which is however many it has been
+    /// given since it was parsed. See [`Jar`] for why that is all of them.
+    #[qjs(get)]
+    pub fn cookie(&self) -> String {
+        self.cookies.read()
+    }
+
+    #[qjs(set, rename = "cookie")]
+    pub fn set_cookie(&self, header: Coerced<String>) {
+        self.cookies.write(&header.0);
+    }
+
     #[qjs(get, rename = "documentElement")]
     pub fn document_element<'js>(&self, ctx: Ctx<'js>) -> rquickjs::Result<Value<'js>> {
         wrap_id(&ctx, self.dom.root())
@@ -207,6 +221,7 @@ pub(super) fn install(ctx: &Ctx<'_>, dom: &Rc<Dom>) -> Result<()> {
         Document {
             dom: Rc::clone(dom),
             ready_state: RefCell::new("loading".to_owned()),
+            cookies: Jar::default(),
         },
     )?;
     let object: Object = document.into_inner();

@@ -38,9 +38,16 @@ Block-in-inline took it to **371** — nine won, none lost. Then one line of
 Painting what a page actually asks for — rounded corners, shadows, gradients,
 opacity, transforms, clipping — then took it to **455**, which is the smaller
 half of that change. The larger half is that a modern page stops looking like a
-wireframe; `docs/what-real-pages-need.md` measures that axis instead. That one turned out
-not to be a layout bug at all: the anonymous boxes existed and were laid out
-correctly, and the painter walked the DOM, which does not mention them.
+wireframe; `docs/what-real-pages-need.md` measures that axis instead.
+
+The next three paint features — `background-image: url()`, `text-decoration`
+and list markers — moved it **not at all**, and neither did the six things
+found by rendering Wikipedia (`docs/wikipedia.md`), which included
+`visibility: hidden` being ignored outright. That is the clearest statement of
+the disagreement this file has. All of them match Chromium
+on their probe or take a real page measurably closer; none of them is what
+`normal-flow` measures, which is where a box goes and not what is drawn in it.
+A feature can be worth having and be invisible here.
 
 ## How this was worked out
 
