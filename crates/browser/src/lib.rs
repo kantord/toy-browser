@@ -29,7 +29,9 @@ pub use blitz::{LaidOut, lay_out};
 pub use cursor_icon::CursorIcon;
 pub use navigate::{Loaded, NavigationError};
 pub use hovering::Hovering;
-pub use scene::{Rendered, Scene, normal_form, pixels as scene_pixels, render as render_scene};
+pub use scene::{
+    Rendered, Scene, family, normal_form, pixels as scene_pixels, render as render_scene,
+};
 /// The pixel buffer this browser rasterizes into.
 ///
 /// Re-exported rather than left for a caller to depend on: it comes in through

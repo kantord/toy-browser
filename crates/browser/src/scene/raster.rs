@@ -37,7 +37,10 @@ pub fn pixels(scene: &Scene) -> Result<tiny_skia::Pixmap> {
     let text = super::normal_form(scene);
     let wrote = started.elapsed();
     let started = std::time::Instant::now();
-    let tree = usvg::Tree::from_str(&text, &options(scene)).context("parsing the scene")?;
+    let options = options(scene);
+    let readied = started.elapsed();
+    let started = std::time::Instant::now();
+    let tree = usvg::Tree::from_str(&text, &options).context("parsing the scene")?;
     let parsed = started.elapsed();
     let started = std::time::Instant::now();
     let size = tree.size().to_int_size();
@@ -46,7 +49,7 @@ pub fn pixels(scene: &Scene) -> Result<tiny_skia::Pixmap> {
     resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
     if std::env::var_os("TOY_BROWSER_TIME_RASTER").is_some() {
         eprintln!(
-            "  write {wrote:.1?}  parse {parsed:.1?}  raster {:.1?}  ({}x{})",
+            "  write {wrote:.1?}  fonts {readied:.1?}  parse {parsed:.1?}  raster {:.1?}  ({}x{})",
             started.elapsed(),
             size.width(),
             size.height()
