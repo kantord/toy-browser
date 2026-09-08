@@ -18,7 +18,7 @@ use std::sync::Arc;
 use blitz_dom::{Node, NodeId};
 
 use crate::blitz::LaidOut;
-use crate::scene::{Area, Corners, Digest, Ink, Mark, Paint, Scene};
+use crate::scene::{Digest, Mark, Paint, Scene};
 use toy_browser_engine::ids;
 
 /// Every run of text an element lays out, positioned glyph by glyph.
@@ -29,8 +29,24 @@ pub(super) fn of(page: &LaidOut, node: &Node, x: f32, y: f32, scene: &mut Scene)
     else {
         return Vec::new();
     };
+    written(page, &inline.layout, &inline.text, (x, y), scene)
+}
+
+/// One parley layout, drawn where it was put.
+///
+/// Shared because a list marker is a layout too — blitz lays `1.` out with the
+/// same machinery it lays a paragraph out with, and drawing it as a shape
+/// instead is how every ordered list came out as bullets.
+pub(super) fn written(
+    page: &LaidOut,
+    layout: &parley::Layout<blitz_dom::node::TextBrush>,
+    source: &str,
+    origin: (f32, f32),
+    scene: &mut Scene,
+) -> Vec<Mark> {
+    let (x, y) = origin;
     let mut marks = Vec::new();
-    for line in inline.layout.lines() {
+    for line in layout.lines() {
         // Several glyph runs share one underlying run — one per span, one per
         // the text between them — and a glyph run does not say which part of it
         // is its own. They come in order, so the count already emitted from a
@@ -51,24 +67,28 @@ pub(super) fn of(page: &LaidOut, node: &Node, x: f32, y: f32, scene: &mut Scene)
                 count,
                 origin: (x, y),
             };
-            let drawn = mark(page, &placed, &inline.text, scene);
-            marks.extend(lines_over(page, &placed, drawn.as_ref()));
+            let drawn = mark(page, &placed, source, scene);
+            marks.extend(super::around::behind(page, &placed));
+            marks.extend(super::around::lines_over(page, &placed, drawn.as_ref()));
             marks.extend(drawn);
         }
     }
     marks
 }
 
+
+
+
 /// One glyph run, with the part of its underlying run it covers and where the
 /// element holding it sits.
 ///
 /// Together rather than separately because they are one thing: a run only means
 /// something at a place, over a stretch of text.
-struct Placed<'a> {
-    run: parley::layout::GlyphRun<'a, blitz_dom::node::TextBrush>,
+pub(super) struct Placed<'a> {
+    pub(super) run: parley::layout::GlyphRun<'a, blitz_dom::node::TextBrush>,
     from: usize,
     count: usize,
-    origin: (f32, f32),
+    pub(super) origin: (f32, f32),
 }
 
 fn mark(page: &LaidOut, placed: &Placed<'_>, source: &str, scene: &mut Scene) -> Option<Mark> {
@@ -84,13 +104,15 @@ fn mark(page: &LaidOut, placed: &Placed<'_>, source: &str, scene: &mut Scene) ->
     Some(Mark::Glyphs {
         places: laid.places,
         text: words.to_owned(),
-        baseline: y + run.baseline(),
+        baseline: y + run.baseline() - super::around::raised(page, owner),
         size: run.run().font_size(),
         paint: colour(page, owner),
         face: face(run, scene),
         node: Some(ids::raw(owner)),
     })
 }
+
+
 
 /// The Face this run was laid out in, remembered by the Scene.
 ///
@@ -179,61 +201,3 @@ fn colour(page: &LaidOut, owner: NodeId) -> Paint {
     super::channels(red, green, blue, 1.0)
 }
 
-/// The lines a run is struck with — underline, overline, line-through.
-///
-/// Drawn from the face's own metrics, which say where an underline sits and how
-/// thick it is, so a line under 10pt text is not the same line as one under
-/// 30pt.
-///
-/// Read from the element the run belongs to. CSS *propagates* a decoration to
-/// everything inside the element that set it, rather than inheriting it, so a
-/// `<span>` inside an underlined `<a>` should be underlined and here is not —
-/// the span has no decoration of its own to report.
-fn lines_over(page: &LaidOut, placed: &Placed<'_>, drawn: Option<&Mark>) -> Vec<Mark> {
-    use style::values::computed::TextDecorationLine as Line;
-    let Some(Mark::Glyphs { places, baseline, paint, .. }) = drawn else {
-        return Vec::new();
-    };
-    let owner = placed.run.style().brush.id;
-    let Some(style) = page.document.get_node(owner).and_then(Node::primary_styles) else {
-        return Vec::new();
-    };
-    let lines = style.get_text().text_decoration_line;
-    if lines.is_empty() {
-        return Vec::new();
-    }
-    // From where the run starts to where it ends, not from the first glyph to
-    // the last plus a run's width — the last glyph is already inside the run,
-    // and adding the whole advance to it draws a line past the end of the word.
-    let Some(from) = places.first().copied() else {
-        return Vec::new();
-    };
-    let to = placed.origin.0 + placed.run.offset() + placed.run.advance();
-    let metrics = placed.run.run().metrics();
-    let thick = metrics.underline_size.max(1.0);
-    let width = (to - from).max(0.0);
-
-    // Where each line sits relative to the baseline. The face states the
-    // underline and the strike; an overline goes at the top of the ascent,
-    // which is the only one it does not have an opinion about.
-    let mut marks = Vec::new();
-    let mut rule = |above: f32| {
-        marks.push(Mark::Fill {
-            area: Area { x: from, y: baseline - above - thick / 2.0, width, height: thick },
-            ink: Ink::Flat(*paint),
-            corners: Corners::NONE,
-            shadow: None,
-            node: Some(ids::raw(owner)),
-        });
-    };
-    if lines.contains(Line::UNDERLINE) {
-        rule(metrics.underline_offset);
-    }
-    if lines.contains(Line::LINE_THROUGH) {
-        rule(metrics.strikethrough_offset);
-    }
-    if lines.contains(Line::OVERLINE) {
-        rule(metrics.ascent);
-    }
-    marks
-}

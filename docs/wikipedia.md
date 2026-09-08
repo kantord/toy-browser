@@ -141,6 +141,31 @@ corpus cases got *better* in the same change, because 0.3 also fixed
 `border-spacing`. Written up in `docs/upstream.md` ready to file; not worth
 giving up floats for.
 
+## A second pass, once the page was readable
+
+With floats in, the page was close enough to read side by side, and reading it
+found three more — none of them found by a probe, because a probe only asks
+about the feature it was written for:
+
+- **Every ordered list came out bulleted.** The marker was drawn here as a
+  rounded rectangle, which is easy for `•` and impossible for `1.`. blitz had
+  been laying the real marker out all along — text, counter and all, as a parley
+  layout on the list item — so the fix was to draw *that*, with the same code
+  that draws a paragraph. It brought `lower-alpha` and `square` with it for
+  nothing. The references section is 200 numbered entries and the `[1]` markers
+  in the body point at those numbers.
+- **`<sup>` and `<sub>` sat on the baseline.** There are **352 `<sup>` on this
+  page** — every citation marker. It is not `vertical-align`, because stylo's
+  Servo build has no such longhand and the cascade cannot be asked; it is the
+  two tags that exist to mean it, raised a third of the parent's font size and
+  lowered a fifth, which is what Chromium does measured at two sizes.
+- **`<mark>` and highlighted spans drew no highlight.** An inline box has no box
+  in the layout tree, so the code that paints a background had nothing to read.
+  Now one fill per *fragment*, which is what makes it right across a line break.
+
+What is left on this page is the two upstream bugs in `docs/upstream.md` and one
+thing of ours: `text-overflow: ellipsis` truncates without drawing the `…`.
+
 ## The one difference that is not a defect
 
 `#siteNotice` is 98px tall in Chromium and zero here, which shifts everything

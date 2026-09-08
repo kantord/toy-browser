@@ -28,11 +28,13 @@ use crate::blitz::{Composed, LaidOut};
 use crate::scene::{Area, Corners, Ink, Mark, Paint, Scene};
 use toy_browser_engine::ids;
 
+mod around;
 mod boxes;
 mod edges;
 mod effects;
+mod markers;
 mod pictures;
-mod words;
+pub(super) mod words;
 
 /// One render unit, as one Scene.
 ///
@@ -178,7 +180,6 @@ fn subtree(
     if shown {
         let backdrop = pictures::backdrop(&unit.laid_out, node, x, y, scene, resources);
         marks.extend(boxes::background(node, x, y, backdrop));
-        marks.extend(boxes::marker(node, x, y));
         marks.extend(edges::of(node, x, y));
     }
 
@@ -189,6 +190,7 @@ fn subtree(
     let mut inside = Vec::new();
     if shown {
         inside.extend(pictures::of(&unit.laid_out, node, x, y, scene, resources));
+        inside.extend(markers::of(&unit.laid_out, node, x, y, scene));
         inside.extend(words::of(&unit.laid_out, node, x, y, scene));
     }
     // Children are walked either way: `visibility` is inherited but can be

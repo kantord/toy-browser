@@ -29,9 +29,9 @@ uses.
 A page laid out with flexbox or grid comes out right. That is most of the modern
 web's structure.
 
-**All nine are now fixed**, floats included, and each matches Chromium on its probe or
-comes within a pixel of it, where the whole point of the measurement is that it
-is against a real browser rather than against an opinion:
+**Every one of them is now fixed**, floats included. Each matches Chromium on
+its probe or comes within a pixel or two of it — the whole point of the
+measurement being that it is against a real browser rather than an opinion:
 
 | | before | after |
 |---|---|---|
@@ -41,16 +41,21 @@ is against a real browser rather than against an opinion:
 | gradients | 4.50% | **0.00%** |
 | `transform` | 1.42% | **0.00%** |
 | `background-image` | nothing drawn | **0.00%** |
-| list markers | no bullet | **0.09%** — the `ul` box off by 2px |
 | `text-decoration` | no line | **0.19%** — the strikethrough off by 1px |
 | `overflow: hidden` | 0.25% | 0.15% |
 | **floats** | not implemented | **0.30%** |
+| list markers | every list bulleted | **0.18%** — numbers, letters, squares |
+| inline backgrounds | nothing drawn | **0.97%** — the fill is a few px tall |
+| `<sup>` / `<sub>` | on the baseline | raised and lowered |
 
 What that took, in the Scene's own terms: a Fill gained corner radii, an `Ink`
 that can be a gradient rather than only a flat colour, and a shadow; `Clip`
 turned out to already be the mark `overflow` needed; and `Moved` was added as a
 fifth kind of Mark, which is the general transform the closed set was always
-going to need eventually.
+going to need eventually. The last three took **nothing at all** — a list
+marker is a `Glyphs` mark like any other text, an inline background is a `Fill`
+per fragment, and a superscript is the same `Glyphs` with its baseline moved.
+Floats were the only one that needed a different layout engine.
 
 `overflow` clips correctly and the remainder is the edge of the clip itself.
 
@@ -68,7 +73,10 @@ rendering the probe and counting marks — a feature that draws nothing leaves o
 | **`opacity`** | ignored; drawn fully opaque | overlays, disabled states, fades |
 | **`transform`** | ignored; box stays at its untransformed origin | centring, icons, anything animated |
 | **`overflow: hidden`** | no clip; content escapes its box | structural — containers stop containing |
-| **`text-overflow: ellipsis`** | wraps instead of truncating | tables, nav, cards |
+| **`text-overflow: ellipsis`** | truncates, but draws no `…` | tables, nav, cards |
+| **ordered list numbering** | `1. 2. 3.` came out as bullets | every numbered list, every references section |
+| **inline backgrounds** | `<mark>` and highlighted spans drew nothing | highlighting, chips, syntax colouring |
+| **`<sup>` / `<sub>`** | sat on the baseline | every citation marker, every formula |
 | **floats** | box on its own line, content underneath | every infobox, every thumbnail, every wrapped image |
 
 The first five would garble a modern page on their own. A card with no shadow,

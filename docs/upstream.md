@@ -73,6 +73,24 @@ skip borders on a non-replaced inline until fragments are available.
 
 ---
 
+## blitz-dom: counter styles fall back to a literal box character
+
+**Version.** `blitz-dom 0.3.0-beta.2`.
+
+**What happens.** `list-style-type: lower-roman` — and every other counter style
+outside a short list — renders each marker as `□`.
+
+**Where.** `src/layout/list.rs`, `marker_for_style`. It handles `decimal`,
+`lower-alpha`, `upper-alpha`, `disc`, `circle`, `square` and the two disclosure
+triangles, then `_ => Marker::Char('□')`.
+
+**What should happen.** At minimum `lower-roman` and `upper-roman`, which are
+the other two CSS 2.1 counter styles a document is likely to ask for. A tofu box
+is worse than falling back to `decimal`, because it looks like a missing font
+rather than a missing feature.
+
+---
+
 ## What is not here
 
 `taffy` has no floats and `parley` no inline exclusions in the versions

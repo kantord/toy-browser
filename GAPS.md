@@ -24,9 +24,9 @@ page does not. `docs/what-real-pages-need.md` measures the second axis with
 the short version is that **modern layout works, and paint has caught up**:
 flexbox, grid, custom properties, `calc()`, `z-index`, `text-align` and
 `::before` were always correct, and `border-radius`, `box-shadow`, gradients,
-`opacity`, `transform`, `background-image`, `text-decoration`, list markers and
-`overflow` clipping have since joined them. `text-overflow: ellipsis` is the
-one left.
+`opacity`, `transform`, `background-image`, `text-decoration`, `overflow`
+clipping, list markers, inline backgrounds and floats have since joined them.
+`text-overflow: ellipsis` is the one left.
 
 Both orders are at the end of this file.
 
@@ -97,27 +97,33 @@ renderer did.
 
 ---
 
-## 7. Paint — *eight of the nine are done*
+## 7. Paint — *all of it, bar the ellipsis*
 
 `border-radius`, `box-shadow`, gradients, `opacity`, `transform`,
-`background-image: url()`, `text-decoration` and list markers all now match
-Chromium on their probe or come within a pixel of it, and `overflow: hidden`
-clips. See `docs/what-real-pages-need.md` for the before and after.
+`background-image: url()`, `text-decoration`, list markers, inline backgrounds
+and `<sup>`/`<sub>` all now match Chromium on their probe or come within a pixel
+or two of it, and `overflow: hidden` clips. See
+`docs/what-real-pages-need.md` for the before and after.
 
 What it cost the Scene, which is the part worth knowing: **one new kind of
-Mark**, in nine features. `Fill` gained corner radii, a shadow, and an `Ink`
-that can be a gradient or a tiled picture rather than only a flat colour;
+Mark**, across a dozen features. `Fill` gained corner radii, a shadow, and an
+`Ink` that can be a gradient or a tiled picture rather than only a flat colour;
 `Clip` turned out to already be the mark `overflow` needed; and `Moved` was
-added as the fifth Mark, which is the general transform the closed set was
-always going to need. `text-decoration` and list markers added nothing at all —
-an underline is a `Fill` the width of the run, a disc is a `Fill` whose corners
-are half its width. That the closed set absorbed seven of nine without gaining
-a variant is the argument for the closed set; that `Moved` had to be argued for
-is what the set is *for*.
+added as the fifth Mark, the general transform the closed set was always going
+to need. The last four cost nothing at all — an underline and an inline
+background are `Fill`s, a list marker and a superscript are `Glyphs` like any
+other text, one placed beside the item and one with its baseline moved. That
+the closed set absorbed all but one without gaining a variant is the argument
+for the closed set; that `Moved` had to be argued for is what the set is *for*.
 
 **What is still missing here:**
 
-- **`text-overflow: ellipsis`** — wraps instead of truncating.
+- **`text-overflow: ellipsis`** — truncates, but draws no `…`.
+- **`vertical-align`** — `<sup>` and `<sub>` are handled by tag, because stylo's
+  Servo build has no such longhand for the cascade to compute. A bare
+  `vertical-align` does nothing, and a raised run does not grow its line box.
+- **An inline background covers its own element only**, not the inline
+  ancestors above it.
 - **Known approximations**: one shadow where CSS allows a list, `inset` shadows
   not drawn, `transform-origin` not read (the centre is assumed), and `opacity`
   applied per mark rather than to a composited group — which differs only where

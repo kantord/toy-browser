@@ -45,4 +45,9 @@ A probe asks about a feature. Some bugs only a whole page has: on Wikipedia,
 five of the six things wrong were a missing `document.cookie`, a missing
 `localStorage`, classic scripts running in strict mode, `visibility: hidden`
 being ignored, and a zero-height box declining to clip. Only the last two are
-even shaped like something a probe could have asked. `docs/wikipedia.md`.
+even shaped like something a probe could have asked.
+
+Reading the same page again, once it was legible, found three more: every
+ordered list bulleted, `<sup>` sitting on the baseline, and `<mark>` drawing no
+highlight. `list.html` and `inline-text.html` cover those now — a probe is
+written *after* a real page finds the gap, not before. `docs/wikipedia.md`.
