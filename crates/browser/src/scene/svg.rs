@@ -42,9 +42,13 @@ pub fn export(scene: &Scene) -> String {
 
 fn write_svg(scene: &Scene, refer: Refer) -> String {
     let (wide, tall) = (scene.width.max(1), scene.height.max(1));
+    // The viewBox is what moves a band into view. Marks keep the coordinates
+    // they were painted at, so a band and the whole page say the same thing
+    // about where anything is.
+    let top = scene.top;
     let mut out = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{wide}\" height=\"{tall}\" \
-         viewBox=\"0 0 {wide} {tall}\">\n"
+         viewBox=\"0 {top} {wide} {tall}\">\n"
     );
     if refer == Refer::Inline {
         faces(scene, &mut out);

@@ -182,6 +182,10 @@ impl Realm {
         self.dom.tag_name(node)
     }
 
+    pub fn parent(&self, node: NodeId) -> Option<NodeId> {
+        self.dom.parent(node)
+    }
+
     pub fn executed(&self) -> usize {
         self.report.borrow().executed
     }

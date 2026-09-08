@@ -4222,6 +4222,7 @@ dependencies = [
  "blitz-dom",
  "blitz-html",
  "blitz-traits",
+ "cursor-icon",
  "euclid",
  "image",
  "parley",

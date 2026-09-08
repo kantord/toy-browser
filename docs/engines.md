@@ -85,6 +85,24 @@ Both are in `lay_out`, as a user-agent stylesheet, and both are marked.
   like much: it was 107px down the page, and finding it took the Hacker News
   median from 56px to 4px.
 
+## What follows the pointer
+
+`:hover` and `cursor` are the cascade's half of a mouse moving — the half a page
+has whether or not it runs any script. `Browser::hover` tells blitz where the
+pointer is and re-resolves **only when the hovered element changed**, which
+`set_hover_to` reports; a pointer crossing one paragraph restyles nothing and
+costs nothing. The Scene is built fresh from the composition on every paint, so
+once the styles change the next frame shows it with nothing to invalidate.
+
+It is applied to the *composition* rather than to a fresh layout, because the
+composition is what gets drawn and hover has to survive from one frame to the
+next — a document rebuilt per frame could not hold it.
+
+Which element asks for which cursor is in the user-agent stylesheet
+(`blitz/agent.rs`) rather than in a table in code, because that is what it is:
+`cursor` is CSS and `:hover` is CSS, so a page that sets its own beats ours by
+the ordinary rules instead of by a special case.
+
 ## What is still missing
 
 - **CSS background images.** The painter draws background *colours* and `<img>`

@@ -47,8 +47,17 @@ impl Browser {
     /// Leaving and entering are a difference between two calls, which is the
     /// whole reason a Page remembers its Pointer.
     pub fn pointer_move(&mut self, page: &PageId, point: Point) -> Result<Emitted> {
+        // Where the pointer is, told to the cascade before it is told to the
+        // scripts. `hover` walks into a `<webview>` itself, so it is asked once
+        // at the top rather than again on the way down.
+        self.hover(page, point)?;
+        self.moved(page, point)
+    }
+
+    /// The events one move raises, in whichever page the pointer is over.
+    fn moved(&mut self, page: &PageId, point: Point) -> Result<Emitted> {
         if let Some((child, inside)) = self.routed(page, point) {
-            return self.pointer_move(&child, inside);
+            return self.moved(&child, inside);
         }
         let over = self.hit_test(page, point)?;
         let mut pointer = self.pointer(page);

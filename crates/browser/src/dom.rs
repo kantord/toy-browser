@@ -67,6 +67,12 @@ impl Browser {
         }
     }
 
+    /// The element this one sits in, if it is not the root.
+    pub fn parent(&mut self, page: &PageId, node: NodeId) -> Result<Option<NodeId>> {
+        let session = self.session(page)?;
+        self.engine.parent(&session, node)
+    }
+
     /// Whether `node` sits anywhere under `ancestor`. Runs no JavaScript.
     ///
     /// A front end deciding whether a click landed where it aimed needs this:

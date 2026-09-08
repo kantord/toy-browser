@@ -4,8 +4,7 @@
 //! `mod.rs` moves when the windowing stack does, this moves when the chrome
 //! does — the back button, the URL field, what a click is allowed to mean.
 
-use toy_browser::tiny_skia::Pixmap;
-use toy_browser::{Browser, PageId, Point, Viewport};
+use toy_browser::{Browser, CursorIcon, Hovering, PageId, Point, Viewport};
 use winit::event::{ElementState, MouseScrollDelta};
 
 use super::{NOTCH, Open};
@@ -26,9 +25,74 @@ impl Open {
 
     /// Every move is told to the page, because entering and leaving an element
     /// is a difference between two of them and the page is entitled to both.
-    pub(super) fn moved(&mut self, x: f32, y: f32) {
-        self.pointer = (x, y);
+    pub(super) fn moved(&mut self) {
+        // Before the events, not after: `pointer_move` sets the hover state
+        // too, and asking afterwards would always be told nothing had changed.
+        self.hovered();
         let _ = self.browser.pointer_move(&self.page, self.at());
+    }
+
+    /// Tells the page where the pointer is, and the window what to draw as one.
+    ///
+    /// Two things follow a pointer that scripts have nothing to do with:
+    /// `:hover` matches something new, and the cursor becomes whatever that
+    /// something asks for. Both come from the cascade, so both are answered
+    /// together and a page with no JavaScript still has them.
+    pub(super) fn hovered(&mut self) {
+        let at = self.at();
+        let Ok(hovering) = self.browser.hover(&self.page, at) else {
+            return;
+        };
+        self.traced(at, &hovering);
+        let Some(shown) = &self.shown else { return };
+        shown
+            .window
+            .set_cursor(hovering.cursor.unwrap_or(CursorIcon::Default));
+        // Only when the hovered element changed. A pointer crossing one
+        // paragraph restyles nothing, and redrawing per pixel of travel would
+        // repaint the page hundreds of times to no effect.
+        if hovering.moved {
+            self.painted = None;
+            shown.window.request_redraw();
+        }
+    }
+
+    /// Says what the pointer is over, when asked to.
+    ///
+    /// `TOY_BROWSER_TRACE_POINTER=1` turns it on. A cursor that looks wrong is
+    /// hard to argue about from a screenshot — this prints the window point,
+    /// the document point the scroll makes of it, the element found there and
+    /// the box that element was given, which between them say whether the
+    /// answer or the question was wrong.
+    fn traced(&mut self, at: Point, hovering: &Hovering) {
+        if std::env::var_os("TOY_BROWSER_TRACE_POINTER").is_none() {
+            return;
+        }
+        let found = self.browser.hit_test(&self.page, at).ok().flatten();
+        let named = found.and_then(|node| {
+            let element = toy_browser::Remote::Element(node);
+            self.browser
+                .bounding_box(&self.page, &element)
+                .ok()
+                .flatten()
+                .map(|area| {
+                    format!(
+                        "[{:.0} {:.0} {:.0}x{:.0}]",
+                        area.x, area.y, area.width, area.height
+                    )
+                })
+        });
+        eprintln!(
+            "pointer window {:.0},{:.0}  document {:.0},{:.0}  scrolled {:.0}  \
+             cursor {:?}  over {found:?} {}",
+            self.pointer.0,
+            self.pointer.1,
+            at.x,
+            at.y,
+            self.scrolled,
+            hovering.cursor,
+            named.unwrap_or_else(|| "no box".to_owned()),
+        );
     }
 
     /// Nothing scrolls in this browser, so scrolling is done to the window: the
@@ -38,9 +102,16 @@ impl Open {
             MouseScrollDelta::LineDelta(_, lines) => lines * NOTCH,
             MouseScrollDelta::PixelDelta(at) => at.y as f32,
         };
-        let tallest = self.painted.as_ref().map_or(0, Pixmap::height) as f32;
+        // The page's height, not the band's: the band is one screenful and
+        // would say there was nowhere to scroll to.
+        let tallest = self.browser.height(&self.page).unwrap_or(0.0);
         let furthest = (tallest - self.size.1 as f32).max(0.0);
         self.scrolled = (self.scrolled - by).clamp(0.0, furthest);
+        // The pointer has not moved and what is under it has. Without this the
+        // cursor keeps answering for wherever the pointer was in the document
+        // before the scroll, so it drifts further from what is on screen the
+        // further the page is moved.
+        self.hovered();
         if let Some(shown) = &self.shown {
             shown.window.request_redraw();
         }

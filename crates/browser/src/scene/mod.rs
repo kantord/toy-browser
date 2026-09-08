@@ -25,6 +25,7 @@
 
 use std::collections::BTreeMap;
 
+mod band;
 mod raster;
 mod shapes;
 mod values;
@@ -203,6 +204,13 @@ pub struct Scene {
     /// How wide and tall the picture is.
     pub width: u32,
     pub height: u32,
+    /// Where the picture starts down the page.
+    ///
+    /// Zero for a whole page, which is what a screenshot wants. A window asks
+    /// for a [`band`](Scene::band) instead and gets the same marks at the same
+    /// coordinates with this moved down, so the `viewBox` shows the part it is
+    /// over without a single number in a mark being rewritten.
+    pub top: f32,
 }
 
 impl Scene {

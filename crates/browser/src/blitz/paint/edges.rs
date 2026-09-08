@@ -54,7 +54,7 @@ pub(super) fn of(node: &Node, x: f32, y: f32) -> Vec<Mark> {
         return Vec::new();
     }
     let border = style.get_border();
-    sides(node, x, y)
+    sides(node, x, y, collapsed(&style))
         .into_iter()
         .filter(|side| side.thickness > 0.0 && side.area.width > 0.0 && side.area.height > 0.0)
         .filter(|side| paints(side.kind(border)))
@@ -112,12 +112,54 @@ impl Side {
     }
 }
 
+/// The widths a collapsed table cell draws with, if that is what this is.
+///
+/// Under `border-collapse: collapse` blitz zeroes every cell's border and puts
+/// the width into the table's `gap` instead, so the line between two cells is a
+/// gap with nothing in it and the outer frame is the table's own border band.
+/// Layout therefore has no border to read; the style still has one, and the
+/// space to draw it in is *outside* the cell rather than inside.
+///
+/// Wikipedia's `.wikitable` is `border-collapse: collapse`, so before this
+/// every table on the site came out with no rules at all.
+fn collapsed(style: &style::properties::ComputedValues) -> Option<Edges> {
+    use style::computed_values::border_collapse::T as Collapse;
+    if style.get_inherited_table().border_collapse != Collapse::Collapse {
+        return None;
+    }
+    let border = style.get_border();
+    let edges = Edges {
+        top: border.border_top_width.0.to_f32_px(),
+        bottom: border.border_bottom_width.0.to_f32_px(),
+        left: border.border_left_width.0.to_f32_px(),
+        right: border.border_right_width.0.to_f32_px(),
+    };
+    (edges.top + edges.bottom + edges.left + edges.right > 0.0).then_some(edges)
+}
+
+/// Four widths, one per side.
+#[derive(Clone, Copy)]
+struct Edges {
+    top: f32,
+    bottom: f32,
+    left: f32,
+    right: f32,
+}
+
 /// The four strips, in paint order.
 ///
 /// Top and bottom take the full width and the sides take what is left between
 /// them, which is the square-corner approximation this file's header describes.
-fn sides(node: &Node, x: f32, y: f32) -> [Side; 4] {
+///
+/// `outside` inverts that for a collapsed table cell: the strips are laid in
+/// the gap around the box rather than inside it, because that is where the
+/// space for them is.
+fn sides(node: &Node, x: f32, y: f32, outside: Option<Edges>) -> [Side; 4] {
     let laid = &node.final_layout();
+    let bare = laid.border.top + laid.border.bottom + laid.border.left + laid.border.right == 0.0;
+    if let Some(edges) = outside.filter(|_| bare) {
+        return around(x, y, laid.size.width, laid.size.height, edges);
+    }
     let (width, height) = (laid.size.width, laid.size.height);
     let edges = laid.border;
     let between = height - edges.top - edges.bottom;
@@ -149,6 +191,40 @@ fn sides(node: &Node, x: f32, y: f32) -> [Side; 4] {
             edges.right,
             at(x + width - edges.right, y + edges.top, edges.right, between),
         ),
+    ]
+}
+
+/// The same four strips, laid in the gap *around* the box.
+///
+/// The horizontals run the full outset width so the corners are covered by
+/// them; two neighbouring cells write the same rectangle over their shared
+/// edge, which is one line of the right width rather than two of half it.
+fn around(x: f32, y: f32, width: f32, height: f32, edges: Edges) -> [Side; 4] {
+    let across = width + edges.left + edges.right;
+    let at = |x, y, width, height| Area {
+        x,
+        y,
+        width,
+        height,
+    };
+    let strip = |edge, thickness, area| Side {
+        edge,
+        thickness,
+        area,
+    };
+    [
+        strip(
+            Edge::Top,
+            edges.top,
+            at(x - edges.left, y - edges.top, across, edges.top),
+        ),
+        strip(
+            Edge::Bottom,
+            edges.bottom,
+            at(x - edges.left, y + height, across, edges.bottom),
+        ),
+        strip(Edge::Left, edges.left, at(x - edges.left, y, edges.left, height)),
+        strip(Edge::Right, edges.right, at(x + width, y, edges.right, height)),
     ]
 }
 

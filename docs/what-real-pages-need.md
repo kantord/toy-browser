@@ -47,6 +47,10 @@ measurement being that it is against a real browser rather than an opinion:
 | list markers | every list bulleted | **0.18%** — numbers, letters, squares |
 | inline backgrounds | nothing drawn | **0.97%** — the fill is a few px tall |
 | `<sup>` / `<sub>` | on the baseline | raised and lowered |
+| collapsed table rules | no rules at all | **0.49%** |
+| padded contents | text drawn at the border box | inset correctly |
+| `:hover` | never matched | restyles, and repaints only on a change |
+| `cursor` | always an arrow | the hand over a link, the beam over text |
 
 What that took, in the Scene's own terms: a Fill gained corner radii, an `Ink`
 that can be a gradient rather than only a flat colour, and a shadow; `Clip`
@@ -77,6 +81,10 @@ rendering the probe and counting marks — a feature that draws nothing leaves o
 | **ordered list numbering** | `1. 2. 3.` came out as bullets | every numbered list, every references section |
 | **inline backgrounds** | `<mark>` and highlighted spans drew nothing | highlighting, chips, syntax colouring |
 | **`<sup>` / `<sub>`** | sat on the baseline | every citation marker, every formula |
+| **`border-collapse: collapse`** | no table rules at all | every Wikipedia table, most data tables |
+| **padding and border on a box's contents** | text drawn at the border box | any padded cell or bordered box with text |
+| **`:hover`** | never matched anything | every link, button, menu and card on the web |
+| **`cursor`** | the arrow, always | the one thing that says an element can be clicked |
 | **floats** | box on its own line, content underneath | every infobox, every thumbnail, every wrapped image |
 
 The first five would garble a modern page on their own. A card with no shadow,

@@ -187,11 +187,18 @@ fn subtree(
     // includes the element's own text: an inline root holds the words of
     // everything inside it, so leaving them out here would let the one thing
     // most likely to overflow escape the clip.
+    // From the *content* box, not the border box. A box's padding and border are
+    // room its contents do not get, and parley lays a run out from zero at the
+    // content edge — so adding the border-box origin instead put every word
+    // under its own border. Nothing showed it for a long time because the boxes
+    // that hold text on most pages have no padding; a table cell does, and
+    // every one of them had its text against the rule.
+    let (across, down) = content(node, x, y);
     let mut inside = Vec::new();
     if shown {
-        inside.extend(pictures::of(&unit.laid_out, node, x, y, scene, resources));
-        inside.extend(markers::of(&unit.laid_out, node, x, y, scene));
-        inside.extend(words::of(&unit.laid_out, node, x, y, scene));
+        inside.extend(pictures::of(&unit.laid_out, node, across, down, scene, resources));
+        inside.extend(markers::of(&unit.laid_out, node, across, down, scene));
+        inside.extend(words::of(&unit.laid_out, node, across, down, scene));
     }
     // Children are walked either way: `visibility` is inherited but can be
     // turned back on, so a hidden box is not a hidden subtree.
@@ -237,6 +244,16 @@ fn arrived<'a>(
     }
     let placed = node.absolute_position(0.0, 0.0);
     Some((node, placed.x + at.0, placed.y + at.1))
+}
+
+/// Where this box's contents start: its border box, moved in by whatever the
+/// border and padding take.
+fn content(node: &Node, x: f32, y: f32) -> (f32, f32) {
+    let laid = node.final_layout();
+    (
+        x + laid.border.left + laid.padding.left,
+        y + laid.border.top + laid.padding.top,
+    )
 }
 
 /// Whether this element paints itself at all.

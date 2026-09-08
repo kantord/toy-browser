@@ -10,6 +10,9 @@ anyhow.workspace = true
 blitz-dom = { version = "0.3.0-beta.2", features = ["floats"] }
 blitz-html = "0.3.0-beta.2"
 blitz-traits = "0.3.0-beta.2"
+# The cursor a page asks for. blitz answers in this crate's type and winit
+# takes the same one, so naming it here is what lets the answer travel.
+cursor-icon = "1.2"
 parley = { version = "0.11.1", default-features = false, features = ["std"] }
 style = { package = "stylo", version = "0.20" }
 ureq = { version = "3.4.0", default-features = false, features = ["rustls"] }

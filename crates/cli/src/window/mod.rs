@@ -47,7 +47,9 @@ pub fn open(url: &str, width: u32, height: u32) -> Result<()> {
         size: (width, height),
         shown: None,
         painted: None,
+        band: None,
         pointer: (0.0, 0.0),
+        stirred: false,
         scrolled: 0.0,
     };
     event_loop
@@ -66,7 +68,12 @@ struct Open {
     /// The page as pixels, kept until something changes it. Laying a page out
     /// is the expensive part and a redraw is not a reason to do it again.
     painted: Option<Pixmap>,
+    /// Which band `painted` holds: how far down, and how tall. A window moved
+    /// over the page needs a new one even though nothing about the page changed.
+    band: Option<(u32, u32)>,
     pointer: (f32, f32),
+    /// Whether the pointer has moved since it was last acted on.
+    stirred: bool,
     scrolled: f32,
 }
 
@@ -76,10 +83,17 @@ struct Shown {
 }
 
 impl Open {
-    /// The page as pixels, laying it out again only if something has changed it.
+    /// The band of the page the window is over, drawn again only if something
+    /// has changed it or the window has moved.
+    ///
+    /// A band rather than the whole page: drawing a 35,000px article to show
+    /// 800px of it took a second and a half, nearly all of it resvg shaping
+    /// words off screen. Every hover threw that away and did it again.
     fn pixels(&mut self) -> Result<&Pixmap> {
-        if self.painted.is_none() {
-            self.painted = Some(self.browser.pixels(&self.page)?);
+        let band = (self.scrolled.max(0.0) as u32, self.size.1);
+        if self.painted.is_none() || self.band != Some(band) {
+            self.painted = Some(self.browser.band(&self.page, band.0 as f32, band.1)?);
+            self.band = Some(band);
         }
         Ok(self.painted.as_ref().expect("just filled in"))
     }
@@ -95,6 +109,9 @@ impl Open {
 
     fn changed(&mut self) {
         self.painted = None;
+        // A page that has been navigated or resized has different things under
+        // a pointer that never moved, so the cursor is asked again here too.
+        self.hovered();
         if let Some(shown) = &self.shown {
             let url = self
                 .browser
@@ -125,7 +142,9 @@ impl Open {
             .buffer_mut()
             .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-        let from = self.scrolled.max(0.0) as usize;
+        // The pixmap is already the band this window is over, so it starts at
+        // its own first row.
+        let from = 0usize;
         let across = page.width() as usize;
         for y in 0..height as usize {
             for x in 0..width as usize {
@@ -191,12 +210,29 @@ impl ApplicationHandler for Open {
         }
     }
 
+    /// Everything the loop had has been handled, so the pointer has stopped
+    /// somewhere: this is where a move is finally acted on.
+    fn about_to_wait(&mut self, _: &ActiveEventLoop) {
+        if std::mem::take(&mut self.stirred) {
+            self.moved();
+        }
+    }
+
     fn window_event(&mut self, events: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => events.exit(),
             WindowEvent::Resized(size) => self.resized(size.width, size.height),
             WindowEvent::CursorMoved { position, .. } => {
-                self.moved(position.x as f32, position.y as f32);
+                // Recorded, not acted on. A pointer dragged across the window
+                // arrives as one event per sample the device took — hundreds a
+                // second — and each one here is a hover, a hit test, three
+                // events raised at the page and a settle. Doing that per sample
+                // does not merely waste the work: the queue fills faster than
+                // it drains, so the lag *grows* for as long as the mouse keeps
+                // moving. Coalescing to one move per turn of the loop is what a
+                // browser does, and the position it uses is the newest one.
+                self.pointer = (position.x as f32, position.y as f32);
+                self.stirred = true;
             }
             WindowEvent::MouseWheel { delta, .. } => self.wheeled(delta),
             WindowEvent::MouseInput {

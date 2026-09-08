@@ -163,8 +163,28 @@ about the feature it was written for:
   in the layout tree, so the code that paints a background had nothing to read.
   Now one fill per *fragment*, which is what makes it right across a line break.
 
-What is left on this page is the two upstream bugs in `docs/upstream.md` and one
-thing of ours: `text-overflow: ellipsis` truncates without drawing the `…`.
+## A third pass: the tables
+
+Reading it again with the text legible showed the tables were wrong in two ways
+at once, and only one of them was upstream.
+
+- **`border-collapse: collapse` drew no rules at all** — and `.wikitable`, which
+  is every table on the site, is collapsed. blitz zeroes each cell's border in
+  that mode and puts the width into the table's `gap` instead, leaving the lines
+  as gaps for the renderer to fill; we were reading the cell's border from
+  layout, finding zero, and drawing nothing. Now the strips are laid in the gap
+  *around* each cell, from the width the style still carries.
+- **Every box drew its contents at its border box.** Padding and border are room
+  the contents do not get, and parley lays a run out from zero at the content
+  edge — so a padded cell had its text against the rule and a bordered box had
+  its first letter under the border. It had gone unnoticed because the elements
+  that hold text on most pages have no padding; a table cell has.
+
+What is left on this page is three upstream bugs in `docs/upstream.md` — the
+first-row column widths, the split-inline border box, and a non-breaking space
+being trimmed at an inline element's edge, which is why the article still reads
+"160–184cm" — and one thing of ours: `text-overflow: ellipsis` truncates without
+drawing the `…`.
 
 ## The one difference that is not a defect
 

@@ -13,6 +13,7 @@ pub mod blitz;
 mod dom;
 mod frames;
 mod navigate;
+mod hovering;
 mod pointer;
 mod scene;
 
@@ -25,8 +26,10 @@ use anyhow::Result;
 use toy_browser_engine::{Engine, Handle, SessionId};
 
 pub use blitz::{LaidOut, lay_out};
+pub use cursor_icon::CursorIcon;
 pub use navigate::{Loaded, NavigationError};
-pub use scene::{Rendered, pixels as scene_pixels, render as render_scene};
+pub use hovering::Hovering;
+pub use scene::{Rendered, Scene, normal_form, pixels as scene_pixels, render as render_scene};
 /// The pixel buffer this browser rasterizes into.
 ///
 /// Re-exported rather than left for a caller to depend on: it comes in through
@@ -81,6 +84,13 @@ struct Page {
     /// composed the page and then drawing composed it again, which is two full
     /// parse-and-cascade passes for one frame.
     composed: Option<Laid>,
+    /// The Scene that composition paints to, kept until something changes it.
+    ///
+    /// Building it is a walk over every box on the page — 150ms on a long
+    /// article — and a window redraws for reasons that do not change it at all:
+    /// scrolling, or being moved over. Thrown away when the composition is
+    /// rebuilt, and when hovering restyles something.
+    drawn: Option<scene::Scene>,
     /// Where the mouse is and whether it is pressed. A setting of the Page, so
     /// it outlives each event the way a real pointer does.
     pointer: Pointer,
@@ -196,6 +206,7 @@ impl Browser {
                 run_scripts: true,
                 measured: None,
                 composed: None,
+                drawn: None,
                 pointer: Pointer::default(),
                 visited: Vec::new(),
                 mounted: HashMap::new(),

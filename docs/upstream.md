@@ -91,6 +91,39 @@ rather than a missing feature.
 
 ---
 
+## blitz-dom: a non-breaking space is trimmed at an inline element's edge
+
+**Version.** `blitz-dom 0.3.0-beta.2`.
+
+**What happens.** A `U+00A0` at the start or end of an inline element's text is
+collapsed away, taking its width with it. A non-breaking space is not
+collapsible white space and must survive.
+
+```html
+<p>A<span style="background:red">&#160;</span>B</p>   <!-- renders "AB" -->
+<p>C<span style="background:red">&#160;x&#160;</span>D</p>  <!-- renders "CxD" -->
+<p>E&#160;F</p>                                       <!-- correct: "E F" -->
+```
+
+The element is not dropped from the DOM — it is in the tree, with its style —
+but it contributes no advance to the line, so the red background has zero width
+and the words either side touch.
+
+**What should happen.** CSS Text §4.1.1: only spaces, tabs and segment breaks
+collapse. `U+00A0` is explicitly not one of them; that is the point of it.
+
+**Where to look.** `is_whitespace_node` in `src/node/node.rs` uses
+`is_ascii_whitespace`, which correctly excludes `U+00A0`, so the loss is
+somewhere later — the tree builder's white-space mode, or the trimming done at
+inline element boundaries.
+
+**Why it matters.** MediaWiki emits every non-breaking space as its own
+element: `<span typeof="mw:Entity">\u{a0}</span>`. On one Wikipedia article that
+is every measurement, every `p.&nbsp;195`, every unit — the article reads
+"160–184cm (63–72in)" where it should read "160–184 cm (63–72 in)".
+
+---
+
 ## What is not here
 
 `taffy` has no floats and `parley` no inline exclusions in the versions

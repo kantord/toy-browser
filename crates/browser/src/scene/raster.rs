@@ -33,12 +33,25 @@ pub struct Rendered {
 /// the whole page, and the caller then decodes it back to arrive where this
 /// already is.
 pub fn pixels(scene: &Scene) -> Result<tiny_skia::Pixmap> {
-    let tree = usvg::Tree::from_str(&super::normal_form(scene), &options(scene))
-        .context("parsing the scene")?;
+    let started = std::time::Instant::now();
+    let text = super::normal_form(scene);
+    let wrote = started.elapsed();
+    let started = std::time::Instant::now();
+    let tree = usvg::Tree::from_str(&text, &options(scene)).context("parsing the scene")?;
+    let parsed = started.elapsed();
+    let started = std::time::Instant::now();
     let size = tree.size().to_int_size();
     let mut pixmap = tiny_skia::Pixmap::new(size.width(), size.height())
         .with_context(|| format!("allocating {}x{} pixmap", size.width(), size.height()))?;
     resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
+    if std::env::var_os("TOY_BROWSER_TIME_RASTER").is_some() {
+        eprintln!(
+            "  write {wrote:.1?}  parse {parsed:.1?}  raster {:.1?}  ({}x{})",
+            started.elapsed(),
+            size.width(),
+            size.height()
+        );
+    }
     Ok(pixmap)
 }
 

@@ -37,11 +37,6 @@ pub(super) fn of(page: &LaidOut, node: &Node, x: f32, y: f32, scene: &mut Scene)
     else {
         return Vec::new();
     };
-    let laid = node.final_layout();
-    let inset = (
-        laid.padding.left + laid.border.left,
-        laid.padding.top + laid.border.top,
-    );
     // Right-aligned into the space before the content. A bullet gets a gap and
     // a number does not, which is blitz's own rule and the one its renderer
     // uses — a number already carries its `.` and the space after it.
@@ -49,10 +44,10 @@ pub(super) fn of(page: &LaidOut, node: &Node, x: f32, y: f32, scene: &mut Scene)
         Marker::Char(_) => BULLET_GAP,
         Marker::String(_) => 0.0,
     };
-    let across = x + inset.0 - (layout.full_width() / layout.scale() + gap);
+    let across = x - (layout.full_width() / layout.scale() + gap);
     // On the baseline of the item's own first line rather than at the top of
     // its box, so the marker sits level with the words it belongs to.
-    let down = y + inset.1 + level_with_the_text(element, layout);
+    let down = y + level_with_the_text(element, layout);
     super::words::written(page, layout, &text_of(marker), (across, down), scene)
 }
 

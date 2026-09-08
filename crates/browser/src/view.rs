@@ -59,6 +59,53 @@ impl Browser {
         crate::scene::pixels(&self.painted(page, viewport)?)
     }
 
+    /// One screenful of the page, from `top` down.
+    ///
+    /// What a window wants for every frame after the first. Drawing the whole
+    /// page to show a screenful of it is not a small waste: the Scene reaches
+    /// resvg as text and resvg shapes every word in it, so a long article costs
+    /// a second and a half of shaping against fifty milliseconds of drawing.
+    /// A band is the same Scene with what falls outside it left out.
+    pub fn band(
+        &mut self,
+        page: &PageId,
+        top: f32,
+        tall: u32,
+    ) -> Result<crate::tiny_skia::Pixmap> {
+        self.sync(page)?;
+        if self
+            .pages
+            .get(page)
+            .is_none_or(|held| held.drawn.is_none())
+        {
+            let viewport = self.viewport(page);
+            let scene = self.painted(page, viewport)?;
+            if let Some(held) = self.pages.get_mut(page) {
+                held.drawn = Some(scene);
+            }
+        }
+        let whole = self
+            .pages
+            .get(page)
+            .and_then(|held| held.drawn.as_ref())
+            .ok_or_else(|| anyhow::anyhow!("no such page"))?;
+        crate::scene::pixels(&whole.band(top, tall))
+    }
+
+    /// How tall the page came out, which is how far a window may scroll.
+    ///
+    /// The *picture's* height rather than the root element's: what a window
+    /// scrolls over is everything that was drawn, and a page can put marks
+    /// below the box its `<html>` was given.
+    pub fn height(&mut self, page: &PageId) -> Result<f32> {
+        self.band(page, 0.0, 1)?;
+        Ok(self
+            .pages
+            .get(page)
+            .and_then(|held| held.drawn.as_ref())
+            .map_or(0.0, |scene| scene.height as f32))
+    }
+
     /// Renders the page and keeps every intermediate artifact.
     pub fn render(&mut self, page: &PageId) -> Result<Rendered> {
         self.sync(page)?;
@@ -73,6 +120,12 @@ impl Browser {
 
     /// The page as a Scene, with whatever is mounted in it drawn in the same
     /// picture.
+    /// The Scene this page paints to, for anything that wants to measure it.
+    pub fn scene_for(&mut self, page: &PageId) -> Result<crate::scene::Scene> {
+        let viewport = self.viewport(page);
+        self.painted(page, viewport)
+    }
+
     pub(crate) fn painted(
         &mut self,
         page: &PageId,

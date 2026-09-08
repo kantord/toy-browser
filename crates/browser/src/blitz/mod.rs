@@ -25,12 +25,14 @@ use toy_browser_engine::{ElementBox, key_of};
 
 use crate::Viewport;
 
+mod agent;
 mod export;
 mod order;
 pub(crate) mod fonts;
 mod geometry;
 mod net;
 
+use agent::{CURSORS, LINE_HEIGHT};
 use fonts::context;
 
 use export::{colour, font_size};
@@ -76,6 +78,7 @@ pub fn lay_out(
         },
     );
     document.add_user_agent_stylesheet(LINE_HEIGHT);
+    document.add_user_agent_stylesheet(CURSORS);
     for sheet in sheets {
         document.add_user_agent_stylesheet(sheet);
     }
@@ -122,6 +125,36 @@ pub struct Composed {
     pub mounted: HashMap<NodeId, (ElementBox, Composed)>,
 }
 
+impl Composed {
+    /// The page this point lands in, and where it lands inside it.
+    ///
+    /// A `<webview>` holds a page of its own, and the pointer belongs to the
+    /// innermost one it is over — the same rule the events already follow.
+    /// Answered as a mutable borrow because what the caller wants to do with it
+    /// is tell it where the pointer is, which is a change to that document.
+    pub fn under(&mut self, x: f32, y: f32) -> (&mut LaidOut, f32, f32) {
+        // The key first, then the borrow: finding and mutating in one
+        // expression borrows the map twice.
+        let inside = self
+            .mounted
+            .iter()
+            .find(|(_, (area, _))| {
+                x >= area.x
+                    && y >= area.y
+                    && x < area.x + area.width
+                    && y < area.y + area.height
+            })
+            .map(|(node, (area, _))| (*node, area.x, area.y));
+        match inside {
+            Some((node, left, top)) => match self.mounted.get_mut(&node) {
+                Some((_, held)) => held.under(x - left, y - top),
+                None => (&mut self.laid_out, x, y),
+            },
+            None => (&mut self.laid_out, x, y),
+        }
+    }
+}
+
 /// One `<webview>` in a document: a rectangle the host lays out, holding a page
 /// the host has nothing to do with.
 ///
@@ -154,25 +187,6 @@ const DEFAULT_HEIGHT: u32 = 600;
 /// arrived. A page whose resources name further resources would otherwise never
 /// settle.
 const ROUNDS: usize = 8;
-
-/// What `line-height: normal` is worth.
-///
-/// TODO: a workaround for blitz-dom, which maps `normal` to a flat 1.2 of the
-/// font size (`stylo_to_parley.rs`). A browser uses the font's own metrics —
-/// about 1.15 for Liberation Sans, which is what a page asking for
-/// `Verdana, Geneva, sans-serif` gets on this machine. The difference is small
-/// per line and compounds: on Hacker News every row stepped 39.25px where
-/// Chromium steps 34, leaving the page 175px too tall.
-///
-/// Set on the root rather than on `*`, so it inherits the way a real
-/// `line-height` does and a page that sets its own still wins. A `*` rule would
-/// match every element directly and beat what its parent said.
-const LINE_HEIGHT: &str = "html { line-height: 1.08 }\
-\
-table[cellspacing=\"0\"] { border-spacing: 0 }\
-table[cellpadding=\"0\"] td, table[cellpadding=\"0\"] th { padding: 0 }\
-\
-webview { display: block; overflow: hidden }";
 
 impl LaidOut {
     /// Every `<webview>` the document holds, with the box it was given.

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { margin: 0; font: 20px sans-serif }
+      /* A block that changes colour, so the restyle is visible in the paint
+         and not only in the computed style. */
+      #box { width: 200px; height: 60px; background: rgb(200, 200, 200) }
+      #box:hover { background: rgb(255, 0, 0) }
+      #plain { width: 200px; height: 60px; background: rgb(220, 220, 220) }
+    </style>
+  </head>
+  <body>
+    <div id="box">hover me</div>
+    <div id="plain">not hoverable</div>
+    <p><a id="link" href="hello.html">a link</a></p>
+    <!-- A link surrounded by words, so it is an inline box among other inline
+         boxes rather than the only thing in its paragraph. -->
+    <p>some words before <a id="inline" href="hello.html">the link</a> and after</p>
+  </body>
+</html>

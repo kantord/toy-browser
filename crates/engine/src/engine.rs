@@ -242,6 +242,14 @@ impl Engine {
     }
 
     /// An element's tag name, or `None` if it is not an element.
+    /// The element this one sits in, if it is not the root.
+    ///
+    /// For walking *up* from a hit test, which is how a click on the word
+    /// inside a link finds the link.
+    pub fn parent(&mut self, session: &SessionId, node: NodeId) -> Result<Option<NodeId>> {
+        Ok(self.realm(session)?.parent(node))
+    }
+
     pub fn tag_name(&mut self, session: &SessionId, node: NodeId) -> Result<Option<String>> {
         Ok(self.realm(session)?.tag_name(node))
     }

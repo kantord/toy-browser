@@ -63,6 +63,8 @@ impl Browser {
             let unit = self.compose(page, viewport)?;
             let revisions = self.revisions(page)?;
             if let Some(held) = self.pages.get_mut(page) {
+                // A new composition is a new picture, whatever the old one said.
+                held.drawn = None;
                 held.composed = Some(crate::Laid {
                     unit,
                     width: viewport.width,
