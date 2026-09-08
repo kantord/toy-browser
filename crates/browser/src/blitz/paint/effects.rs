@@ -32,7 +32,10 @@ pub(super) fn turned(node: &Node, x: f32, y: f32, marks: Vec<Mark>) -> Vec<Mark>
         return marks;
     }
     let reference = euclid::Rect::new(
-        euclid::Point2D::new(style::values::computed::Length::new(0.0), style::values::computed::Length::new(0.0)),
+        euclid::Point2D::new(
+            style::values::computed::Length::new(0.0),
+            style::values::computed::Length::new(0.0),
+        ),
         euclid::Size2D::new(
             style::values::computed::Length::new(size.width),
             style::values::computed::Length::new(size.height),
@@ -69,38 +72,37 @@ pub(super) fn faded(node: &Node, marks: Vec<Mark>) -> Vec<Mark> {
     marks.into_iter().map(|mark| dimmed(mark, alpha)).collect()
 }
 
-fn dimmed(mark: Mark, by: f32) -> Mark {
-    match mark {
-        Mark::Fill { area, mut ink, corners, shadow, node } => {
-            match &mut ink {
-                Ink::Flat(paint) => paint.alpha *= by,
-                Ink::Linear { stops, .. } => {
-                    for stop in stops.iter_mut() {
-                        stop.paint.alpha *= by;
-                    }
-                }
-                // A picture has no alpha of its own to dim here. Fading one
-                // needs the group composited, which is the same limit this
-                // whole approach has and is written down beside it.
-                Ink::Tiled(_) => {}
+/// One mark, faded.
+///
+/// In place rather than rebuilt: every variant keeps every field it had except
+/// the one carrying the colour, and writing all of them out again said nothing
+/// but hid which one changed.
+fn dimmed(mut mark: Mark, by: f32) -> Mark {
+    match &mut mark {
+        Mark::Fill { ink, .. } => faded_ink(ink, by),
+        Mark::Glyphs { paint, .. } => paint.alpha *= by,
+        // A group is faded by fading what is in it, which is the approximation
+        // this whole file is: see [`faded`].
+        Mark::Clip { marks, .. } | Mark::Moved { marks, .. } => {
+            let inside = std::mem::take(marks);
+            *marks = inside.into_iter().map(|it| dimmed(it, by)).collect();
+        }
+        // A picture has no alpha of its own to dim here.
+        Mark::Image { .. } => {}
+    }
+    mark
+}
+
+/// Fades an ink, as far as one can be without compositing the group.
+fn faded_ink(ink: &mut Ink, by: f32) {
+    match ink {
+        Ink::Flat(paint) => paint.alpha *= by,
+        Ink::Linear { stops, .. } => {
+            for stop in stops.iter_mut() {
+                stop.paint.alpha *= by;
             }
-            Mark::Fill { area, ink, corners, shadow, node }
         }
-        Mark::Glyphs { places, text, baseline, size, mut paint, face, node } => {
-            paint.alpha *= by;
-            Mark::Glyphs { places, text, baseline, size, paint, face, node }
-        }
-        Mark::Clip { to, marks, node } => Mark::Clip {
-            to,
-            marks: marks.into_iter().map(|it| dimmed(it, by)).collect(),
-            node,
-        },
-        Mark::Moved { by: matrix, about, marks, node } => Mark::Moved {
-            by: matrix,
-            about,
-            marks: marks.into_iter().map(|it| dimmed(it, by)).collect(),
-            node,
-        },
-        other => other,
+        // Same limit as a picture in an Image mark, and for the same reason.
+        Ink::Tiled(_) => {}
     }
 }

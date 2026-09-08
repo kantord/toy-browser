@@ -117,14 +117,10 @@ pub(super) fn radii(style: &style::properties::ComputedValues, area: &Area) -> C
 /// The first of the list, and only if it is an outer shadow: an `inset` one is
 /// drawn inside the box against its own edges, which is a different shape and
 /// not one this can make.
-pub(super) fn shadow(
-    style: &style::properties::ComputedValues,
-) -> Option<Shadow> {
+pub(super) fn shadow(style: &style::properties::ComputedValues) -> Option<Shadow> {
     let shadows = &style.get_effects().box_shadow.0;
     let first = shadows.iter().find(|it| !it.inset)?;
-    let [red, green, blue, alpha] = *style
-        .resolve_color(&first.base.color)
-        .raw_components();
+    let [red, green, blue, alpha] = *style.resolve_color(&first.base.color).raw_components();
     Some(Shadow {
         across: first.base.horizontal.px(),
         down: first.base.vertical.px(),
@@ -138,15 +134,16 @@ pub(super) fn shadow(
 /// Linear only, and the first image only. A page that layers three backgrounds
 /// is asking for something a single Fill cannot say, and a radial gradient is a
 /// different shape of answer than an angle and a line.
-pub(super) fn gradient(
-    style: &style::properties::ComputedValues,
-) -> Option<Ink> {
-    use style::values::generics::image::{GenericGradient, GenericImage, GenericGradientItem};
+pub(super) fn gradient(style: &style::properties::ComputedValues) -> Option<Ink> {
+    use style::values::generics::image::{GenericGradient, GenericGradientItem, GenericImage};
     let first = style.get_background().background_image.0.first()?;
     let GenericImage::Gradient(gradient) = first else {
         return None;
     };
-    let GenericGradient::Linear { direction, items, .. } = &**gradient else {
+    let GenericGradient::Linear {
+        direction, items, ..
+    } = &**gradient
+    else {
         return None;
     };
     let angle = heading(direction);
@@ -158,12 +155,12 @@ pub(super) fn gradient(
         .enumerate()
         .filter_map(|(nth, item)| {
             let (colour, at) = match item {
-                GenericGradientItem::SimpleColorStop(colour) => {
-                    (colour, nth as f32 / count as f32)
-                }
+                GenericGradientItem::SimpleColorStop(colour) => (colour, nth as f32 / count as f32),
                 GenericGradientItem::ComplexColorStop { color, position } => (
                     color,
-                    position.to_percentage().map_or(nth as f32 / count as f32, |it| it.0),
+                    position
+                        .to_percentage()
+                        .map_or(nth as f32 / count as f32, |it| it.0),
                 ),
                 GenericGradientItem::InterpolationHint(_) => return None,
             };
@@ -183,7 +180,9 @@ pub(super) fn gradient(
 /// bottom` — and each is an angle with a name.
 pub(super) fn heading(direction: &style::values::computed::image::LineDirection) -> f32 {
     use style::values::computed::image::LineDirection;
-    use style::values::specified::position::{HorizontalPositionKeyword as X, VerticalPositionKeyword as Y};
+    use style::values::specified::position::{
+        HorizontalPositionKeyword as X, VerticalPositionKeyword as Y,
+    };
     match direction {
         LineDirection::Angle(angle) => angle.degrees(),
         LineDirection::Horizontal(X::Left) => 270.0,
@@ -198,4 +197,3 @@ pub(super) fn heading(direction: &style::values::computed::image::LineDirection)
         },
     }
 }
-

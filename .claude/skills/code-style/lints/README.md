@@ -36,6 +36,8 @@ Nothing here needs a runtime, an index to rebuild, or a tool to read it.
   than at the limit, and records that raising the budget was refused.
 - [too-many-arguments](/.claude/skills/code-style/lints/too-many-arguments.md)
   — a signature longer than anyone holds. Usually a value nobody named yet.
+- [type-complexity](/.claude/skills/code-style/lints/type-complexity.md) — a
+  nested generic that is a value nobody named.
 
 Both of the last two were written the first time they fired, from a grilling in
 the session that tripped them — which is the arrangement

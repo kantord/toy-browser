@@ -78,9 +78,7 @@ impl Browser {
                 // blitz found the link itself, which it can when the link has a
                 // box of its own — an image, or anything not inline.
                 Some(cursor_icon::CursorIcon::Pointer) => cursor,
-                _ if self.over_a_link(page, point)? => {
-                    Some(cursor_icon::CursorIcon::Pointer)
-                }
+                _ if self.over_a_link(page, point)? => Some(cursor_icon::CursorIcon::Pointer),
                 _ => cursor,
             },
             moved,

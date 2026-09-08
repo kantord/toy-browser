@@ -12,6 +12,7 @@
 //! it is how Hacker News came out in Greek letters, because the only thing on
 //! that machine claiming to be Verdana was a symbol font.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -76,9 +77,6 @@ pub(super) fn written(
     marks
 }
 
-
-
-
 /// One glyph run, with the part of its underlying run it covers and where the
 /// element holding it sits.
 ///
@@ -104,6 +102,7 @@ fn mark(page: &LaidOut, placed: &Placed<'_>, source: &str, scene: &mut Scene) ->
     Some(Mark::Glyphs {
         places: laid.places,
         text: words.to_owned(),
+        glyphs: chosen(placed, y),
         baseline: y + run.baseline() - super::around::raised(page, owner),
         size: run.run().font_size(),
         paint: colour(page, owner),
@@ -112,7 +111,23 @@ fn mark(page: &LaidOut, placed: &Placed<'_>, source: &str, scene: &mut Scene) ->
     })
 }
 
-
+/// The glyphs layout picked for this run, where it put them.
+///
+/// Taken from parley rather than worked out from the characters: shaping has
+/// already chosen these — ligatures joined, marks positioned, the right face
+/// picked from the fallback list — and deriving them again from the letters
+/// would be doing the hard part twice and getting a different answer.
+fn chosen(placed: &Placed<'_>, down: f32) -> Vec<crate::scene::Glyph> {
+    placed
+        .run
+        .positioned_glyphs()
+        .map(|glyph| crate::scene::Glyph {
+            id: glyph.id,
+            x: placed.origin.0 + glyph.x,
+            y: down + glyph.y,
+        })
+        .collect()
+}
 
 /// The Face this run was laid out in, remembered by the Scene.
 ///
@@ -124,8 +139,45 @@ fn face(
     run: &parley::layout::GlyphRun<'_, blitz_dom::node::TextBrush>,
     scene: &mut Scene,
 ) -> Digest {
-    let font = run.run().font();
-    scene.remember_face(Arc::from(font.data.data()))
+    let known = named(run.run().font());
+    scene.hold_face(known.digest, known.bytes);
+    known.digest
+}
+
+/// What a font's bytes are called, worked out once per font rather than once
+/// per run.
+///
+/// A Digest is a hash of a whole font file, and owning the bytes is a copy of
+/// one. A page has a glyph run per span and per line, so asking per run meant
+/// hashing and copying the same half-megabyte of Noto a couple of thousand
+/// times on one article — 140ms of a 157ms paint, which is most of what a
+/// scroll cost.
+///
+/// Keyed by the id its owner gives the blob, which is stable for as long as the
+/// font is loaded, and answered with the bytes as well as the name so that a
+/// second Scene does not copy them again either.
+fn named(font: &parley::FontData) -> Known {
+    thread_local! {
+        static KNOWN: RefCell<HashMap<u64, Known>> = RefCell::new(HashMap::new());
+    }
+    let blob = font.data.id();
+    if let Some(known) = KNOWN.with(|known| known.borrow().get(&blob).cloned()) {
+        return known;
+    }
+    let bytes: Arc<[u8]> = Arc::from(font.data.data());
+    let known = Known {
+        digest: Digest::of(&bytes),
+        bytes,
+    };
+    KNOWN.with(|seen| seen.borrow_mut().insert(blob, known.clone()));
+    known
+}
+
+/// A font the Scene has a name for, and the bytes that name is of.
+#[derive(Clone)]
+struct Known {
+    digest: Digest,
+    bytes: Arc<[u8]>,
 }
 
 /// What part of the source a glyph run covers, and where each of its characters
@@ -200,4 +252,3 @@ fn colour(page: &LaidOut, owner: NodeId) -> Paint {
     let [red, green, blue, _] = *style.clone_color().raw_components();
     super::channels(red, green, blue, 1.0)
 }
-

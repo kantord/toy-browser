@@ -124,12 +124,7 @@ impl Dom {
 }
 
 /// Every element with this tag under `id`, in document order.
-fn collect_by_tag(
-    doc: &BaseDocument,
-    id: blitz_dom::NodeId,
-    tag: &str,
-    found: &mut Vec<usize>,
-) {
+fn collect_by_tag(doc: &BaseDocument, id: blitz_dom::NodeId, tag: &str, found: &mut Vec<usize>) {
     let Some(node) = doc.get_node(id) else {
         return;
     };

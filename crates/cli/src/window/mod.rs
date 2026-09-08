@@ -16,7 +16,7 @@ use anyhow::{Context as _, Result};
 use toy_browser::tiny_skia::Pixmap;
 use toy_browser::{Browser, PageId, Point, Resources, Viewport};
 use winit::application::ApplicationHandler;
-use winit::event::{MouseButton, WindowEvent};
+use winit::event::{MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
@@ -50,7 +50,9 @@ pub fn open(url: &str, width: u32, height: u32) -> Result<()> {
         band: None,
         pointer: (0.0, 0.0),
         stirred: false,
+        turned: 0.0,
         scrolled: 0.0,
+        tallest: None,
     };
     event_loop
         .run_app(&mut open)
@@ -74,7 +76,12 @@ struct Open {
     pointer: (f32, f32),
     /// Whether the pointer has moved since it was last acted on.
     stirred: bool,
+    /// How far the wheel has turned since it was last acted on, in pixels.
+    turned: f32,
     scrolled: f32,
+    /// How tall the page is, which is how far it can be scrolled. Kept because
+    /// it costs a Scene to work out and a wheel does not change it.
+    tallest: Option<f32>,
 }
 
 struct Shown {
@@ -109,6 +116,7 @@ impl Open {
 
     fn changed(&mut self) {
         self.painted = None;
+        self.tallest = None;
         // A page that has been navigated or resized has different things under
         // a pointer that never moved, so the cursor is asked again here too.
         self.hovered();
@@ -213,6 +221,13 @@ impl ApplicationHandler for Open {
     /// Everything the loop had has been handled, so the pointer has stopped
     /// somewhere: this is where a move is finally acted on.
     fn about_to_wait(&mut self, _: &ActiveEventLoop) {
+        // Scrolling first: it decides where in the document the pointer is, and
+        // a hover worked out before it would be about where the page used to
+        // be.
+        let turned = std::mem::take(&mut self.turned);
+        if turned != 0.0 {
+            self.wheeled(turned);
+        }
         if std::mem::take(&mut self.stirred) {
             self.moved();
         }
@@ -234,7 +249,18 @@ impl ApplicationHandler for Open {
                 self.pointer = (position.x as f32, position.y as f32);
                 self.stirred = true;
             }
-            WindowEvent::MouseWheel { delta, .. } => self.wheeled(delta),
+            WindowEvent::MouseWheel { delta, .. } => {
+                // Added up, not acted on, for the same reason a pointer move
+                // is: a trackpad reports a flick as dozens of events, and each
+                // one here is a hover and a repaint of the page. Acting on
+                // every one makes the queue fill faster than it drains, so the
+                // page arrives further behind the finger the longer the scroll
+                // goes on.
+                self.turned += match delta {
+                    MouseScrollDelta::LineDelta(_, lines) => lines * NOTCH,
+                    MouseScrollDelta::PixelDelta(at) => at.y as f32,
+                };
+            }
             WindowEvent::MouseInput {
                 state,
                 button: MouseButton::Left,

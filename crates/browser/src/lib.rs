@@ -12,8 +12,8 @@
 pub mod blitz;
 mod dom;
 mod frames;
-mod navigate;
 mod hovering;
+mod navigate;
 mod pointer;
 mod scene;
 
@@ -27,11 +27,8 @@ use toy_browser_engine::{Engine, Handle, SessionId};
 
 pub use blitz::{LaidOut, lay_out};
 pub use cursor_icon::CursorIcon;
-pub use navigate::{Loaded, NavigationError};
 pub use hovering::Hovering;
-pub use scene::{
-    Rendered, Scene, family, normal_form, pixels as scene_pixels, render as render_scene,
-};
+pub use navigate::{Loaded, NavigationError};
 /// The pixel buffer this browser rasterizes into.
 ///
 /// Re-exported rather than left for a caller to depend on: it comes in through
@@ -39,6 +36,10 @@ pub use scene::{
 /// same thing. Bridging those meant encoding a PNG and decoding it straight
 /// back, which is a lot of work to change one name into another.
 pub use resvg::tiny_skia;
+pub use scene::{
+    Rendered, Scene, draw as draw_scene, family, normal_form, pixels as scene_pixels,
+    render as render_scene,
+};
 pub use toy_browser_engine::{Budget, ElementBox, NodeId, Point, ScriptSurvey};
 pub use toy_browser_fetch::{Resources, Url};
 

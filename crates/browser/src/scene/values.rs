@@ -49,7 +49,10 @@ impl Corners {
     };
 
     pub fn any(&self) -> bool {
-        self.top_left > 0.0 || self.top_right > 0.0 || self.bottom_right > 0.0 || self.bottom_left > 0.0
+        self.top_left > 0.0
+            || self.top_right > 0.0
+            || self.bottom_right > 0.0
+            || self.bottom_left > 0.0
     }
 
     /// Shrunk so that two corners on one side cannot together exceed it, which
@@ -85,7 +88,10 @@ pub enum Ink {
     Flat(Paint),
     /// A line of colour across the area, at `angle` degrees clockwise from
     /// "up", which is how CSS states it.
-    Linear { angle: f32, stops: Vec<Stop> },
+    Linear {
+        angle: f32,
+        stops: Vec<Stop>,
+    },
     /// A picture laid over the area, once or tiled.
     ///
     /// An Ink rather than an [`Image`](super::Mark::Image) mark, because a
@@ -154,4 +160,27 @@ pub struct Paint {
     pub green: u8,
     pub blue: u8,
     pub alpha: f32,
+}
+
+/// One glyph, chosen and placed.
+///
+/// The Scene carries these *as well as* the characters they spell, because two
+/// readers want different things from one run: a rasterizer wants the glyphs
+/// layout already picked, and a person opening the exported file wants the
+/// words. They are written down together from the same parley run in one pass,
+/// so they describe the same thing and cannot drift apart.
+///
+/// Carrying the glyphs is what lets the screen be drawn without shaping the
+/// text a second time. Handing a rasterizer the characters instead meant it
+/// re-derived every glyph on every frame — 29ms of a 30ms parse on one article,
+/// to arrive at what parley had already worked out.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Glyph {
+    /// The face's own number for it. Meaningless without the Face, which is
+    /// why the mark names one.
+    pub id: u32,
+    /// Where it sits, in document coordinates: `x` at its origin, `y` on the
+    /// baseline it was laid on.
+    pub x: f32,
+    pub y: f32,
 }

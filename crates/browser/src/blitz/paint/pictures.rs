@@ -181,15 +181,17 @@ fn stretched(
             use style::values::generics::length::GenericLengthPercentageOrAuto as Maybe;
             let across = match width {
                 Maybe::Auto => None,
-                Maybe::LengthPercentage(it) => {
-                    Some(it.0.to_used_value(app_units::Au::from_f32_px(box_.0)).to_f32_px())
-                }
+                Maybe::LengthPercentage(it) => Some(
+                    it.0.to_used_value(app_units::Au::from_f32_px(box_.0))
+                        .to_f32_px(),
+                ),
             };
             let down = match height {
                 Maybe::Auto => None,
-                Maybe::LengthPercentage(it) => {
-                    Some(it.0.to_used_value(app_units::Au::from_f32_px(box_.1)).to_f32_px())
-                }
+                Maybe::LengthPercentage(it) => Some(
+                    it.0.to_used_value(app_units::Au::from_f32_px(box_.1))
+                        .to_f32_px(),
+                ),
             };
             match (across, down) {
                 (Some(w), Some(h)) => (w, h),
@@ -214,7 +216,11 @@ fn placed(
     position
         .to_percentage()
         .map(|it| spare * it.0)
-        .unwrap_or_else(|| position.to_used_value(app_units::Au::from_f32_px(room)).to_f32_px())
+        .unwrap_or_else(|| {
+            position
+                .to_used_value(app_units::Au::from_f32_px(room))
+                .to_f32_px()
+        })
 }
 
 /// Whether the tile repeats across and down.

@@ -243,8 +243,10 @@ mod tests {
                 true => ink,
                 false => ground,
             };
-            *pixel =
-                toy_browser::tiny_skia::PremultipliedColorU8::from_rgba(rgb[0], rgb[1], rgb[2], 255).unwrap();
+            *pixel = toy_browser::tiny_skia::PremultipliedColorU8::from_rgba(
+                rgb[0], rgb[1], rgb[2], 255,
+            )
+            .unwrap();
         }
         pixmap
     }

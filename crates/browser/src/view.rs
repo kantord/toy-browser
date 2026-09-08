@@ -66,30 +66,43 @@ impl Browser {
     /// resvg as text and resvg shapes every word in it, so a long article costs
     /// a second and a half of shaping against fifty milliseconds of drawing.
     /// A band is the same Scene with what falls outside it left out.
-    pub fn band(
-        &mut self,
-        page: &PageId,
-        top: f32,
-        tall: u32,
-    ) -> Result<crate::tiny_skia::Pixmap> {
+    pub fn band(&mut self, page: &PageId, top: f32, tall: u32) -> Result<crate::tiny_skia::Pixmap> {
+        let clock = std::time::Instant::now();
         self.sync(page)?;
-        if self
-            .pages
-            .get(page)
-            .is_none_or(|held| held.drawn.is_none())
-        {
+        let synced = clock.elapsed();
+        if self.pages.get(page).is_none_or(|held| held.drawn.is_none()) {
             let viewport = self.viewport(page);
             let scene = self.painted(page, viewport)?;
             if let Some(held) = self.pages.get_mut(page) {
                 held.drawn = Some(scene);
             }
         }
+        let repainted = clock.elapsed();
         let whole = self
             .pages
             .get(page)
             .and_then(|held| held.drawn.as_ref())
             .ok_or_else(|| anyhow::anyhow!("no such page"))?;
-        crate::scene::pixels(&whole.band(top, tall))
+        let strip = whole.band(top, tall);
+        let cut = clock.elapsed();
+        let pixels = crate::scene::pixels(&strip);
+        // `TOY_BROWSER_TRACE_FRAME=1` says where a frame went. The four costs
+        // are separable and only one of them is the drawing: measuring the page
+        // again, painting the Scene, cutting the band out of it, and filling
+        // the pixels. Which one dominates has changed twice already.
+        if std::env::var_os("TOY_BROWSER_TRACE_FRAME").is_some() {
+            eprintln!(
+                "frame  sync {:>6.1}ms  paint {:>6.1}ms  cut {:>6.1}ms  draw {:>6.1}ms  \
+                 marks {} of {}",
+                synced.as_secs_f32() * 1000.0,
+                (repainted - synced).as_secs_f32() * 1000.0,
+                (cut - repainted).as_secs_f32() * 1000.0,
+                clock.elapsed().saturating_sub(cut).as_secs_f32() * 1000.0,
+                strip.marks.len(),
+                whole.marks.len(),
+            );
+        }
+        pixels
     }
 
     /// How tall the page came out, which is how far a window may scroll.

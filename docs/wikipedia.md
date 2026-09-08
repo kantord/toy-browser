@@ -193,3 +193,34 @@ below it. That is the fundraising banner, injected by a module fetched after
 load. A static render legitimately does not have it — and it is most of what
 the first-viewport pixel comparison is measuring on this page, which is why the
 height of the whole document is the better number to read.
+
+## What a scroll costs
+
+The page is laid out once at its full height and a window shows a band of it, so
+scrolling is not layout — it is a Scene, a cut, and a fill. Measured on this
+article at 1200×800, with `TOY_BROWSER_TRACE_FRAME=1` and
+`cargo run --release --example frame`:
+
+| | first | scrolling |
+|---|---|---|
+| whole page through resvg | 2.3s | 2.3s |
+| a band through resvg | 2.3s | 51ms |
+| a band, drawn directly | 424ms | 175ms |
+| …with the face named once | **310ms** | **36ms** |
+
+The last row is one line of the story worth keeping. A Mark names its font by a
+`Digest`, which is a hash of the whole font file, and `face()` worked one out per
+glyph run — so a page with two thousand runs hashed and copied the same
+half-megabyte of Noto two thousand times, and *that* was 140ms of the 157ms it
+took to paint the Scene. It hid behind resvg for as long as resvg was slower.
+
+Two things in the window cost more than the drawing did, and neither was drawing:
+
+- **The wheel was not coalesced.** A trackpad reports one flick as dozens of
+  events, and each was a hover, a height and a repaint. The queue filled faster
+  than it drained, so the page fell further behind the finger the longer the
+  scroll went on — the same failure the pointer had, fixed the same way, in
+  `about_to_wait`.
+- **The height was asked for per notch.** How far a page can scroll is the
+  height of its picture, and working that out means painting the Scene. It
+  cannot change while the wheel turns, so it is kept.

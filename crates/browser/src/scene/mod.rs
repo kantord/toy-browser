@@ -26,14 +26,16 @@
 use std::collections::BTreeMap;
 
 mod band;
+mod draw;
 mod raster;
 mod shapes;
-mod values;
 mod svg;
+mod values;
 
+pub use draw::draw;
 pub use raster::{Rendered, pixels, render};
 pub use svg::{export, family, normal_form};
-pub use values::{Area, Corners, Ink, Paint, Shadow, Stop, Tiles};
+pub use values::{Area, Corners, Glyph, Ink, Paint, Shadow, Stop, Tiles};
 
 /// Bytes named by their own content.
 ///
@@ -152,10 +154,14 @@ pub enum Mark {
     /// does not merely lose the odd character — it slides every position after
     /// the first disagreement onto the wrong one.
     Glyphs {
-        /// One x per glyph, in order, already in document coordinates.
+        /// One x per *character*, in order, already in document coordinates.
+        /// What an SVG `<text>` wants, and what the two writings use.
         places: Vec<f32>,
         /// What those glyphs spell.
         text: String,
+        /// The glyphs themselves, as layout chose them. What a rasterizer wants
+        /// — see [`Glyph`] for why the same run is written down both ways.
+        glyphs: Vec<Glyph>,
         baseline: f32,
         size: f32,
         paint: Paint,
@@ -226,7 +232,16 @@ impl Scene {
 
     pub fn remember_face(&mut self, bytes: std::sync::Arc<[u8]>) -> Digest {
         let digest = Digest::of(&bytes);
-        self.faces.entry(digest).or_insert(Face { bytes });
+        self.hold_face(digest, bytes);
         digest
+    }
+
+    /// Holds a face's bytes under a name already worked out.
+    ///
+    /// [`remember_face`](Self::remember_face) hashes what it is handed, and
+    /// hashing a font file is not something a caller can afford to do once per
+    /// glyph run. One that has kept the answer says it here instead.
+    pub fn hold_face(&mut self, digest: Digest, bytes: std::sync::Arc<[u8]>) {
+        self.faces.entry(digest).or_insert(Face { bytes });
     }
 }

@@ -196,7 +196,14 @@ fn subtree(
     let (across, down) = content(node, x, y);
     let mut inside = Vec::new();
     if shown {
-        inside.extend(pictures::of(&unit.laid_out, node, across, down, scene, resources));
+        inside.extend(pictures::of(
+            &unit.laid_out,
+            node,
+            across,
+            down,
+            scene,
+            resources,
+        ));
         inside.extend(markers::of(&unit.laid_out, node, across, down, scene));
         inside.extend(words::of(&unit.laid_out, node, across, down, scene));
     }
@@ -216,7 +223,6 @@ fn subtree(
     }
     effects::turned(node, x, y, effects::faded(node, marks))
 }
-
 
 /// The node this walk has reached and where it sits, or nothing at all.
 ///

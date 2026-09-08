@@ -91,15 +91,28 @@ pub(super) fn rounded(area: &Area, corners: Corners) -> String {
          V {:.2} A {:.2} {:.2} 0 0 1 {:.2} {:.2} \
          H {:.2} A {:.2} {:.2} 0 0 1 {:.2} {:.2} \
          V {:.2} A {:.2} {:.2} 0 0 1 {:.2} {:.2} Z",
-        x + tl, y,
+        x + tl,
+        y,
         x + w - tr,
-        tr, tr, x + w, y + tr,
+        tr,
+        tr,
+        x + w,
+        y + tr,
         y + h - br,
-        br, br, x + w - br, y + h,
+        br,
+        br,
+        x + w - br,
+        y + h,
         x + bl,
-        bl, bl, x, y + h - bl,
+        bl,
+        bl,
+        x,
+        y + h - bl,
         y + tl,
-        tl, tl, x + tl, y,
+        tl,
+        tl,
+        x + tl,
+        y,
     )
 }
 
@@ -138,8 +151,16 @@ pub(super) fn tiled(
         repeat,
     } = tiles;
     let (wide, tall) = (
-        if repeat.0 { tile.0 } else { area.width.max(tile.0) },
-        if repeat.1 { tile.1 } else { area.height.max(tile.1) },
+        if repeat.0 {
+            tile.0
+        } else {
+            area.width.max(tile.0)
+        },
+        if repeat.1 {
+            tile.1
+        } else {
+            area.height.max(tile.1)
+        },
     );
     let id = format!("tile-{digest}-{:.0}-{:.0}-{wide:.0}-{tall:.0}", at.0, at.1);
     let _ = writeln!(

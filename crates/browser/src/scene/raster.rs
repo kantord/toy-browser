@@ -1,20 +1,22 @@
-//! Turning a Scene into pixels.
+//! Turning a Scene into the things a caller asks for: pixels, a PNG, an SVG.
 //!
-//! The Scene is written in its normal form and handed to resvg together with
-//! every Picture and Face it names, so resvg resolves nothing. That is the whole
-//! arrangement: the two halves of "what to draw" and "what to draw it with"
-//! travel together, and neither is a URL.
+//! The drawing itself is in `draw.rs` and does not go through SVG at all. It
+//! used to: the Scene was written in its normal form and handed to resvg with
+//! every Picture and Face it names, so resvg resolved nothing. That arrangement
+//! was right about resources — nothing was ever looked up, which is how an
+//! `http://` image stopped silently vanishing and a family name stopped
+//! resolving to a face layout had never seen — and wrong about text, because
+//! handing a rasterizer characters makes it shape them, and layout had already
+//! done that. Every word on the page was shaped twice, once per frame.
 //!
-//! What this replaces is a rasterizer left to look things up. Its image resolver
-//! stats an href as a path, so an `http://` reference matched nothing and the
-//! image disappeared without a word. Its font database was the machine's, so a
-//! family name could resolve to a face layout had never seen. Both are gone
-//! here, not by being handled better but by there being nothing left to look up.
+//! What survives of it is [`decoded_pixmap`], which is the same idea in one
+//! line: a Picture is decoded here, from bytes the Scene carries, and never
+//! fetched.
 
 use anyhow::{Context, Result};
 use resvg::{tiny_skia, usvg};
 
-use super::{Face, Format, Picture, Scene};
+use super::{Format, Picture, Scene};
 
 /// The Scene as pixels, and the artifacts on the way there.
 pub struct Rendered {
@@ -32,30 +34,14 @@ pub struct Rendered {
 /// What a window wants. Asking for a [`Rendered`] instead costs a PNG encode of
 /// the whole page, and the caller then decodes it back to arrive where this
 /// already is.
+/// The Scene as pixels.
+///
+/// Drawn from the marks rather than through SVG. The Scene is still *written*
+/// as SVG — that is what [`export`](super::export) is for, and `docs/adr/0012`
+/// argues for it — but handing that text to a rasterizer made it shape every
+/// word again, and layout had already chosen the glyphs. See `draw.rs`.
 pub fn pixels(scene: &Scene) -> Result<tiny_skia::Pixmap> {
-    let started = std::time::Instant::now();
-    let text = super::normal_form(scene);
-    let wrote = started.elapsed();
-    let started = std::time::Instant::now();
-    let options = options(scene);
-    let readied = started.elapsed();
-    let started = std::time::Instant::now();
-    let tree = usvg::Tree::from_str(&text, &options).context("parsing the scene")?;
-    let parsed = started.elapsed();
-    let started = std::time::Instant::now();
-    let size = tree.size().to_int_size();
-    let mut pixmap = tiny_skia::Pixmap::new(size.width(), size.height())
-        .with_context(|| format!("allocating {}x{} pixmap", size.width(), size.height()))?;
-    resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
-    if std::env::var_os("TOY_BROWSER_TIME_RASTER").is_some() {
-        eprintln!(
-            "  write {wrote:.1?}  fonts {readied:.1?}  parse {parsed:.1?}  raster {:.1?}  ({}x{})",
-            started.elapsed(),
-            size.width(),
-            size.height()
-        );
-    }
-    Ok(pixmap)
+    super::draw(scene)
 }
 
 pub fn render(scene: &Scene) -> Result<Rendered> {
@@ -68,70 +54,32 @@ pub fn render(scene: &Scene) -> Result<Rendered> {
     })
 }
 
-/// How a Scene is read: with exactly its own resources, and nothing else.
+/// A Picture as pixels, for a painter that draws them itself.
 ///
-/// No system fonts are loaded. A Scene that draws text carries the Face it drew
-/// it in, so reaching for the machine's fonts could only ever find a different
-/// answer to a question already settled.
-fn options(scene: &Scene) -> usvg::Options<'static> {
-    let mut options = usvg::Options::default();
-    for (digest, Face { bytes }) in &scene.faces {
-        register(options.fontdb_mut(), digest, bytes);
+/// The same bytes resvg is handed, decoded here instead. An SVG picture is
+/// rasterized at its own size and treated as any other image from then on:
+/// nothing downstream needs to know one was ever vector.
+pub(super) fn decoded_pixmap(picture: &Picture) -> Option<tiny_skia::Pixmap> {
+    if picture.format == Format::Svg {
+        let tree = usvg::Tree::from_data(&picture.bytes, &usvg::Options::default()).ok()?;
+        let size = tree.size().to_int_size();
+        let mut pixmap = tiny_skia::Pixmap::new(size.width().max(1), size.height().max(1))?;
+        resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
+        return Some(pixmap);
     }
-    let pictures = scene.pictures.clone();
-    options.image_href_resolver = usvg::ImageHrefResolver {
-        resolve_data: usvg::ImageHrefResolver::default_data_resolver(),
-        resolve_string: Box::new(move |href, _| {
-            let digest = href.strip_prefix("tb:")?;
-            let picture = pictures
-                .iter()
-                .find(|(held, _)| held.to_string() == digest)?
-                .1;
-            decoded(picture)
-        }),
-    };
-    options
-}
-
-/// Puts one Face in the database under a name only this Scene uses.
-///
-/// fontdb would otherwise file it under whatever family the font's own name
-/// table claims, which is the name we are trying to stop relying on — two faces
-/// can both call themselves Liberation Sans. Registering it by Digest means the
-/// name in the text is the bytes, and can match nothing else.
-fn register(database: &mut usvg::fontdb::Database, digest: &super::Digest, bytes: &[u8]) {
-    let source = usvg::fontdb::Source::Binary(std::sync::Arc::new(bytes.to_vec()));
-    database.push_face_info(usvg::fontdb::FaceInfo {
-        // Replaced by the database as it inserts; it will not read this one.
-        id: usvg::fontdb::ID::dummy(),
-        source,
-        index: 0,
-        families: vec![(
-            super::family(digest),
-            usvg::fontdb::Language::English_UnitedStates,
-        )],
-        post_script_name: super::family(digest),
-        style: usvg::fontdb::Style::Normal,
-        weight: usvg::fontdb::Weight::NORMAL,
-        stretch: usvg::fontdb::Stretch::Normal,
-        monospaced: false,
-    });
-}
-
-/// A Picture in the shape resvg wants it: the bytes, and what they are.
-fn decoded(picture: &Picture) -> Option<usvg::ImageKind> {
-    let bytes = std::sync::Arc::new(picture.bytes.to_vec());
-    Some(match picture.format {
-        Format::Png => usvg::ImageKind::PNG(bytes),
-        Format::Jpeg => usvg::ImageKind::JPEG(bytes),
-        Format::Gif => usvg::ImageKind::GIF(bytes),
-        Format::Webp => usvg::ImageKind::WEBP(bytes),
-        // A nested picture is a document of its own, and is parsed as one.
-        Format::Svg => {
-            let inner = usvg::Tree::from_data(&bytes, &usvg::Options::default()).ok()?;
-            usvg::ImageKind::SVG(inner)
-        }
-    })
+    let decoded = image::ImageReader::new(std::io::Cursor::new(picture.bytes.as_ref()))
+        .with_guessed_format()
+        .ok()?
+        .decode()
+        .ok()?
+        .to_rgba8();
+    let (wide, tall) = decoded.dimensions();
+    let mut pixmap = tiny_skia::Pixmap::new(wide.max(1), tall.max(1))?;
+    for (target, source) in pixmap.pixels_mut().iter_mut().zip(decoded.pixels()) {
+        let [red, green, blue, alpha] = source.0;
+        *target = tiny_skia::ColorU8::from_rgba(red, green, blue, alpha).premultiply();
+    }
+    Some(pixmap)
 }
 
 /// The single colour filling the pixmap, if there is one.

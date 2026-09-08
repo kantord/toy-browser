@@ -138,12 +138,7 @@ pub(super) fn evaluate(ctx: &Ctx<'_>, report: &Rc<RefCell<Diagnostics>>, name: &
 /// so on Wikipedia the first statement of each threw and the module system
 /// never started. The page still rendered, because the markup is served whole;
 /// what was missing was everything the page does to itself afterwards.
-fn evaluate_classic(
-    ctx: &Ctx<'_>,
-    report: &Rc<RefCell<Diagnostics>>,
-    name: &str,
-    source: &str,
-) {
+fn evaluate_classic(ctx: &Ctx<'_>, report: &Rc<RefCell<Diagnostics>>, name: &str, source: &str) {
     let mut options = EvalOptions::default();
     options.global = true;
     options.strict = false;

@@ -124,7 +124,10 @@ fn staying_put_reports_no_change() {
     let page = hoverable(&mut browser);
 
     let at = centre(&mut browser, &page, "#box");
-    assert!(browser.hover(&page, at).unwrap().moved, "arriving is a move");
+    assert!(
+        browser.hover(&page, at).unwrap().moved,
+        "arriving is a move"
+    );
 
     let nudged = Point {
         x: at.x + 1.0,

@@ -104,6 +104,8 @@ fn glyphs(mark: &Mark, out: &mut String) {
     let Mark::Glyphs {
         places,
         text,
+        // The glyphs are for a rasterizer; a reader wants the words.
+        glyphs: _,
         baseline,
         size,
         paint,
@@ -286,8 +288,6 @@ pub(super) fn reference(digest: &super::Digest, picture: &Picture, refer: Refer)
 pub fn family(digest: &super::Digest) -> String {
     format!("tb-face-{digest}")
 }
-
-
 
 fn named(node: Option<usize>) -> String {
     node.map(|id| format!(" data-node=\"{id}\""))

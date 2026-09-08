@@ -223,8 +223,16 @@ fn around(x: f32, y: f32, width: f32, height: f32, edges: Edges) -> [Side; 4] {
             edges.bottom,
             at(x - edges.left, y + height, across, edges.bottom),
         ),
-        strip(Edge::Left, edges.left, at(x - edges.left, y, edges.left, height)),
-        strip(Edge::Right, edges.right, at(x + width, y, edges.right, height)),
+        strip(
+            Edge::Left,
+            edges.left,
+            at(x - edges.left, y, edges.left, height),
+        ),
+        strip(
+            Edge::Right,
+            edges.right,
+            at(x + width, y, edges.right, height),
+        ),
     ]
 }
 

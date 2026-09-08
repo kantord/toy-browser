@@ -11,9 +11,9 @@
 //!
 //! [`Session`]: Engine::create_session
 
-pub mod ids;
 mod dom;
 mod engine;
+pub mod ids;
 mod loader;
 mod realm;
 mod scripts;

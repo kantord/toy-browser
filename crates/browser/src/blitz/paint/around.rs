@@ -113,49 +113,89 @@ pub(super) fn raised(page: &LaidOut, owner: NodeId) -> f32 {
 /// the span has no decoration of its own to report.
 pub(super) fn lines_over(page: &LaidOut, placed: &Placed<'_>, drawn: Option<&Mark>) -> Vec<Mark> {
     use style::values::computed::TextDecorationLine as Line;
-    let Some(Mark::Glyphs { places, baseline, paint, .. }) = drawn else {
+    let Some(struck) = struck(page, placed, drawn) else {
         return Vec::new();
+    };
+    // Where each line sits relative to the baseline. The face states the
+    // underline and the strike; an overline goes at the top of the ascent,
+    // which is the only one it does not have an opinion about.
+    let metrics = placed.run.run().metrics();
+    let mut marks = Vec::new();
+    let mut rule = |above: f32| marks.push(struck.rule(above));
+    if struck.lines.contains(Line::UNDERLINE) {
+        rule(metrics.underline_offset);
+    }
+    if struck.lines.contains(Line::LINE_THROUGH) {
+        rule(metrics.strikethrough_offset);
+    }
+    if struck.lines.contains(Line::OVERLINE) {
+        rule(metrics.ascent);
+    }
+    marks
+}
+
+/// A decorated run: which lines it asked for, and the one rectangle they all
+/// vary only the height of.
+struct Struck {
+    lines: style::values::computed::TextDecorationLine,
+    from: f32,
+    width: f32,
+    thick: f32,
+    baseline: f32,
+    paint: crate::scene::Paint,
+    owner: NodeId,
+}
+
+impl Struck {
+    /// One line, `above` the baseline by whatever the face says.
+    fn rule(&self, above: f32) -> Mark {
+        Mark::Fill {
+            area: Area {
+                x: self.from,
+                y: self.baseline - above - self.thick / 2.0,
+                width: self.width,
+                height: self.thick,
+            },
+            ink: Ink::Flat(self.paint),
+            corners: Corners::NONE,
+            shadow: None,
+            node: Some(ids::raw(self.owner)),
+        }
+    }
+}
+
+/// Whether this run is decorated, and the geometry the lines share.
+fn struck(page: &LaidOut, placed: &Placed<'_>, drawn: Option<&Mark>) -> Option<Struck> {
+    let Some(Mark::Glyphs {
+        places,
+        baseline,
+        paint,
+        ..
+    }) = drawn
+    else {
+        return None;
     };
     let owner = placed.run.style().brush.id;
-    let Some(style) = page.document.get_node(owner).and_then(Node::primary_styles) else {
-        return Vec::new();
-    };
+    let style = page
+        .document
+        .get_node(owner)
+        .and_then(Node::primary_styles)?;
     let lines = style.get_text().text_decoration_line;
     if lines.is_empty() {
-        return Vec::new();
+        return None;
     }
     // From where the run starts to where it ends, not from the first glyph to
     // the last plus a run's width — the last glyph is already inside the run,
     // and adding the whole advance to it draws a line past the end of the word.
-    let Some(from) = places.first().copied() else {
-        return Vec::new();
-    };
+    let from = places.first().copied()?;
     let to = placed.origin.0 + placed.run.offset() + placed.run.advance();
-    let metrics = placed.run.run().metrics();
-    let thick = metrics.underline_size.max(1.0);
-    let width = (to - from).max(0.0);
-
-    // Where each line sits relative to the baseline. The face states the
-    // underline and the strike; an overline goes at the top of the ascent,
-    // which is the only one it does not have an opinion about.
-    let mut marks = Vec::new();
-    let mut rule = |above: f32| {
-        marks.push(Mark::Fill {
-            area: Area { x: from, y: baseline - above - thick / 2.0, width, height: thick },
-            ink: Ink::Flat(*paint),
-            corners: Corners::NONE,
-            shadow: None,
-            node: Some(ids::raw(owner)),
-        });
-    };
-    if lines.contains(Line::UNDERLINE) {
-        rule(metrics.underline_offset);
-    }
-    if lines.contains(Line::LINE_THROUGH) {
-        rule(metrics.strikethrough_offset);
-    }
-    if lines.contains(Line::OVERLINE) {
-        rule(metrics.ascent);
-    }
-    marks
+    Some(Struck {
+        lines,
+        from,
+        width: (to - from).max(0.0),
+        thick: placed.run.run().metrics().underline_size.max(1.0),
+        baseline: *baseline,
+        paint: *paint,
+        owner,
+    })
 }

@@ -5,9 +5,9 @@
 //! does — the back button, the URL field, what a click is allowed to mean.
 
 use toy_browser::{Browser, CursorIcon, Hovering, PageId, Point, Viewport};
-use winit::event::{ElementState, MouseScrollDelta};
+use winit::event::ElementState;
 
-use super::{NOTCH, Open};
+use super::Open;
 
 /// What each thing a person does to a window means to the page in it.
 impl Open {
@@ -97,14 +97,19 @@ impl Open {
 
     /// Nothing scrolls in this browser, so scrolling is done to the window: the
     /// page is laid out at its full height and this moves the band on show.
-    pub(super) fn wheeled(&mut self, delta: MouseScrollDelta) {
-        let by = match delta {
-            MouseScrollDelta::LineDelta(_, lines) => lines * NOTCH,
-            MouseScrollDelta::PixelDelta(at) => at.y as f32,
-        };
+    pub(super) fn wheeled(&mut self, by: f32) {
         // The page's height, not the band's: the band is one screenful and
-        // would say there was nowhere to scroll to.
-        let tallest = self.browser.height(&self.page).unwrap_or(0.0);
+        // would say there was nowhere to scroll to. Asked once per page rather
+        // than once per notch: working it out means painting the whole Scene,
+        // and a wheel cannot change it.
+        let tallest = match self.tallest {
+            Some(tallest) => tallest,
+            None => {
+                let tallest = self.browser.height(&self.page).unwrap_or(0.0);
+                self.tallest = Some(tallest);
+                tallest
+            }
+        };
         let furthest = (tallest - self.size.1 as f32).max(0.0);
         self.scrolled = (self.scrolled - by).clamp(0.0, furthest);
         // The pointer has not moved and what is under it has. Without this the

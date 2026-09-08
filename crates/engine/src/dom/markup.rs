@@ -32,7 +32,10 @@ pub fn parse(source: &str, base_url: &Url) -> BaseDocument {
 impl Dom {
     pub fn set_inner_html(&self, id: usize, html: &str) {
         self.touched();
-        self.doc.borrow_mut().mutate().set_inner_html(ids::of(id), html);
+        self.doc
+            .borrow_mut()
+            .mutate()
+            .set_inner_html(ids::of(id), html);
     }
 
     pub fn outer_html(&self, id: usize) -> String {

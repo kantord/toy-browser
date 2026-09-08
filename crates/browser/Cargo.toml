@@ -13,6 +13,9 @@ blitz-traits = "0.3.0-beta.2"
 # The cursor a page asks for. blitz answers in this crate's type and winit
 # takes the same one, so naming it here is what lets the answer travel.
 cursor-icon = "1.2"
+# Glyph outlines, so the screen can be drawn without asking a rasterizer to
+# shape the text a second time. Already in the tree under parley.
+skrifa = "0.44"
 parley = { version = "0.11.1", default-features = false, features = ["std"] }
 style = { package = "stylo", version = "0.20" }
 ureq = { version = "3.4.0", default-features = false, features = ["rustls"] }

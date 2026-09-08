@@ -4228,6 +4228,7 @@ dependencies = [
  "parley",
  "resvg",
  "serde_json",
+ "skrifa",
  "stylo",
  "toy-browser-engine",
  "toy-browser-fetch",

@@ -27,10 +27,10 @@ use crate::Viewport;
 
 mod agent;
 mod export;
-mod order;
 pub(crate) mod fonts;
 mod geometry;
 mod net;
+mod order;
 
 use agent::{CURSORS, LINE_HEIGHT};
 use fonts::context;
@@ -139,10 +139,7 @@ impl Composed {
             .mounted
             .iter()
             .find(|(_, (area, _))| {
-                x >= area.x
-                    && y >= area.y
-                    && x < area.x + area.width
-                    && y < area.y + area.height
+                x >= area.x && y >= area.y && x < area.x + area.width && y < area.y + area.height
             })
             .map(|(node, (area, _))| (*node, area.x, area.y));
         match inside {
