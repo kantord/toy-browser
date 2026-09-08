@@ -12,13 +12,14 @@ use blitz_dom::Node;
 use crate::scene::{Area, Corners, Ink, Mark, Shadow};
 
 use super::channels;
+use toy_browser_engine::ids;
 
 /// An element's own background, if it paints one.
 pub(super) fn background(node: &Node, x: f32, y: f32, backdrop: Option<Ink>) -> Vec<Mark> {
     let Some(style) = node.primary_styles() else {
         return Vec::new();
     };
-    let size = node.final_layout.size;
+    let size = node.final_layout().size;
     if size.width <= 0.0 || size.height <= 0.0 {
         return Vec::new();
     }
@@ -45,7 +46,7 @@ pub(super) fn background(node: &Node, x: f32, y: f32, backdrop: Option<Ink>) -> 
         shadow,
         area,
         ink,
-        node: Some(node.id),
+        node: Some(ids::raw(node.id)),
     };
     // The colour, then whatever is laid over it. Two fills rather than one,
     // because CSS paints the picture *over* the colour and a single ink could
@@ -79,7 +80,7 @@ pub(super) fn clips(node: &Node) -> Option<Area> {
     // Guarding against zero here is what let every collapsed menu on Wikipedia
     // paint in full: `.vector-dropdown-content` is `height: 0; overflow:
     // hidden`, and the whole header came out piled on top of itself.
-    let size = node.final_layout.size;
+    let size = node.final_layout().size;
     Some(Area {
         x: 0.0,
         y: 0.0,
@@ -93,7 +94,7 @@ pub(super) fn clips(node: &Node) -> Option<Area> {
 /// Each radius is a pair — CSS lets a corner be elliptical — and only the
 /// horizontal one is taken. An ellipse needs two arcs where a circle needs one,
 /// and no page seen so far asks for the difference.
-pub(super) fn radii(style: &impl std::ops::Deref<Target = style::properties::ComputedValues>, area: &Area) -> Corners {
+pub(super) fn radii(style: &style::properties::ComputedValues, area: &Area) -> Corners {
     let border = style.get_border();
     let across = |radius: &style::values::computed::BorderCornerRadius| {
         radius
@@ -117,7 +118,7 @@ pub(super) fn radii(style: &impl std::ops::Deref<Target = style::properties::Com
 /// drawn inside the box against its own edges, which is a different shape and
 /// not one this can make.
 pub(super) fn shadow(
-    style: &impl std::ops::Deref<Target = style::properties::ComputedValues>,
+    style: &style::properties::ComputedValues,
 ) -> Option<Shadow> {
     let shadows = &style.get_effects().box_shadow.0;
     let first = shadows.iter().find(|it| !it.inset)?;
@@ -138,7 +139,7 @@ pub(super) fn shadow(
 /// is asking for something a single Fill cannot say, and a radial gradient is a
 /// different shape of answer than an angle and a line.
 pub(super) fn gradient(
-    style: &impl std::ops::Deref<Target = style::properties::ComputedValues>,
+    style: &style::properties::ComputedValues,
 ) -> Option<Ink> {
     use style::values::generics::image::{GenericGradient, GenericImage, GenericGradientItem};
     let first = style.get_background().background_image.0.first()?;
@@ -238,6 +239,6 @@ pub(super) fn marker(node: &Node, x: f32, y: f32) -> Option<Mark> {
             bottom_left: round,
         },
         shadow: None,
-        node: Some(node.id),
+        node: Some(ids::raw(node.id)),
     })
 }

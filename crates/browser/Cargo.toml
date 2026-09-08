@@ -7,11 +7,11 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-blitz-dom = "0.2.4"
-blitz-html = "0.2.0"
-blitz-traits = "0.2.0"
-parley = { version = "0.6", default-features = false, features = ["std"] }
-style = { package = "stylo", version = "0.8" }
+blitz-dom = { version = "0.3.0-beta.2", features = ["floats"] }
+blitz-html = "0.3.0-beta.2"
+blitz-traits = "0.3.0-beta.2"
+parley = { version = "0.11.1", default-features = false, features = ["std"] }
+style = { package = "stylo", version = "0.20" }
 ureq = { version = "3.4.0", default-features = false, features = ["rustls"] }
 serde_json.workspace = true
 toy-browser-engine.workspace = true

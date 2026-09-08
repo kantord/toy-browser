@@ -42,8 +42,15 @@ against Chromium's 1,181.
 
 Three table cases got worse — `050` 8 to 24px, `051` 12 to 46px, `052` 18 to
 191px — because blitz shares a table's spare width between columns differently
-from Chromium. That is the same fault takumi had until it was fixed by
-hand, and it is the largest thing left.
+from Chromium. That is the same fault takumi had until it was fixed by hand.
+
+**Since blitz 0.3** (taken for its floats — `GAPS.md` 7a) two of those got
+better and one got worse in a new way: `050` is now exact and `052` is 171px,
+because 0.3 fixed `border-spacing`, while `051` went from 46px to 660px and the
+frozen Hacker News case from 33,102px to 90,840px, because 0.3 builds a table's
+column widths from the first row alone. `layout/table.rs`, `if *row == 1` —
+right for `table-layout: fixed`, wrong for the `auto` default. Filed in
+`docs/upstream.md`; the corpus was re-ratcheted deliberately to record it.
 
 ## What it does
 

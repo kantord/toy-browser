@@ -10,6 +10,7 @@ use blitz_html::HtmlProvider;
 use toy_browser_fetch::Url;
 
 use super::{Dom, html_name};
+use crate::ids;
 
 /// Parses `source` into a DOM whose relative references resolve against
 /// `base_url`.
@@ -31,19 +32,19 @@ pub fn parse(source: &str, base_url: &Url) -> BaseDocument {
 impl Dom {
     pub fn set_inner_html(&self, id: usize, html: &str) {
         self.touched();
-        self.doc.borrow_mut().mutate().set_inner_html(id, html);
+        self.doc.borrow_mut().mutate().set_inner_html(ids::of(id), html);
     }
 
     pub fn outer_html(&self, id: usize) -> String {
         let doc = self.doc.borrow();
-        doc.get_node(id)
+        doc.get_node(ids::of(id))
             .map(|node| crate::serialize::node_to_html(&doc, node))
             .unwrap_or_default()
     }
 
     pub fn inner_html(&self, id: usize) -> String {
         let doc = self.doc.borrow();
-        let Some(node) = doc.get_node(id) else {
+        let Some(node) = doc.get_node(ids::of(id)) else {
             return String::new();
         };
         node.children
@@ -61,7 +62,7 @@ impl Dom {
         let mut mutator = doc.mutate();
         let scratch = mutator.create_element(html_name("div"), Vec::new());
         mutator.set_inner_html(scratch, html);
-        mutator.reparent_children(scratch, parent);
+        mutator.reparent_children(scratch, ids::of(parent));
         mutator.remove_and_drop_node(scratch);
     }
 }

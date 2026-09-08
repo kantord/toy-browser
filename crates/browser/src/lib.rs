@@ -91,7 +91,7 @@ struct Page {
     /// A whole page, not a frame: its own session, its own DOM, its own realm.
     /// Kept here so it outlives a draw — a webview that opened its page afresh
     /// every frame would lose whatever the person using it had done.
-    mounted: HashMap<usize, Mounted>,
+    mounted: HashMap<blitz_dom::NodeId, Mounted>,
 }
 
 /// A page put inside another one, and where it was last drawn.

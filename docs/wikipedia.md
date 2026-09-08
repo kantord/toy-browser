@@ -2,17 +2,16 @@
 
 One page, taken as far as it goes: `https://en.wikipedia.org/wiki/Lion`. It is
 worth a document of its own because almost nothing it found was a drawing bug.
-Six things were wrong, five of them were in the **JavaScript environment and
-the box model**, and each one was discovered by asking why a number disagreed
-rather than by looking at the picture.
+Most of what was wrong was in the **JavaScript environment and the box model**,
+and each one was found by asking why a number disagreed rather than by looking
+at the picture.
 
-| | ours | Chromium |
-|---|---|---|
-| page height at 800px, before | 56424px | 36504px |
-| page height at 800px, after | **44743px** | 36504px |
-| first viewport, share of pixels disagreeing | 29.6% → **26.6%** | |
-| render score | 0.0569 → **0.0462** | |
-| JavaScript errors | 4 | **0** |
+| | before | after | Chromium |
+|---|---|---|---|
+| page height at 800px | 56424px | **35312px** | 36504px |
+| JavaScript errors | 4 | **0** | |
+
+Seven bugs of ours, and one dependency upgrade for the eighth.
 
 ## The chain
 
@@ -59,29 +58,93 @@ was disagreeing with itself, since the same elements correctly reported no
 computed style. `geometry.rs` now answers `[0, 0, 0, 0]`, which is what
 `getBoundingClientRect` says for `display: none`.
 
-## What is left, and why it is not ours
+## Floats, and the upgrade that brought them
 
-**Floats.** They are not implemented, at all — `float: right` lays a box out on
-the left, on its own line, with the text below it. On Wikipedia that means every
-infobox and every thumbnail takes a full-width block of the article instead of
-sitting beside the text, and it is **87% of the remaining disagreement**: the
-three lead paragraphs are each about 1780px lower than they should be, and the
-lead section is 2501px tall against Chromium's 732px.
+Floats were the whole of what was left — 87% of the disagreement — and they
+were not a bug to fix here. Layout is taffy through blitz-dom, `taffy 0.10` has
+no concept of a float, and parley has no inline exclusions to wrap text around
+one. **blitz-dom 0.3.0-beta.2 has both**, behind a `floats` feature that turns
+on `taffy/float_layout` and `stylo_taffy/floats`, so the fix was a dependency
+upgrade.
 
-This one is not a bug to fix here. Layout is taffy, through blitz-dom, and
-`taffy 0.10` has no concept of a float; parley has no inline exclusions to wrap
-text around one either. **blitz-dom 0.3.0-beta.2 does**, behind a `floats`
-feature that turns on `taffy/float_layout` and `stylo_taffy/floats`. Taking it
-costs a stylo bump from 0.8 to 0.20 and about 50 mechanical compile errors —
-`NodeId` became a newtype, `NodeData`'s variants changed shape, and markup5ever
-moved under `blitz-html`, which the engine's own parse entry drives directly.
+It cost a stylo bump from 0.8 to 0.20 and about fifty mechanical compile
+errors. Five things were interesting, and only the first was a compile error at
+all — the rest compiled cleanly and were wrong:
 
-Smaller and also outstanding: `window.scrollTo` does not exist, and
-`blitz-html`'s parse sink `println!`s `ERROR: Unexpected token` to stdout on
-every render — a dependency's debug output, not ours.
+- **`NodeId` is a newtype now**, packing a slot and a *version*, so an id left
+  over from a dropped node stops resolving instead of quietly naming whichever
+  node took the slot. A bare index cannot be cast into one. Everything above
+  the DOM needs a plain integer — `__id` in JavaScript, the node ids CDP hands
+  a client — so the id travels as `as_u64`, which is the whole thing including
+  the version and round-trips exactly. `crates/engine/src/ids.rs` is the one
+  place that says so.
+- **The key class silently stopped parsing.** Elements are serialized carrying
+  `class="tbkey<id>"` so that geometry measured by the renderer can be
+  attributed back. `format!("{}", node.id)` used to write an integer; `NodeId`'s
+  own `Display` writes `3v0`. Nothing failed — every box and every computed
+  style simply came back empty, on every page.
+- **`final_layout` panics** on a node kind that has no box. Text nodes reach
+  the painter constantly, so asking is now a question (`blitz::boxed`) rather
+  than an assertion.
+- **`z-index` children are hoisted.** blitz moves a positioned child with a
+  non-zero `z-index` out of its parent's `paint_children` and onto the nearest
+  stacking-context root, sorted. A painter reading only `paint_children` gets
+  the flow and loses the layering — and then reaches the hoisted child through
+  its DOM parent anyway, drawing it in document order. `order.rs` reads the
+  hoisted lists and mirrors blitz's hoist test so the DOM fallback skips them.
+- **A table is not walked as its own markup, and nothing clicked.** blitz
+  flattens a table into a grid of its *cells*, so `<tbody>` and `<tr>` are
+  reached only through the DOM child list — which the walk visited last, after
+  everything they contain. `Boxes::hit` answers with the last box recorded over
+  a point, so the topmost thing over any link in a table was the row, and every
+  link on Hacker News is in a table. The fix is that the DOM fallback goes
+  **first**: everything landing there *contains* the paint-list nodes rather
+  than sitting on top of them, which is also the right paint order, since a
+  row's background belongs under its cells. `descend` had been reading the
+  paint lists itself instead of going through `paint_order`, which is how the
+  walk and the painter came to disagree at all; there is one order now.
+
+Resource loading got simpler rather than harder: the handler blitz gives a
+provider now knows what to do with the bytes and posts the result to the
+document itself, so `net.rs` only has to *find* them.
+
+## What it bought, and what it cost
+
+| | before | after | Chromium |
+|---|---|---|---|
+| Wikipedia, page height at 800px | 44743px | **35312px** | 36504px |
+| `float` probe | 0.898% | **0.298%** | |
+| Hacker News, first viewport | 9.86% | **13.13%** | |
+
+Wikipedia is the win: the infobox floats right, the lead paragraphs sit beside
+it, and the page is within 3.3% of Chromium's height having started this at
+55% over. Side by side the first screen is hard to tell apart, and what remains
+is a fundraising banner Chromium's JavaScript injects and ours does not.
+
+Hacker News is the cost, and it is one bug: **blitz 0.3 builds a table's column
+widths from the first row only.** In `layout/table.rs` the column template is
+pushed under `if *row == 1`, so a cell in a later row with a wider explicit
+width is squashed into whatever row one asked for. That is correct for
+`table-layout: fixed` and wrong for `auto`, which is the default and which
+0.2 got right.
+
+```
+<tr><td style="width:150px"><td style="width:40px">
+<tr><td style="width:40px"> <td style="width:150px">
+
+Chromium   both columns 152px    blitz 0.3   152px and 42px
+```
+
+Hacker News is built out of tables, so it feels this everywhere; the corpus
+records it as `051-table-uneven-columns` and `900-hackernews.frozen`. Two other
+corpus cases got *better* in the same change, because 0.3 also fixed
+`border-spacing`. Written up in `docs/upstream.md` ready to file; not worth
+giving up floats for.
 
 ## The one difference that is not a defect
 
 `#siteNotice` is 98px tall in Chromium and zero here, which shifts everything
-below it by 122px. That is the fundraising banner, injected by a module fetched
-after load. A static render legitimately does not have it.
+below it. That is the fundraising banner, injected by a module fetched after
+load. A static render legitimately does not have it — and it is most of what
+the first-viewport pixel comparison is measuring on this page, which is why the
+height of the whole document is the better number to read.

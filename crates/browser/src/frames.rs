@@ -218,7 +218,7 @@ impl Browser {
         page: &PageId,
         laid_out: &crate::blitz::LaidOut,
         mut inside: HashMap<usize, crate::blitz::Composed>,
-    ) -> HashMap<usize, (crate::ElementBox, crate::blitz::Composed)> {
+    ) -> HashMap<blitz_dom::NodeId, (crate::ElementBox, crate::blitz::Composed)> {
         let mut mounted = HashMap::new();
         for frame in laid_out.webviews() {
             let Some(composed) = frame.key.and_then(|key| inside.remove(&key)) else {

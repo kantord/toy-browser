@@ -12,6 +12,7 @@
 use blitz_dom::Node;
 
 use crate::scene::{Ink, Mark};
+use toy_browser_engine::ids;
 
 /// The same marks, moved, if this element carries a transform.
 ///
@@ -25,7 +26,7 @@ pub(super) fn turned(node: &Node, x: f32, y: f32, marks: Vec<Mark>) -> Vec<Mark>
     let Some(style) = node.primary_styles() else {
         return marks;
     };
-    let size = node.final_layout.size;
+    let size = node.final_layout().size;
     let box_ = style.get_box();
     if box_.transform.0.is_empty() {
         return marks;
@@ -46,7 +47,7 @@ pub(super) fn turned(node: &Node, x: f32, y: f32, marks: Vec<Mark>) -> Vec<Mark>
         ],
         about: (x + size.width / 2.0, y + size.height / 2.0),
         marks,
-        node: Some(node.id),
+        node: Some(ids::raw(node.id)),
     }]
 }
 

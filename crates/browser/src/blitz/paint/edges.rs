@@ -26,13 +26,30 @@ use style::values::computed::BorderStyle;
 use crate::scene::{Area, Corners, Ink, Mark};
 
 use super::channels;
+use toy_browser_engine::ids;
 
 /// Every side of this element's border that paints something.
 pub(super) fn of(node: &Node, x: f32, y: f32) -> Vec<Mark> {
     let Some(style) = node.primary_styles() else {
         return Vec::new();
     };
-    let laid = &node.final_layout;
+    // A non-replaced inline box is not painted here at all.
+    //
+    // Its border belongs to each *fragment* the line breaking produced — one
+    // run of it per line, with the left edge only on the first and the right
+    // only on the last — and this file draws one rectangle per side of one
+    // box. Since blitz 0.3 a split inline does have a box, covering everything
+    // from its first fragment to its last, so drawing from it puts a single
+    // frame around content that is nowhere near the element: on the web
+    // platform tests it drew one blue rectangle around eight blocks that
+    // should each have been outside the inline entirely.
+    //
+    // Drawing nothing is the honest state of a thing not implemented, and it
+    // is what this did before blitz started reporting the box.
+    if style.get_box().display.is_inline_flow() {
+        return Vec::new();
+    }
+    let laid = &node.final_layout();
     if laid.size.width <= 0.0 || laid.size.height <= 0.0 {
         return Vec::new();
     }
@@ -51,7 +68,7 @@ pub(super) fn of(node: &Node, x: f32, y: f32) -> Vec<Mark> {
                 shadow: None,
                 area: side.area,
                 ink: Ink::Flat(channels(red, green, blue, alpha)),
-                node: Some(node.id),
+                node: Some(ids::raw(node.id)),
             }
         })
         .collect()
@@ -100,7 +117,7 @@ impl Side {
 /// Top and bottom take the full width and the sides take what is left between
 /// them, which is the square-corner approximation this file's header describes.
 fn sides(node: &Node, x: f32, y: f32) -> [Side; 4] {
-    let laid = &node.final_layout;
+    let laid = &node.final_layout();
     let (width, height) = (laid.size.width, laid.size.height);
     let edges = laid.border;
     let between = height - edges.top - edges.bottom;

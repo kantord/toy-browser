@@ -130,6 +130,19 @@ test("clicking a link navigates", async () => {
   expect(await page.textContent("h1")).toBe("Hello, toy browser");
 });
 
+test("clicking a link inside a table navigates", async () => {
+  // A table is not laid out as its own markup: blitz flattens one into a grid
+  // of its cells, so `<tbody>` and `<tr>` are reached only through the DOM. A
+  // walk that visits them after the cells puts the row on top of everything in
+  // it, and the topmost thing over a link stops being the link.
+  await page.goto(fixture("activate-in-table.html"));
+  const { x, y } = await centre(page, "#label");
+  await page.mouse.click(x, y);
+
+  expect(page.url()).toContain("hello.html");
+  expect(await page.textContent("h1")).toBe("Hello, toy browser");
+});
+
 // `page.mouse` works; `locator.click()` does not. Playwright checks a target is
 // actionable first, and that check awaits a promise from its injected script —
 // which comes back as `{}` because `Runtime.evaluate` ignores `awaitPromise`.

@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use blitz_dom::Node;
+use blitz_dom::{Node, NodeId};
 
 use crate::blitz::LaidOut;
 use crate::blitz::geometry::{Around, placed};
@@ -29,9 +29,9 @@ impl LaidOut {
 
     fn record(
         &self,
-        id: usize,
+        id: NodeId,
         path: String,
-        implied: &HashMap<usize, Around>,
+        implied: &HashMap<NodeId, Around>,
         into: &mut Vec<serde_json::Value>,
     ) {
         let Some(node) = self.document.get_node(id) else {

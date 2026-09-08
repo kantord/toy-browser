@@ -21,11 +21,12 @@
 
 use std::collections::HashSet;
 
-use blitz_dom::Node;
+use blitz_dom::{Node, NodeId};
 
 use crate::Viewport;
 use crate::blitz::{Composed, LaidOut};
 use crate::scene::{Area, Corners, Ink, Mark, Paint, Scene};
+use toy_browser_engine::ids;
 
 mod boxes;
 mod edges;
@@ -141,7 +142,7 @@ fn compose(
         marks.push(Mark::Clip {
             to,
             marks: inner,
-            node: Some(*node),
+            node: Some(ids::raw(*node)),
         });
     }
     marks
@@ -156,22 +157,17 @@ fn compose(
 /// of them belong to whom.
 fn subtree(
     unit: &Composed,
-    id: usize,
+    id: NodeId,
     at: (f32, f32),
     scene: &mut Scene,
     height: &mut f32,
     resources: &toy_browser_fetch::Resources,
-    seen: &mut HashSet<usize>,
+    seen: &mut HashSet<NodeId>,
 ) -> Vec<Mark> {
-    if !seen.insert(id) {
-        return Vec::new();
-    }
-    let Some(node) = unit.laid_out.document.get_node(id) else {
+    let Some((node, x, y)) = arrived(unit, id, at, seen) else {
         return Vec::new();
     };
-    let placed = node.absolute_position(0.0, 0.0);
-    let (x, y) = (placed.x + at.0, placed.y + at.1);
-    *height = height.max(y + node.final_layout.size.height);
+    *height = height.max(y + node.final_layout().size.height);
 
     // The box itself — what it is drawn *as*. Never clipped: a box does not
     // cut off its own edge.
@@ -205,13 +201,41 @@ fn subtree(
         Some(to) => marks.push(Mark::Clip {
             to: Area { x, y, ..to },
             marks: inside,
-            node: Some(id),
+            node: Some(ids::raw(id)),
         }),
         None => marks.extend(inside),
     }
     effects::turned(node, x, y, effects::faded(node, marks))
 }
 
+
+/// The node this walk has reached and where it sits, or nothing at all.
+///
+/// Three ways to arrive somewhere with nothing to do, and they are one
+/// question rather than three:
+///
+/// - **Already drawn.** The paint tree and the DOM both name some nodes, and
+///   `seen` is what keeps one from being painted twice.
+/// - **Gone.** An id can outlive the node it named.
+/// - **No box.** A text node has no position of its own — asking blitz for one
+///   panics — and nothing is drawn from one directly: its words belong to the
+///   inline root above it.
+fn arrived<'a>(
+    unit: &'a Composed,
+    id: NodeId,
+    at: (f32, f32),
+    seen: &mut HashSet<NodeId>,
+) -> Option<(&'a Node, f32, f32)> {
+    if !seen.insert(id) {
+        return None;
+    }
+    let node = unit.laid_out.document.get_node(id)?;
+    if !crate::blitz::boxed(node) {
+        return None;
+    }
+    let placed = node.absolute_position(0.0, 0.0);
+    Some((node, placed.x + at.0, placed.y + at.1))
+}
 
 /// Whether this element paints itself at all.
 ///

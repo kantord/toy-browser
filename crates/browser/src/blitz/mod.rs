@@ -2,8 +2,9 @@
 //!
 //! `blitz-dom` is Servo's style system (Stylo) over Taffy and Parley: a real
 //! cascade with a real user-agent stylesheet, and formatting contexts for
-//! blocks, inline content, flexbox, grid, lists and **tables**. The engine
-//! already parses every document with it; this lays that same document out.
+//! blocks, inline content, flexbox, grid, lists, **tables** and — since 0.3,
+//! behind its `floats` feature — **floats**. The engine already parses every
+//! document with it; this lays that same document out.
 //!
 //! It replaced a screenshot library, and what went with that library was not
 //! one file but a stack of workarounds — a hand-written table layout, a
@@ -15,7 +16,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use blitz_dom::{BaseDocument, DocumentConfig, Node};
+use blitz_dom::{BaseDocument, DocumentConfig, Node, NodeId};
 use blitz_traits::shell::{ColorScheme, Viewport as BlitzViewport};
 
 use std::collections::HashMap;
@@ -70,7 +71,7 @@ pub fn lay_out(
             )),
             base_url: Some(base.to_owned()),
             font_ctx: Some(context()),
-            net_provider: Some(Arc::clone(&files) as Arc<dyn blitz_traits::net::NetProvider<_>>),
+            net_provider: Some(Arc::clone(&files) as Arc<dyn blitz_traits::net::NetProvider>),
             ..Default::default()
         },
     );
@@ -86,15 +87,18 @@ pub fn lay_out(
     // A page reflows when its pictures land, so the pass that asked for them is
     // not the pass that can use them. Bounded, because a stylesheet may name an
     // image that names another.
+    //
+    // What arrived is the document's own business now: blitz gave the reader
+    // the handler, so the bytes were already parsed into a stylesheet or an
+    // image and posted to the document. This waits for the reads to finish and
+    // tells it to take delivery.
     for _ in 0..ROUNDS {
+        let before = files.delivered();
         files.settle();
-        let arrived = files.collect();
-        if arrived.is_empty() {
+        if files.delivered() == before {
             break;
         }
-        for resource in arrived {
-            document.load_resource(resource);
-        }
+        document.handle_messages();
         document.resolve(0.0);
     }
     Ok(LaidOut {
@@ -115,7 +119,7 @@ pub struct Composed {
     pub laid_out: LaidOut,
     /// What is mounted in it, by the element holding it: where the box is, and
     /// what is inside.
-    pub mounted: HashMap<usize, (ElementBox, Composed)>,
+    pub mounted: HashMap<NodeId, (ElementBox, Composed)>,
 }
 
 /// One `<webview>` in a document: a rectangle the host lays out, holding a page
@@ -130,7 +134,7 @@ pub struct Composed {
 /// where to put one.
 pub struct Webview {
     /// The element, so the page behind it can be remembered against it.
-    pub node: usize,
+    pub node: NodeId,
     /// The engine's own id for it, which survives being laid out again — the
     /// same document parsed twice gives the same nodes, but nothing promises
     /// that, and a measurement attached to the wrong frame is worse than none.
@@ -187,7 +191,7 @@ impl LaidOut {
             // No size test. A frame with no height yet is the one that most
             // needs finding: what gives it a height is the page inside it, and
             // that page cannot be laid out until this has been noticed.
-            let size = node.final_layout.size;
+            let size = node.final_layout().size;
             found.push(Webview {
                 node: node.id,
                 key: keyed(node),
@@ -239,9 +243,28 @@ impl LaidOut {
 
     /// How big the document came out.
     pub fn root(&self) -> (f32, f32) {
-        let size = self.document.root_element().final_layout.size;
+        let size = self.document.root_element().final_layout().size;
         (size.width, size.height)
     }
+}
+
+/// Whether this node kind carries a layout box at all.
+///
+/// blitz 0.3 keeps one on element, anonymous-block and document nodes only, and
+/// `Node::final_layout` **panics** for anything else. Text and comment nodes
+/// reach this code constantly — the painter walks them, and `enclose` recurses
+/// through them to find what an inline element covers — so the question has to
+/// be asked before the box is taken.
+///
+/// A predicate rather than an `Option<&Layout>` because taffy's `Layout` is not
+/// re-exported by blitz, and naming it would mean depending on taffy directly
+/// to say something this file already knows.
+pub(crate) fn boxed(node: &Node) -> bool {
+    use blitz_dom::NodeData;
+    matches!(
+        node.data,
+        NodeData::Element(_) | NodeData::AnonymousBlock(_) | NodeData::Document(_)
+    )
 }
 
 /// What an element paints behind itself, if it paints anything at all.

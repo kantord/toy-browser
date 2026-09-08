@@ -176,8 +176,9 @@ What it still does not do, and why:
   thing, so it is left undefined rather than approximated.
 - **Scrolling** is not modelled at all, so `scrollWidth`, `scrollHeight`,
   `scrollTop`, `scrollLeft` and `window.scrollTo` are absent rather than zero.
-- **Computed style** would need the cascade. Nothing runs it, so a script
-  cannot ask what a stylesheet decided.
+- **Computed style** answers only what layout was asked to report — `color`
+  and `font-size` — and `""` for everything else, which is what a declaration
+  says about a property it does not have.
 - **Ranges, tree walkers and selections** have no implementation.
 - **Element constructors** (`HTMLInputElement`, `Text`, `SVGElement`, …) do not
   exist, so `instanceof` against them throws rather than answering false.

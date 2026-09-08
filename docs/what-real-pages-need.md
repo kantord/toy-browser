@@ -29,7 +29,7 @@ uses.
 A page laid out with flexbox or grid comes out right. That is most of the modern
 web's structure.
 
-**Eight of the nine are now fixed**, and each matches Chromium on its probe or
+**All nine are now fixed**, floats included, and each matches Chromium on its probe or
 comes within a pixel of it, where the whole point of the measurement is that it
 is against a real browser rather than against an opinion:
 
@@ -44,6 +44,7 @@ is against a real browser rather than against an opinion:
 | list markers | no bullet | **0.09%** — the `ul` box off by 2px |
 | `text-decoration` | no line | **0.19%** — the strikethrough off by 1px |
 | `overflow: hidden` | 0.25% | 0.15% |
+| **floats** | not implemented | **0.30%** |
 
 What that took, in the Scene's own terms: a Fill gained corner radii, an `Ink`
 that can be a gradient rather than only a flat colour, and a shadow; `Clip`
@@ -68,10 +69,13 @@ rendering the probe and counting marks — a feature that draws nothing leaves o
 | **`transform`** | ignored; box stays at its untransformed origin | centring, icons, anything animated |
 | **`overflow: hidden`** | no clip; content escapes its box | structural — containers stop containing |
 | **`text-overflow: ellipsis`** | wraps instead of truncating | tables, nav, cards |
+| **floats** | box on its own line, content underneath | every infobox, every thumbnail, every wrapped image |
 
 The first five would garble a modern page on their own. A card with no shadow,
-square corners, a flat background and a fully opaque overlay is not a card. Only
-`text-overflow: ellipsis` is still outstanding.
+square corners, a flat background and a fully opaque overlay is not a card.
+Floats were the last and the largest: not a paint gap at all but a missing
+piece of layout, found by rendering one long real page rather than by any probe
+here. Only `text-overflow: ellipsis` is still outstanding.
 
 **Why this is not the failure table.** Both features at the top of that table
 are markers rather than causes, and each was checked rather than assumed:
@@ -107,6 +111,7 @@ as it goes found six, and five of them were not drawing bugs at all — a missin
 `visibility: hidden` ignored, and a zero-height box declining to clip.
 
 That is worth knowing about the instrument: a page can be wrong in ways no
-probe is shaped to ask about. `docs/wikipedia.md` records the chain, and the
-one thing left on that page — **floats** — which no probe here covers either,
-because until it was measured nobody had noticed they were missing.
+probe is shaped to ask about, and the biggest of them was not paint at all. `docs/wikipedia.md` records the chain, and the
+one thing left on that page after those — **floats** — which no probe here
+covered either, because until the page was measured nobody had noticed they
+were missing. `float.html` covers them now.

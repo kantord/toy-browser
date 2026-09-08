@@ -9,11 +9,11 @@ license.workspace = true
 anyhow.workspace = true
 toy-browser-fetch.workspace = true
 serde_json.workspace = true
-blitz-dom = "0.2.4"
-blitz-html = "0.2.0"
+blitz-dom = { version = "0.3.0-beta.2", features = ["floats"] }
+blitz-html = "0.3.0-beta.2"
 rquickjs = { version = "0.12.2", features = ["macro", "classes", "properties", "loader"] }
-xml5ever = "0.35"
-html5ever = "0.35"
+xml5ever = "0.39"
+html5ever = "0.39"
 
 [lints]
 workspace = true

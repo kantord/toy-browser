@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 
-use blitz_dom::Node;
+use blitz_dom::{Node, NodeId};
 use toy_browser_engine::{Boxes, ElementBox};
 
 use crate::blitz::{LaidOut, colour, font_size, keyed};
@@ -67,8 +67,8 @@ impl LaidOut {
     /// **Rows and row groups** are structural in a table: the cells are laid
     /// out, and `<tr>` is what they are laid out in. A browser reports a box for
     /// one anyway, so it is the cells it holds.
-    pub(super) fn implied(&self) -> HashMap<usize, Around> {
-        let mut found: HashMap<usize, Around> = HashMap::new();
+    pub(super) fn implied(&self) -> HashMap<NodeId, Around> {
+        let mut found: HashMap<NodeId, Around> = HashMap::new();
         self.walk(&mut |node, x, y| {
             if !rendered(node) {
                 return;
@@ -110,7 +110,7 @@ impl LaidOut {
     }
 
     /// Gives an element with no box of its own the one around what it holds.
-    fn enclose(&self, id: usize, found: &mut HashMap<usize, Around>) -> Option<Around> {
+    fn enclose(&self, id: NodeId, found: &mut HashMap<NodeId, Around>) -> Option<Around> {
         let node = self.document.get_node(id)?;
         if !rendered(node) {
             // Nothing under a box that is not drawn is drawn either, so a
@@ -118,7 +118,7 @@ impl LaidOut {
             return None;
         }
         let held = self.around_contents(node, found);
-        let size = node.final_layout.size;
+        let size = node.final_layout().size;
         // A node layout did give a box to answers with it, and keeps none of
         // what its contents said: the box is the fact, and the contents can
         // spill out of it.
@@ -134,7 +134,7 @@ impl LaidOut {
 
     /// The one box around everything a node holds, and around whatever the
     /// node's own glyph runs already put there.
-    fn around_contents(&self, node: &Node, found: &mut HashMap<usize, Around>) -> Option<Around> {
+    fn around_contents(&self, node: &Node, found: &mut HashMap<NodeId, Around>) -> Option<Around> {
         let mut held: Option<Around> = found.get(&node.id).copied();
         for child in &node.children {
             if let Some(around) = self.enclose(*child, found) {
@@ -174,11 +174,11 @@ impl LaidOut {
 
 /// Where an element is: the box layout gave it, or the one around what it
 /// holds when layout gave it none.
-pub(super) fn placed(node: &Node, x: f32, y: f32, implied: &HashMap<usize, Around>) -> ElementBox {
+pub(super) fn placed(node: &Node, x: f32, y: f32, implied: &HashMap<NodeId, Around>) -> ElementBox {
     if !rendered(node) {
         return NOWHERE;
     }
-    let size = node.final_layout.size;
+    let size = node.final_layout().size;
     if size.width > 0.0 || size.height > 0.0 {
         return ElementBox {
             x,

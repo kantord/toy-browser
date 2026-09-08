@@ -15,10 +15,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use blitz_dom::Node;
+use blitz_dom::{Node, NodeId};
 
 use crate::blitz::LaidOut;
 use crate::scene::{Area, Corners, Digest, Ink, Mark, Paint, Scene};
+use toy_browser_engine::ids;
 
 /// Every run of text an element lays out, positioned glyph by glyph.
 pub(super) fn of(page: &LaidOut, node: &Node, x: f32, y: f32, scene: &mut Scene) -> Vec<Mark> {
@@ -87,7 +88,7 @@ fn mark(page: &LaidOut, placed: &Placed<'_>, source: &str, scene: &mut Scene) ->
         size: run.run().font_size(),
         paint: colour(page, owner),
         face: face(run, scene),
-        node: Some(owner),
+        node: Some(ids::raw(owner)),
     })
 }
 
@@ -165,7 +166,7 @@ fn spelled(
 /// Asked of the element rather than carried on the run: blitz's brush holds the
 /// node it came from and nothing else, which is the more useful half — it is
 /// what lets a mark in the picture be traced back to the document.
-fn colour(page: &LaidOut, owner: usize) -> Paint {
+fn colour(page: &LaidOut, owner: NodeId) -> Paint {
     let Some(style) = page.document.get_node(owner).and_then(Node::primary_styles) else {
         return Paint {
             red: 0,
@@ -222,7 +223,7 @@ fn lines_over(page: &LaidOut, placed: &Placed<'_>, drawn: Option<&Mark>) -> Vec<
             ink: Ink::Flat(*paint),
             corners: Corners::NONE,
             shadow: None,
-            node: Some(owner),
+            node: Some(ids::raw(owner)),
         });
     };
     if lines.contains(Line::UNDERLINE) {

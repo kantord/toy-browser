@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body { margin: 0; padding: 0; font-size: 16px }
+      td { padding: 0 }
+      #label { display: block; width: 120px; height: 20px; background: #93c5fd }
+    </style>
+  </head>
+  <body>
+    <!-- The same link as `activate.html`, in a table. blitz flattens a table
+         into a grid of its cells, so the rows and the row group are reached
+         only through the DOM — and if they are walked after the cells they
+         contain, the row ends up as the topmost thing over the link and
+         nothing is clickable. Every link on Hacker News is inside a table. -->
+    <table><tr><td>
+      <a id="link" href="hello.html"><div id="label">go to hello</div></a>
+    </td></tr></table>
+  </body>
+</html>

@@ -8,10 +8,17 @@ Where it stood when this was written:
 
 | | tests |
 |---|---|
-| pass | 455 |
-| fail | 334 |
+| pass | 391 |
+| fail | 398 |
 | error | 24 |
 | timeout | 1 |
+
+**455 until the blitz 0.3 upgrade**, and the 64 that went are one thing: a
+split inline's border box now takes layout space, so every
+`block-in-inline-insert` and `-remove` case differs from its reference by the
+border width. `docs/upstream.md` has it written up. It was taken knowingly —
+what the upgrade bought is floats, and `docs/wikipedia.md` measures that on a
+real page. This is the sharpest the two axes have ever disagreed.
 
 It started this session at 82 passing. The canvas being painted at the root
 box's size rather than the picture's took it to 333; the XHTML parse dropping
@@ -33,7 +40,7 @@ Block-in-inline took it to **371** — nine won, none lost. Then one line of
 `Cargo.toml` took it to **449**: blitz depends on the `image` crate with
 `default-features = false`, so it could decode no format at all, and every
 `<img>` without explicit dimensions measured 0×0 and was never drawn. See
-`GAPS.md` 0.
+`docs/gaps-closed.md` 0.
 
 Painting what a page actually asks for — rounded corners, shadows, gradients,
 opacity, transforms, clipping — then took it to **455**, which is the smaller
@@ -41,9 +48,10 @@ half of that change. The larger half is that a modern page stops looking like a
 wireframe; `docs/what-real-pages-need.md` measures that axis instead.
 
 The next three paint features — `background-image: url()`, `text-decoration`
-and list markers — moved it **not at all**, and neither did the six things
+and list markers — moved it **not at all**, and neither did the seven things
 found by rendering Wikipedia (`docs/wikipedia.md`), which included
-`visibility: hidden` being ignored outright. That is the clearest statement of
+`visibility: hidden` being ignored outright and every link inside a table being
+unclickable. That is the clearest statement of
 the disagreement this file has. All of them match Chromium
 on their probe or take a real page measurably closer; none of them is what
 `normal-flow` measures, which is where a box goes and not what is drawn in it.

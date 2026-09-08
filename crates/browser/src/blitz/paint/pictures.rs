@@ -18,6 +18,7 @@ use blitz_dom::Node;
 
 use crate::blitz::LaidOut;
 use crate::scene::{Area, Format, Ink, Mark, Scene, Tiles};
+use toy_browser_engine::ids;
 
 /// The `<img>` this node is, if it is one and there is anything to draw.
 pub(super) fn of(
@@ -33,7 +34,7 @@ pub(super) fn of(
         return None;
     }
     let src = element.attr(blitz_dom::local_name!("src"))?;
-    let size = node.final_layout.size;
+    let size = node.final_layout().size;
     if size.width <= 0.0 || size.height <= 0.0 {
         return None;
     }
@@ -50,7 +51,7 @@ pub(super) fn of(
             height: size.height,
         },
         picture,
-        node: Some(node.id),
+        node: Some(ids::raw(node.id)),
     })
 }
 
@@ -124,14 +125,14 @@ pub(super) fn backdrop(
     let GenericImage::Url(url) = background.background_image.0.first()? else {
         return None;
     };
-    let size = node.final_layout.size;
+    let size = node.final_layout().size;
     if size.width <= 0.0 || size.height <= 0.0 {
         return None;
     }
     // Already resolved against the stylesheet it was written in, which is not
     // always the document — an imported sheet names its images relative to
     // itself.
-    let style::servo::url::ComputedUrl::Valid(url) = url else {
+    let style::url::ComputedUrl::Valid(url) = url else {
         return None;
     };
     let bytes = read(page, url.as_str(), resources)?;

@@ -7,10 +7,13 @@
 mod markup;
 mod names;
 mod parse;
+mod tree;
 
 use std::cell::{Cell, RefCell};
 
-use blitz_dom::{BaseDocument, NodeData};
+use blitz_dom::BaseDocument;
+
+use crate::ids;
 use toy_browser_fetch::{Resources, Url};
 
 pub use markup::parse;
@@ -76,28 +79,19 @@ impl Dom {
         visit(&self.doc.borrow())
     }
 
-    pub fn get_element_by_id(&self, id: &str) -> Option<usize> {
-        self.doc.borrow().get_element_by_id(id)
-    }
-
-    pub fn elements_by_tag(&self, tag: &str) -> Vec<usize> {
-        let doc = self.doc.borrow();
-        let mut found = Vec::new();
-        collect_by_tag(&doc, doc.root_element().id, tag, &mut found);
-        found
-    }
-
     pub fn create_element(&self, tag: &str) -> usize {
         self.touched();
-        self.doc
+        let made = self
+            .doc
             .borrow_mut()
             .mutate()
-            .create_element(html_name(tag), Vec::new())
+            .create_element(html_name(tag), Vec::new());
+        ids::raw(made)
     }
 
     pub fn create_text_node(&self, text: &str) -> usize {
         self.touched();
-        self.doc.borrow_mut().mutate().create_text_node(text)
+        ids::raw(self.doc.borrow_mut().mutate().create_text_node(text))
     }
 
     pub fn append_child(&self, parent: usize, child: usize) {
@@ -105,12 +99,12 @@ impl Dom {
         self.doc
             .borrow_mut()
             .mutate()
-            .append_children(parent, &[child]);
+            .append_children(ids::of(parent), &[ids::of(child)]);
     }
 
     pub fn remove_node(&self, id: usize) {
         self.touched();
-        self.doc.borrow_mut().mutate().remove_node(id);
+        self.doc.borrow_mut().mutate().remove_node(ids::of(id));
     }
 
     pub fn set_attribute(&self, id: usize, name: &str, value: &str) {
@@ -118,12 +112,12 @@ impl Dom {
         self.doc
             .borrow_mut()
             .mutate()
-            .set_attribute(id, attribute_name(name), value);
+            .set_attribute(ids::of(id), attribute_name(name), value);
     }
 
     pub fn attribute(&self, id: usize, name: &str) -> Option<String> {
         let doc = self.doc.borrow();
-        let node = doc.get_node(id)?;
+        let node = doc.get_node(ids::of(id))?;
         node.attrs()?
             .iter()
             .find(|attribute| attribute.name.local.as_ref() == name)
@@ -135,6 +129,7 @@ impl Dom {
         self.touched();
         let mut doc = self.doc.borrow_mut();
         let mut mutator = doc.mutate();
+        let id = ids::of(id);
         mutator.remove_and_drop_all_children(id);
         let text_id = mutator.create_text_node(text);
         mutator.append_children(id, &[text_id]);
@@ -142,25 +137,15 @@ impl Dom {
 
     pub fn text(&self, id: usize) -> String {
         let doc = self.doc.borrow();
-        doc.get_node(id)
+        doc.get_node(ids::of(id))
             .map(|node| node.text_content())
-            .unwrap_or_default()
-    }
-
-    /// Every element matching `selector`, in document order. An unparsable
-    /// selector matches nothing rather than failing.
-    pub fn query_all(&self, selector: &str) -> Vec<usize> {
-        self.doc
-            .borrow()
-            .query_selector_all(selector)
-            .map(|found| found.to_vec())
             .unwrap_or_default()
     }
 
     /// Every attribute, in document order.
     pub fn attributes(&self, id: usize) -> Vec<(String, String)> {
         let doc = self.doc.borrow();
-        doc.get_node(id)
+        doc.get_node(ids::of(id))
             .and_then(|node| node.attrs())
             .map(|attrs| {
                 attrs
@@ -176,36 +161,7 @@ impl Dom {
         self.doc
             .borrow_mut()
             .mutate()
-            .clear_attribute(id, attribute_name(name));
-    }
-
-    /// Every child, text and comments included.
-    pub fn child_nodes(&self, id: usize) -> Vec<usize> {
-        let doc = self.doc.borrow();
-        doc.get_node(id)
-            .map(|node| node.children.clone())
-            .unwrap_or_default()
-    }
-
-    /// The DOM's own numbering: 1 element, 3 text, 8 comment, 9 document.
-    pub fn node_type(&self, id: usize) -> u8 {
-        let doc = self.doc.borrow();
-        match doc.get_node(id).map(|node| &node.data) {
-            Some(NodeData::Element(_)) | Some(NodeData::AnonymousBlock(_)) => 1,
-            Some(NodeData::Text(_)) => 3,
-            Some(NodeData::Comment) => 8,
-            Some(NodeData::Document) => 9,
-            None => 0,
-        }
-    }
-
-    /// A text node's data. Elements have none, as in the DOM.
-    pub fn node_value(&self, id: usize) -> Option<String> {
-        let doc = self.doc.borrow();
-        match &doc.get_node(id)?.data {
-            NodeData::Text(text) => Some(text.content.clone()),
-            _ => None,
-        }
+            .clear_attribute(ids::of(id), attribute_name(name));
     }
 
     /// Inserts `node` before `anchor`, which must have a parent.
@@ -213,8 +169,8 @@ impl Dom {
         self.touched();
         let mut doc = self.doc.borrow_mut();
         let mut mutator = doc.mutate();
-        if mutator.parent_id(anchor).is_some() {
-            mutator.insert_nodes_before(anchor, &[node]);
+        if mutator.parent_id(ids::of(anchor)).is_some() {
+            mutator.insert_nodes_before(ids::of(anchor), &[ids::of(node)]);
         }
     }
 
@@ -222,47 +178,7 @@ impl Dom {
     /// subtrees, and pretending otherwise would quietly lose children.
     pub fn clone_node(&self, id: usize) -> usize {
         self.touched();
-        self.doc.borrow_mut().mutate().deep_clone_node(id)
-    }
-
-    pub fn parent(&self, id: usize) -> Option<usize> {
-        self.doc.borrow().get_node(id).and_then(|node| node.parent)
-    }
-
-    /// An element's element children, skipping text and comments.
-    pub fn element_children(&self, id: usize) -> Vec<usize> {
-        let doc = self.doc.borrow();
-        let Some(node) = doc.get_node(id) else {
-            return Vec::new();
-        };
-        node.children
-            .iter()
-            .copied()
-            .filter(|&child_id| {
-                doc.get_node(child_id)
-                    .is_some_and(|child| matches!(child.data, NodeData::Element(_)))
-            })
-            .collect()
-    }
-
-    pub fn root(&self) -> usize {
-        self.doc.borrow().root_element().id
-    }
-
-    pub fn body(&self) -> Option<usize> {
-        self.child_of_root("body")
-    }
-
-    pub fn head(&self) -> Option<usize> {
-        self.child_of_root("head")
-    }
-
-    pub fn tag_name(&self, id: usize) -> Option<String> {
-        let doc = self.doc.borrow();
-        match &doc.get_node(id)?.data {
-            NodeData::Element(element) => Some(element.name.local.to_string()),
-            _ => None,
-        }
+        ids::raw(self.doc.borrow_mut().mutate().deep_clone_node(ids::of(id)))
     }
 
     /// `<img>` elements whose `src` does not resolve to a file on disk. A real
@@ -279,29 +195,5 @@ impl Dom {
                 None => true,
             })
             .collect()
-    }
-
-    fn child_of_root(&self, tag: &str) -> Option<usize> {
-        let doc = self.doc.borrow();
-        let root = doc.root_element();
-        root.children.iter().copied().find(|&child_id| {
-            doc.get_node(child_id).is_some_and(|child| {
-                matches!(&child.data, NodeData::Element(element) if element.name.local.as_ref() == tag)
-            })
-        })
-    }
-}
-
-fn collect_by_tag(doc: &BaseDocument, id: usize, tag: &str, found: &mut Vec<usize>) {
-    let Some(node) = doc.get_node(id) else {
-        return;
-    };
-    if let NodeData::Element(element) = &node.data
-        && element.name.local.as_ref() == tag
-    {
-        found.push(id);
-    }
-    for &child_id in &node.children {
-        collect_by_tag(doc, child_id, tag, found);
     }
 }

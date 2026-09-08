@@ -63,7 +63,10 @@ impl Annotate for Plain {}
 struct Keys;
 impl Annotate for Keys {
     fn extra_class(&self, node: &Node) -> Option<String> {
-        Some(format!("{KEY_CLASS_PREFIX}{}", node.id))
+        // The raw integer, not the `NodeId`'s own `Display` — that prints
+        // `3v0`, which reads back as nothing. The class is a number a *parser*
+        // has to recover, so it has to be written as one.
+        Some(format!("{KEY_CLASS_PREFIX}{}", crate::ids::raw(node.id)))
     }
 }
 
@@ -100,10 +103,10 @@ fn write_node<A: Annotate>(
         }
         NodeData::Element(element) => write_element(doc, node, element, ann, out),
         // Anonymous boxes have no markup of their own, but their children do.
-        NodeData::Document | NodeData::AnonymousBlock(_) => {
+        NodeData::Document(_) | NodeData::AnonymousBlock(_) => {
             write_children(doc, node, false, ann, out)
         }
-        NodeData::Comment => {}
+        NodeData::Comment { .. } => {}
     }
 }
 
