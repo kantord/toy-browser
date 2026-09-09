@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 use blitz_dom::{Node, NodeId};
 
+use super::placed::Placed;
 use crate::blitz::LaidOut;
 use crate::scene::{Digest, Mark, Paint, Scene};
 use toy_browser_engine::ids;
@@ -57,7 +58,7 @@ pub(super) fn written(
         // The whole reason the pass carries a zone. A long article lays out
         // thousands of lines and a window is over about forty of them; turning
         // the rest into positioned glyphs is most of what painting costs.
-        if !pass.wants(&covered(&line, origin)) {
+        if !pass.wants(&covered(&line, origin, layout.scale())) {
             continue;
         }
         // Several glyph runs share one underlying run — one per span, one per
@@ -79,6 +80,7 @@ pub(super) fn written(
                 from,
                 count,
                 origin: (x, y),
+                scale: layout.scale(),
             };
             let drawn = mark(page, &placed, source, pass.scene);
             marks.extend(super::around::behind(page, &placed));
@@ -94,31 +96,24 @@ pub(super) fn written(
 ///
 /// Together rather than separately because they are one thing: a run only means
 /// something at a place, over a stretch of text.
-pub(super) struct Placed<'a> {
-    pub(super) run: parley::layout::GlyphRun<'a, blitz_dom::node::TextBrush>,
-    from: usize,
-    count: usize,
-    pub(super) origin: (f32, f32),
-}
-
 fn mark(page: &LaidOut, placed: &Placed<'_>, source: &str, scene: &mut Scene) -> Option<Mark> {
-    let (run, x, y) = (&placed.run, placed.origin.0, placed.origin.1);
-    let laid = spelled(run, placed.from, placed.count, source, x)?;
+    let y = placed.origin.1;
+    let laid = spelled(placed, source)?;
     // Not trimmed: a space between two runs is a glyph with a position like any
     // other, and dropping it runs the words together.
     let words = source.get(laid.range).unwrap_or_default();
     if words.trim().is_empty() && !words.contains(' ') {
         return None;
     }
-    let owner = run.style().brush.id;
+    let owner = placed.run.style().brush.id;
     Some(Mark::Glyphs {
         places: laid.places,
         text: words.to_owned(),
         glyphs: chosen(placed, y),
-        baseline: y + run.baseline() - super::around::raised(page, owner),
-        size: run.run().font_size(),
+        baseline: y + placed.baseline() - super::around::raised(page, owner),
+        size: placed.size(),
         paint: colour(page, owner),
-        face: face(run, scene),
+        face: face(&placed.run, scene),
         node: Some(ids::raw(owner)),
     })
 }
@@ -135,8 +130,8 @@ fn chosen(placed: &Placed<'_>, down: f32) -> Vec<crate::scene::Glyph> {
         .positioned_glyphs()
         .map(|glyph| crate::scene::Glyph {
             id: glyph.id,
-            x: placed.origin.0 + glyph.x,
-            y: down + glyph.y,
+            x: placed.origin.0 + placed.css(glyph.x),
+            y: down + placed.css(glyph.y),
         })
         .collect()
 }
@@ -201,13 +196,15 @@ struct Known {
 fn covered(
     line: &parley::layout::Line<'_, blitz_dom::node::TextBrush>,
     origin: (f32, f32),
+    scale: f32,
 ) -> crate::scene::Area {
     let metrics = line.metrics();
+    let css = |device: f32| device / scale;
     crate::scene::Area {
-        x: origin.0 + metrics.inline_min_coord,
-        y: origin.1 + metrics.block_min_coord,
-        width: metrics.inline_max_coord - metrics.inline_min_coord,
-        height: metrics.block_max_coord - metrics.block_min_coord,
+        x: origin.0 + css(metrics.inline_min_coord),
+        y: origin.1 + css(metrics.block_min_coord),
+        width: css(metrics.inline_max_coord - metrics.inline_min_coord),
+        height: css(metrics.block_max_coord - metrics.block_min_coord),
     }
 }
 
@@ -231,19 +228,14 @@ struct Laid {
 /// A cluster's characters share its advance, so each takes an even share of it.
 /// Where the rasterizer does form a ligature it uses the first character's
 /// position and ignores the rest, which is the answer we want anyway.
-fn spelled(
-    run: &parley::layout::GlyphRun<'_, blitz_dom::node::TextBrush>,
-    from: usize,
-    count: usize,
-    source: &str,
-    origin: f32,
-) -> Option<Laid> {
+fn spelled(placed: &Placed<'_>, source: &str) -> Option<Laid> {
+    let (run, from, count) = (&placed.run, placed.from, placed.count);
     let (mut seen, mut start, mut end) = (0usize, None, 0usize);
     // Where this piece begins, not where the run does. `visual_clusters` walks
     // the whole underlying run — several glyph runs share one, a span at a time
     // — so the clusters before this piece are somebody else's and their
     // advances must not move this pen.
-    let mut pen = origin + run.offset();
+    let mut pen = placed.origin.0 + placed.offset();
     let mut places = Vec::new();
     for cluster in run.run().visual_clusters() {
         let glyphs = cluster.glyphs().count();
@@ -254,9 +246,9 @@ fn spelled(
             let letters = source
                 .get(range)
                 .map_or(1, |text| text.chars().count().max(1));
-            let step = cluster.advance() / letters as f32;
+            let step = placed.css(cluster.advance()) / letters as f32;
             places.extend((0..letters).map(|nth| pen + nth as f32 * step));
-            pen += cluster.advance();
+            pen += placed.css(cluster.advance());
         }
         seen += glyphs;
     }

@@ -16,7 +16,7 @@ use crate::blitz::LaidOut;
 use crate::scene::{Area, Corners, Ink, Mark};
 use toy_browser_engine::ids;
 
-use super::words::Placed;
+use super::placed::Placed;
 
 /// The background of the inline element this run belongs to.
 ///
@@ -50,13 +50,13 @@ pub(super) fn behind(page: &LaidOut, placed: &Placed<'_>) -> Option<Mark> {
     }
     // As tall as the run's own font, not as tall as the line: an inline box is
     // the height of its text, whatever it shares a line with.
-    let metrics = run.run().metrics();
+    let (ascent, descent) = placed.reach();
     Some(Mark::Fill {
         area: Area {
-            x: x + run.offset(),
-            y: y + run.baseline() - metrics.ascent - raised(page, owner),
-            width: run.advance(),
-            height: metrics.ascent + metrics.descent,
+            x: x + placed.offset(),
+            y: y + placed.baseline() - ascent - raised(page, owner),
+            width: placed.advance(),
+            height: ascent + descent,
         },
         ink: Ink::Flat(super::channels(red, green, blue, alpha)),
         corners: Corners::NONE,
@@ -119,17 +119,17 @@ pub(super) fn lines_over(page: &LaidOut, placed: &Placed<'_>, drawn: Option<&Mar
     // Where each line sits relative to the baseline. The face states the
     // underline and the strike; an overline goes at the top of the ascent,
     // which is the only one it does not have an opinion about.
-    let metrics = placed.run.run().metrics();
+    let (_, under, through, ascent) = placed.rules();
     let mut marks = Vec::new();
     let mut rule = |above: f32| marks.push(struck.rule(above));
     if struck.lines.contains(Line::UNDERLINE) {
-        rule(metrics.underline_offset);
+        rule(under);
     }
     if struck.lines.contains(Line::LINE_THROUGH) {
-        rule(metrics.strikethrough_offset);
+        rule(through);
     }
     if struck.lines.contains(Line::OVERLINE) {
-        rule(metrics.ascent);
+        rule(ascent);
     }
     marks
 }
@@ -188,12 +188,12 @@ fn struck(page: &LaidOut, placed: &Placed<'_>, drawn: Option<&Mark>) -> Option<S
     // the last plus a run's width — the last glyph is already inside the run,
     // and adding the whole advance to it draws a line past the end of the word.
     let from = places.first().copied()?;
-    let to = placed.origin.0 + placed.run.offset() + placed.run.advance();
+    let to = placed.origin.0 + placed.offset() + placed.advance();
     Some(Struck {
         lines,
         from,
         width: (to - from).max(0.0),
-        thick: placed.run.run().metrics().underline_size.max(1.0),
+        thick: placed.rules().0,
         baseline: *baseline,
         paint: *paint,
         owner,

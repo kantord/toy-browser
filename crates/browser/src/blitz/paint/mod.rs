@@ -38,6 +38,7 @@ mod effects;
 mod markers;
 mod pass;
 mod pictures;
+mod placed;
 mod rows;
 pub(super) mod words;
 

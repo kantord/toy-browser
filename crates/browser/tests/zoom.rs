@@ -9,7 +9,7 @@
 mod common;
 
 use common::{browser, fixture};
-use toy_browser::{Area, Browser, PageId, Viewport};
+use toy_browser::{Area, Browser, Mark, PageId, Viewport};
 
 const WIDE: u32 = 400;
 
@@ -183,4 +183,87 @@ fn text_rewraps_when_the_zoom_changes() {
         zoomed > plain * 1.5,
         "half the width takes many more lines: {plain} then {zoomed}"
     );
+}
+
+/// What one zoom level made of the same page.
+struct Written {
+    zoom: u16,
+    box_: (f32, f32),
+    /// The size every glyph run was written at.
+    sizes: Vec<u32>,
+    /// Where the first line's baseline landed.
+    first: f32,
+}
+
+/// Loads the page at `zoom` and reads what it says about its own text.
+fn written(browser: &mut Browser, zoom: u16) -> Written {
+    let page = browser.new_page().unwrap();
+    browser.set_viewport(
+        &page,
+        Viewport {
+            width: 800,
+            height: None,
+            zoom,
+        },
+    );
+    browser
+        .navigate(&page, fixture("zoom-text.html").as_str())
+        .unwrap();
+    let found = browser.query(&page, "#box").unwrap();
+    let box_ = browser
+        .bounding_box(&page, found.first().expect("the box"))
+        .unwrap()
+        .expect("it has a box");
+    let scene = browser.scene_for(&page).unwrap();
+    let runs: Vec<(u32, f32)> = scene
+        .marks
+        .iter()
+        .filter_map(|mark| match mark {
+            Mark::Glyphs { size, baseline, .. } => Some((size.round() as u32, *baseline)),
+            _ => None,
+        })
+        .collect();
+    Written {
+        zoom,
+        box_: (box_.width, box_.height),
+        sizes: runs.iter().map(|it| it.0).collect(),
+        first: runs.first().map_or(0.0, |it| it.1),
+    }
+}
+
+#[test]
+fn text_is_written_in_css_pixels_at_every_zoom() {
+    // The bug this is here for: blitz shapes text at the size it will be
+    // *drawn*, so at 200% a 16px font comes back from parley shaped at 32 with
+    // every offset and baseline in the window's pixels. The box layout gave the
+    // element is in CSS pixels. A Scene holding both is a Scene that gets the
+    // zoom applied twice to its words and once to everything else — text the
+    // right size for nothing, in a box measured for text half as big.
+    //
+    // So: the same page, the same box, and the same numbers at every zoom.
+    let mut browser = browser();
+    for zoom in [50u16, 100, 200, 400] {
+        let seen = written(&mut browser, zoom);
+        let Written {
+            zoom,
+            box_,
+            sizes,
+            first,
+        } = seen;
+        assert_eq!(
+            box_,
+            (200.0, 168.0),
+            "the box is 200px wide and the text takes the same room at {zoom}%"
+        );
+        assert!(
+            sizes.iter().all(|it| *it == 16),
+            "every run is written at the CSS font size at {zoom}%: {sizes:?}"
+        );
+        // Wherever the shaping landed inside the first line — what must not
+        // happen is it scaling with the zoom.
+        assert!(
+            (10.0..24.0).contains(&first),
+            "the first baseline is on the first line at {zoom}%: {first}"
+        );
+    }
 }
