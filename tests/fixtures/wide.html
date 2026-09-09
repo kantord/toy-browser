@@ -1,0 +1,10 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>A page wider than its window</title>
+<style>
+  body { margin: 0; font: 16px/24px sans-serif; }
+  .rail { width: 1200px; height: 60px; background: #eef; }
+  .far { position: absolute; left: 900px; top: 0; width: 200px; height: 60px; background: #000; }
+  .near { position: absolute; left: 0; top: 0; width: 200px; height: 60px; background: #000; }
+</style>
+<div class="rail"><span class="near"></span><span class="far"></span></div>

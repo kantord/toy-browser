@@ -23,6 +23,7 @@ pub fn layout(args: LayoutArgs) -> Result<()> {
         Viewport {
             width: args.width,
             height: Some(args.height),
+            ..Viewport::default()
         },
         &url,
         &resources,
@@ -53,6 +54,7 @@ fn painted(
     let viewport = Viewport {
         width,
         height: None,
+        ..Viewport::default()
     };
     let alone = toy_browser::blitz::Composed {
         laid_out,
@@ -81,6 +83,7 @@ pub fn render(args: RenderArgs) -> Result<()> {
         Viewport {
             width: args.width,
             height: args.height,
+            ..Viewport::default()
         },
     );
     browser.set_run_scripts(&page, !args.no_scripts);

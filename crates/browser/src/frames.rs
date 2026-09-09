@@ -164,6 +164,7 @@ impl Browser {
             let width = Viewport {
                 width: across,
                 height: None,
+                ..Viewport::default()
             };
             self.set_viewport(&child, width);
             let composed = self.compose(&child, width)?;

@@ -22,6 +22,11 @@ pub(super) struct Pass<'a> {
     /// or not it is on screen, because how far a page scrolls is a fact about
     /// the whole of it.
     pub(super) height: f32,
+    /// And how far right anything reaches, for the same reason. Kept apart from
+    /// the height because they are not used for the same thing: the picture is
+    /// as tall as its content and only as wide as its viewport, so this is what
+    /// a window scrolls across and never what a screenshot is sized by.
+    pub(super) widest: f32,
     /// The paint tree and the DOM both name some nodes; this is what keeps one
     /// from being painted twice.
     pub(super) seen: HashSet<NodeId>,

@@ -119,7 +119,14 @@ impl Sessions {
             .as_u64()
             .map(|value| value as u32)
             .or(was.height);
-        self.browser.set_viewport(&page, Viewport { width, height });
+        self.browser.set_viewport(
+            &page,
+            Viewport {
+                width,
+                height,
+                ..Viewport::default()
+            },
+        );
         self.window_rect(id)
     }
 }

@@ -20,6 +20,7 @@ mod scene;
 mod measure;
 mod script;
 mod view;
+mod viewport;
 
 use std::collections::HashMap;
 
@@ -38,11 +39,12 @@ pub use navigate::{Loaded, NavigationError};
 /// back, which is a lot of work to change one name into another.
 pub use resvg::tiny_skia;
 pub use scene::{
-    Rendered, Scene, draw as draw_scene, family, normal_form, pixels as scene_pixels,
+    Area, Rendered, Scene, draw as draw_scene, family, normal_form, pixels as scene_pixels,
     render as render_scene,
 };
 pub use toy_browser_engine::{Budget, ElementBox, NodeId, Point, ScriptSurvey};
 pub use toy_browser_fetch::{Resources, Url};
+pub use viewport::Viewport;
 
 /// A reference handed to a caller.
 ///
@@ -285,26 +287,5 @@ impl Browser {
             .get(page)
             .map(|page| page.session.clone())
             .ok_or_else(|| anyhow::anyhow!("no such page"))
-    }
-}
-
-/// The size a document is laid out and rendered at.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Viewport {
-    pub width: u32,
-    /// Height in px; `None` lets the layout size the output to its content.
-    pub height: Option<u32>,
-}
-
-impl Viewport {
-    pub const DEFAULT_WIDTH: u32 = 800;
-}
-
-impl Default for Viewport {
-    fn default() -> Self {
-        Self {
-            width: Self::DEFAULT_WIDTH,
-            height: None,
-        }
     }
 }

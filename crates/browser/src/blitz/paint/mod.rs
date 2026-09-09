@@ -51,23 +51,30 @@ pub fn scene(
     visible: Option<Area>,
 ) -> Scene {
     let mut scene = Scene {
-        width: viewport.width.max(1),
+        // In CSS pixels, which is what the marks are in. A zoomed page is laid
+        // out in a narrower viewport than the window has, and drawn back up to
+        // it.
+        width: ((viewport.width as f32 / viewport.scale()).round() as u32).max(1),
+        scale: viewport.scale(),
         ..Scene::default()
     };
     let mut pass = Pass {
         scene: &mut scene,
         resources,
         height: 0.0,
+        widest: 0.0,
         seen: HashSet::new(),
         visible,
     };
     let marks = compose(unit, 0.0, 0.0, &mut pass);
-    let height = pass.height;
+    let (height, widest) = (pass.height, pass.widest);
     // Never nothing: a rasterizer refuses a picture with no area, and a page
     // that has not loaded yet is a real thing to be asked to draw.
     scene.height = viewport
         .height
-        .map_or(height.ceil() as u32, |given| given)
+        .map_or(height.ceil() as u32, |given| {
+            (given as f32 / viewport.scale()).round() as u32
+        })
         .max(1);
 
     // The paper goes first but is sized last: it is as big as the picture, and
@@ -75,9 +82,14 @@ pub fn scene(
     let area = Area {
         x: 0.0,
         y: 0.0,
-        width: scene.width as f32,
+        // As far as the page reaches, not as far as the window sees. A window
+        // scrolled past the edge of the viewport would otherwise be over
+        // nothing at all, and the canvas colour is the page's answer for
+        // everywhere it can be looked at.
+        width: (scene.width as f32).max(widest),
         height: scene.height as f32,
     };
+    scene.widest = widest;
     scene.marks.push(paper(&unit.laid_out, area));
     scene.marks.extend(marks);
     scene
@@ -128,10 +140,13 @@ fn compose(unit: &Composed, across: f32, down: f32, pass: &mut Pass<'_>) -> Vec<
         // A mounted page is as tall as it is, and only as much of it shows as
         // the frame allows. What it holds must not make the document taller —
         // the frame already counted, as a box in the page around it.
-        let so_far = std::mem::take(&mut pass.height);
+        let so_far = (
+            std::mem::take(&mut pass.height),
+            std::mem::take(&mut pass.widest),
+        );
         let mut inner = vec![paper(&child.laid_out, to)];
         inner.extend(compose(child, across + area.x, down + area.y, pass));
-        pass.height = so_far;
+        (pass.height, pass.widest) = so_far;
         marks.push(Mark::Clip {
             to,
             marks: inner,
@@ -152,7 +167,9 @@ fn subtree(unit: &Composed, id: NodeId, at: (f32, f32), pass: &mut Pass<'_>) -> 
     let Some((node, x, y)) = arrived(unit, id, at, &mut pass.seen) else {
         return Vec::new();
     };
-    pass.height = pass.height.max(y + node.final_layout().size.height);
+    let size = node.final_layout().size;
+    pass.height = pass.height.max(y + size.height);
+    pass.widest = pass.widest.max(x + size.width);
     // A transform can put this subtree anywhere, so where its boxes were laid
     // out no longer says whether they show. Everything under one is painted in
     // full.

@@ -34,12 +34,14 @@ use super::{Area, Digest, Mark, Paint, Scene};
 
 /// The Scene as pixels.
 pub fn draw(scene: &Scene) -> Result<Pixmap> {
-    let (wide, tall) = (scene.width.max(1), scene.height.max(1));
+    let (wide, tall) = scene.drawn();
     let mut pixmap =
         Pixmap::new(wide, tall).with_context(|| format!("allocating {wide}x{tall} pixmap"))?;
-    // The band's own origin. Marks keep the coordinates they were painted at,
-    // so showing a band is a translation and nothing else.
-    let start = Transform::from_translate(0.0, -scene.top);
+    // The band's own origin, and the size a CSS pixel is drawn at. Marks keep
+    // the coordinates they were painted in, so showing a band of a zoomed page
+    // is a scale and a shift and nothing else.
+    let start = Transform::from_translate(-scene.at.0 * scene.scale, -scene.at.1 * scene.scale)
+        .pre_concat(Transform::from_scale(scene.scale, scene.scale));
     let mut hand = Hand {
         faces: HashMap::new(),
         scene,

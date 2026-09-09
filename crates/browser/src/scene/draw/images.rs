@@ -33,6 +33,11 @@ const MOST: usize = 64;
 /// The `<img>` case and the background case are one value: an image is a patch
 /// the size of its box with the picture filling it, and a `no-repeat`
 /// background is a patch the size of its box with the picture in the corner.
+///
+/// Everything in it is in the pixels a window has, not the CSS pixels the page
+/// is laid out in. Those are the same number until the page is zoomed, and
+/// resampling to the smaller of them and stretching the result back is how a
+/// photograph on a zoomed page came out soft when nothing else did.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct Laid {
     picture: Digest,
@@ -52,25 +57,28 @@ impl Laid {
 
 impl Hand<'_> {
     pub(super) fn image(&mut self, onto: &mut Onto<'_, '_>, area: &Area, picture: &Digest) {
-        let laid = Laid {
+        let scale = self.scene.scale;
+        let (wide, tall) = (area.width * scale, area.height * scale);
+        let Some(patch) = self.patch(Laid {
             picture: *picture,
-            tile: (area.width.to_bits(), area.height.to_bits()),
-            cell: (
-                area.width.round().max(1.0) as u32,
-                area.height.round().max(1.0) as u32,
-            ),
-        };
-        let Some(patch) = self.patch(laid) else {
+            tile: (wide.to_bits(), tall.to_bits()),
+            cell: (wide.round().max(1.0) as u32, tall.round().max(1.0) as u32),
+        }) else {
             return;
         };
         let patch = patch.as_ref();
+        // Where it goes comes from the matrix; how big it is does not. The
+        // patch was made at the size it goes down at, and scaling it a second
+        // time is the thing that made a zoomed photograph soft.
+        let placed = onto
+            .at
+            .pre_concat(Transform::from_translate(area.x, area.y));
         onto.pixmap.draw_pixmap(
             0,
             0,
             patch.as_ref(),
             &tiny_skia::PixmapPaint::default(),
-            onto.at
-                .pre_concat(Transform::from_translate(area.x, area.y)),
+            Transform::from_translate(placed.tx, placed.ty),
             onto.clip.as_ref(),
         );
     }
@@ -97,10 +105,16 @@ impl Hand<'_> {
         } else {
             area.height.max(down)
         };
+        // In the window's pixels, like everything else here: a background
+        // picture on a zoomed page is resampled once, to the size it is shown.
+        let scale = self.scene.scale;
         self.patch(Laid {
             picture: tiles.picture,
-            tile: (across.to_bits(), down.to_bits()),
-            cell: (wide.ceil().max(1.0) as u32, tall.ceil().max(1.0) as u32),
+            tile: ((across * scale).to_bits(), (down * scale).to_bits()),
+            cell: (
+                (wide * scale).ceil().max(1.0) as u32,
+                (tall * scale).ceil().max(1.0) as u32,
+            ),
         })
     }
 

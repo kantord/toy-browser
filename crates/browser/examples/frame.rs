@@ -18,6 +18,7 @@ fn main() -> anyhow::Result<()> {
         Viewport {
             width: 1200,
             height: None,
+            ..Viewport::default()
         },
     );
     browser
@@ -29,8 +30,18 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The window a scroll leaves it over.
+fn window(top: f32) -> toy_browser::Area {
+    toy_browser::Area {
+        x: 0.0,
+        y: top,
+        width: 1200.0,
+        height: 800.0,
+    }
+}
+
 /// One scroll: how far the page can go, what is under the pointer now, and the
-/// band that lands on the screen.
+/// part of it that lands on the screen.
 fn scrolled(browser: &mut Browser, page: &toy_browser::PageId, top: f32) -> anyhow::Result<()> {
     let clock = Instant::now();
     let tall = browser.height(page)?;
@@ -43,7 +54,7 @@ fn scrolled(browser: &mut Browser, page: &toy_browser::PageId, top: f32) -> anyh
         },
     )?;
     let hovered = clock.elapsed();
-    browser.band(page, top, 800)?;
+    browser.over(page, window(top))?;
     eprintln!(
         "scroll to {top}: height {:.1}ms  hover {:.1}ms (moved {})  band {:.1}ms  \
          total {:.1}ms  [{tall} tall]",

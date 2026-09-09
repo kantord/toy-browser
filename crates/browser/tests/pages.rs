@@ -54,6 +54,7 @@ fn elements_are_measured_at_the_pages_viewport() {
         Viewport {
             width: 800,
             height: Some(600),
+            ..Viewport::default()
         },
     );
     browser
@@ -86,6 +87,7 @@ fn a_screenshot_is_the_size_it_was_asked_for() {
             Some(Viewport {
                 width: 800,
                 height: Some(600),
+                ..Viewport::default()
             }),
         )
         .unwrap();
@@ -145,6 +147,7 @@ fn evaluating_sees_geometry() {
         Viewport {
             width: 800,
             height: Some(600),
+            ..Viewport::default()
         },
     );
     browser
@@ -173,6 +176,7 @@ fn nested_page(browser: &mut Browser) -> toy_browser::PageId {
         Viewport {
             width: 800,
             height: Some(600),
+            ..Viewport::default()
         },
     );
     browser

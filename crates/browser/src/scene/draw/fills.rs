@@ -66,7 +66,13 @@ impl Hand<'_> {
                 tiny_skia::SpreadMode::Repeat,
                 tiny_skia::FilterQuality::Bilinear,
                 1.0,
-                Transform::from_translate(tiles.at.0, tiles.at.1),
+                // The cell was made at the size it will be drawn, in the
+                // window's pixels; the fill happens in the page's, which the
+                // matrix then scales. Shrinking the pattern by the same amount
+                // is what leaves it drawn one for one.
+                Transform::from_translate(tiles.at.0, tiles.at.1).pre_concat(
+                    Transform::from_scale(self.scene.scale.recip(), self.scene.scale.recip()),
+                ),
             ),
             ..Default::default()
         };

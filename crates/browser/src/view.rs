@@ -88,18 +88,22 @@ impl Browser {
     /// resvg as text and resvg shapes every word in it, so a long article costs
     /// a second and a half of shaping against fifty milliseconds of drawing.
     /// A band is the same Scene with what falls outside it left out.
-    pub fn band(&mut self, page: &PageId, top: f32, tall: u32) -> Result<crate::tiny_skia::Pixmap> {
+    pub fn over(
+        &mut self,
+        page: &PageId,
+        zone: crate::scene::Area,
+    ) -> Result<crate::tiny_skia::Pixmap> {
         let clock = std::time::Instant::now();
         self.sync(page)?;
         let synced = clock.elapsed();
-        self.repainted(page, top, tall)?;
+        self.repainted(page, zone)?;
         let repainted = clock.elapsed();
         let whole = self
             .pages
             .get(page)
             .and_then(|held| held.drawn.as_ref())
             .ok_or_else(|| anyhow::anyhow!("no such page"))?;
-        let strip = whole.band(top, tall);
+        let strip = whole.over(zone);
         let cut = clock.elapsed();
         let pixels = crate::scene::pixels(&strip);
         // `TOY_BROWSER_TRACE_FRAME=1` says where a frame went. The four costs
@@ -124,10 +128,9 @@ impl Browser {
     /// Paints the page again if what is kept does not answer for this part of
     /// it.
     ///
-    /// For a zone a screenful bigger than the window on every side, so that
+    /// For a zone a windowful bigger than the window on every side, so that
     /// scrolling a little does not mean painting again.
-    fn repainted(&mut self, page: &PageId, top: f32, tall: u32) -> Result<()> {
-        let wanted = self.strip(page, top, tall);
+    fn repainted(&mut self, page: &PageId, wanted: crate::scene::Area) -> Result<()> {
         if self
             .pages
             .get(page)
@@ -156,12 +159,37 @@ impl Browser {
     /// scrolls over is everything that was drawn, and a page can put marks
     /// below the box its `<html>` was given.
     pub fn height(&mut self, page: &PageId) -> Result<f32> {
-        self.band(page, 0.0, 1)?;
+        Ok(self.reach(page)?.1)
+    }
+
+    /// How far the page reaches sideways, which is how far a window may be
+    /// scrolled across.
+    ///
+    /// Not the picture's width: a screenshot is as wide as the viewport and
+    /// clips whatever hangs off, which is what every other browser does. This
+    /// is how far there is to go and see it.
+    pub fn widest(&mut self, page: &PageId) -> Result<f32> {
+        Ok(self.reach(page)?.0)
+    }
+
+    /// How far the page reaches, across and down.
+    fn reach(&mut self, page: &PageId) -> Result<(f32, f32)> {
+        // A pixel of it, because working the answer out means painting the
+        // Scene and the Scene is what holds the answer.
+        self.over(
+            page,
+            crate::scene::Area {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+        )?;
         Ok(self
             .pages
             .get(page)
             .and_then(|held| held.drawn.as_ref())
-            .map_or(0.0, |scene| scene.height as f32))
+            .map_or((0.0, 0.0), |scene| (scene.widest, scene.height as f32)))
     }
 
     /// Renders the page and keeps every intermediate artifact.
@@ -174,20 +202,6 @@ impl Browser {
     /// Renders the page as a Scene and rasterizes it.
     fn draw(&mut self, page: &PageId, viewport: Viewport) -> Result<Rendered> {
         crate::scene::render(&self.painted(page, viewport, None)?)
-    }
-
-    /// What a window at `top` is over, as a rectangle.
-    ///
-    /// Full width, because nothing scrolls sideways — but a rectangle all the
-    /// same, so that the day something does, this is the only place that has to
-    /// learn about it.
-    fn strip(&mut self, page: &PageId, top: f32, tall: u32) -> crate::scene::Area {
-        crate::scene::Area {
-            x: 0.0,
-            y: top,
-            width: self.viewport(page).width as f32,
-            height: tall as f32,
-        }
     }
 
     /// The Scene this page paints to, for anything that wants to measure it.

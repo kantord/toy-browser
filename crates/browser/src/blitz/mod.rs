@@ -65,10 +65,15 @@ pub fn lay_out(
     let mut document = toy_browser_engine::parse_document(
         html,
         DocumentConfig {
+            // The window's own size, and what a CSS pixel is drawn as. blitz
+            // divides one by the other for the size it lays the page out in,
+            // so zooming in is laying the page out *narrower* and drawing it
+            // bigger — which is why the text reflows and stays sharp, rather
+            // than the picture being magnified.
             viewport: Some(BlitzViewport::new(
                 viewport.width,
                 height,
-                1.0,
+                viewport.scale(),
                 ColorScheme::Light,
             )),
             base_url: Some(base.to_owned()),

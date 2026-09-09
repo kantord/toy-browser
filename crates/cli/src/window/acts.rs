@@ -4,23 +4,111 @@
 //! `mod.rs` moves when the windowing stack does, this moves when the chrome
 //! does — the back button, the URL field, what a click is allowed to mean.
 
-use toy_browser::{Browser, CursorIcon, Hovering, PageId, Point, Viewport};
-use winit::event::ElementState;
+use toy_browser::{Browser, CursorIcon, Hovering, PageId, Point};
+use winit::event::{ElementState, MouseScrollDelta};
 
-use super::Open;
+use super::{NOTCH, Open};
 
 /// What each thing a person does to a window means to the page in it.
 impl Open {
     pub(super) fn resized(&mut self, width: u32, height: u32) {
         self.size = (width, height);
-        self.browser.set_viewport(
-            &self.page,
-            Viewport {
-                width,
-                height: None,
-            },
-        );
+        let viewport = self.viewport();
+        self.browser.set_viewport(&self.page, viewport);
         self.changed();
+    }
+
+    /// What one turn of the wheel means.
+    ///
+    /// Recorded, not acted on, for the same reason a pointer move is: a
+    /// trackpad reports one flick as dozens of events, and acting on each would
+    /// fill the queue faster than it drains. `about_to_wait` is where they are
+    /// added up.
+    pub(super) fn turned(&mut self, delta: MouseScrollDelta) {
+        // Added up, not acted on, for the same reason a pointer move
+        // is: a trackpad reports a flick as dozens of events, and each
+        // one here is a hover and a repaint of the page. Acting on
+        // every one makes the queue fill faster than it drains, so the
+        // page arrives further behind the finger the longer the scroll
+        // goes on.
+        let (across, down) = match delta {
+            MouseScrollDelta::LineDelta(across, down) => (across * NOTCH, down * NOTCH),
+            MouseScrollDelta::PixelDelta(at) => (at.x as f32, at.y as f32),
+        };
+        // Ctrl and the wheel is zoom everywhere, and it is not a scroll
+        // that also zooms: the page must not creep while it resizes.
+        if self.held.control_key() {
+            self.pinched += down / NOTCH;
+            return;
+        }
+        // Shift turns a wheel that only goes one way into one that goes
+        // the other, which is what a mouse with a single wheel has.
+        match self.held.shift_key() {
+            true => self.shoved += down + across,
+            false => {
+                self.turned += down;
+                self.shoved += across;
+            }
+        }
+    }
+
+    /// Steps the zoom along by however many notches the wheel was turned with
+    /// ctrl down.
+    ///
+    /// Anchored on the pointer: the page is laid out again at a different size,
+    /// so whatever was under the cursor would otherwise slide out from under it
+    /// — which is the difference between zooming in on something and zooming in
+    /// near it.
+    pub(super) fn zoomed(&mut self, notches: f32) {
+        let was = self.viewport().zoom;
+        let rung = match notches > 0.0 {
+            true => self.rung.saturating_add(1),
+            false => self.rung.saturating_sub(1),
+        };
+        self.rung = rung.min(super::LADDER.len() - 1);
+        let now = self.viewport().zoom;
+        if now == was {
+            return;
+        }
+        // The document point under the cursor, in CSS pixels, kept there. It
+        // can only be approximate: laying the page out in a narrower viewport
+        // reflows it, so what was under the cursor may not be the same distance
+        // into the document afterwards.
+        let (was, now) = (f32::from(was) / 100.0, f32::from(now) / 100.0);
+        let (across, down) = self.pointer;
+        self.scrolled = (
+            (self.scrolled.0 + across / was - across / now).max(0.0),
+            (self.scrolled.1 + down / was - down / now).max(0.0),
+        );
+        let viewport = self.viewport();
+        self.browser.set_viewport(&self.page, viewport);
+        self.changed();
+        // Only now can the page say how big it has become, and the anchor may
+        // have asked to look past the edge of it.
+        self.settle();
+    }
+
+    /// Pulls the scroll back inside the page, which it may have left.
+    ///
+    /// Asking how far the page reaches means painting the Scene, so the answer
+    /// is kept until something that could change it does.
+    fn settle(&mut self) {
+        let reaches = match self.reaches {
+            Some(reaches) => reaches,
+            None => {
+                let reaches = (
+                    self.browser.widest(&self.page).unwrap_or(0.0),
+                    self.browser.height(&self.page).unwrap_or(0.0),
+                );
+                self.reaches = Some(reaches);
+                reaches
+            }
+        };
+        let window = self.windowful();
+        self.scrolled = (
+            self.scrolled.0.clamp(0.0, (reaches.0 - window.0).max(0.0)),
+            self.scrolled.1.clamp(0.0, (reaches.1 - window.1).max(0.0)),
+        );
     }
 
     /// Every move is told to the page, because entering and leaving an element
@@ -32,7 +120,7 @@ impl Open {
         self.hovered();
         let hovered = clock.elapsed();
         let _ = self.browser.pointer_move(&self.page, self.at());
-        super::timed(
+        super::showing::timed(
             "move",
             &[("hover", hovered), ("events", clock.elapsed() - hovered)],
         );
@@ -89,13 +177,14 @@ impl Open {
                 })
         });
         eprintln!(
-            "pointer window {:.0},{:.0}  document {:.0},{:.0}  scrolled {:.0}  \
+            "pointer window {:.0},{:.0}  document {:.0},{:.0}  scrolled {:.0},{:.0}  \
              cursor {:?}  over {found:?} {}",
             self.pointer.0,
             self.pointer.1,
             at.x,
             at.y,
-            self.scrolled,
+            self.scrolled.0,
+            self.scrolled.1,
             hovering.cursor,
             named.unwrap_or_else(|| "no box".to_owned()),
         );
@@ -103,21 +192,9 @@ impl Open {
 
     /// Nothing scrolls in this browser, so scrolling is done to the window: the
     /// page is laid out at its full height and this moves the band on show.
-    pub(super) fn wheeled(&mut self, by: f32) {
-        // The page's height, not the band's: the band is one screenful and
-        // would say there was nowhere to scroll to. Asked once per page rather
-        // than once per notch: working it out means painting the whole Scene,
-        // and a wheel cannot change it.
-        let tallest = match self.tallest {
-            Some(tallest) => tallest,
-            None => {
-                let tallest = self.browser.height(&self.page).unwrap_or(0.0);
-                self.tallest = Some(tallest);
-                tallest
-            }
-        };
-        let furthest = (tallest - self.size.1 as f32).max(0.0);
-        self.scrolled = (self.scrolled - by).clamp(0.0, furthest);
+    pub(super) fn wheeled(&mut self, across: f32, down: f32) {
+        self.scrolled = (self.scrolled.0 - across, self.scrolled.1 - down);
+        self.settle();
         // The pointer has not moved and what is under it has. Without this the
         // cursor keeps answering for wherever the pointer was in the document
         // before the scroll, so it drifts further from what is on screen the
@@ -148,7 +225,7 @@ impl Open {
         };
         // A click that went somewhere starts the new page at the top.
         if self.showing() != showing {
-            self.scrolled = 0.0;
+            self.scrolled = (0.0, 0.0);
         }
         self.settled();
     }
@@ -183,7 +260,7 @@ impl Open {
         if let Err(error) = act(&mut self.browser, &about) {
             eprintln!("could not go there: {error:#}");
         }
-        self.scrolled = 0.0;
+        self.scrolled = (0.0, 0.0);
         self.settled();
     }
 

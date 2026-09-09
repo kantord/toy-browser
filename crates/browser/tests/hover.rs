@@ -12,6 +12,7 @@ fn hoverable(browser: &mut Browser) -> PageId {
         Viewport {
             width: 400,
             height: Some(300),
+            ..Viewport::default()
         },
     );
     browser

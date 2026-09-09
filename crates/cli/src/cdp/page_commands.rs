@@ -154,6 +154,7 @@ fn set_device_metrics(page: &mut Page, browser: &mut Browser, params: &Value) ->
         Viewport {
             width: params["width"].as_u64().unwrap_or(0) as u32,
             height: Some(params["height"].as_u64().unwrap_or(0) as u32),
+            ..Viewport::default()
         },
     );
     Outcome::ok(json!({}))
@@ -186,6 +187,7 @@ fn capture_screenshot(page: &mut Page, browser: &mut Browser, params: &Value) ->
         .map(|clip| Viewport {
             width: round(&clip["width"]),
             height: Some(round(&clip["height"])),
+            ..Viewport::default()
         });
     let png = browser.screenshot(&page.page, clip)?;
     Ok(Outcome::ok(json!({ "data": BASE64.encode(png) })))

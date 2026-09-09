@@ -12,6 +12,7 @@ fn activatable(browser: &mut Browser) -> PageId {
         Viewport {
             width: 800,
             height: Some(600),
+            ..Viewport::default()
         },
     );
     browser

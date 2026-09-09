@@ -40,6 +40,8 @@ Nothing here needs a runtime, an index to rebuild, or a tool to read it.
   nested generic that is a value nobody named.
 - [mem-replace-option-with-some](/.claude/skills/code-style/lints/mem-replace-option-with-some.md)
   — longhand for `Option::replace`. Taken as written; nothing to weigh.
+- [unused-imports](/.claude/skills/code-style/lints/unused-imports.md) — a
+  name nothing needs. Deleted, with one exception worth checking for.
 
 Both of the last two were written the first time they fired, from a grilling in
 the session that tripped them — which is the arrangement

@@ -42,13 +42,15 @@ pub fn export(scene: &Scene) -> String {
 
 fn write_svg(scene: &Scene, refer: Refer) -> String {
     let (wide, tall) = (scene.width.max(1), scene.height.max(1));
-    // The viewBox is what moves a band into view. Marks keep the coordinates
-    // they were painted at, so a band and the whole page say the same thing
-    // about where anything is.
-    let top = scene.top;
+    // The viewBox is what moves a band into view, and what zoom is written as:
+    // marks keep the CSS pixels they were painted in, the picture is as big as
+    // the window it is for, and the two together are the scale. So a band and
+    // the whole page say the same thing about where anything is, at any zoom.
+    let (drawn_wide, drawn_tall) = scene.drawn();
+    let (left, top) = scene.at;
     let mut out = format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{wide}\" height=\"{tall}\" \
-         viewBox=\"0 {top} {wide} {tall}\">\n"
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{drawn_wide}\" \
+         height=\"{drawn_tall}\" viewBox=\"{left} {top} {wide} {tall}\">\n"
     );
     if refer == Refer::Inline {
         faces(scene, &mut out);

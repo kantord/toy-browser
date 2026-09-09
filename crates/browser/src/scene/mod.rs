@@ -202,7 +202,7 @@ pub enum Mark {
 /// The tables are sorted maps so that the same Scene writes down the same way
 /// twice — a Scene that serialised differently on each run would be no use for
 /// comparing anything, which is most of what this project does with them.
-#[derive(Clone, Default, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Scene {
     pub marks: Vec<Mark>,
     pub pictures: BTreeMap<Digest, Picture>,
@@ -210,16 +210,59 @@ pub struct Scene {
     /// How wide and tall the picture is.
     pub width: u32,
     pub height: u32,
-    /// Where the picture starts down the page.
+    /// Where the picture starts in the page.
     ///
     /// Zero for a whole page, which is what a screenshot wants. A window asks
-    /// for a [`band`](Scene::band) instead and gets the same marks at the same
-    /// coordinates with this moved down, so the `viewBox` shows the part it is
-    /// over without a single number in a mark being rewritten.
-    pub top: f32,
+    /// for the part it is [`over`](Scene::over) instead and gets the same marks
+    /// at the same coordinates with this moved, so the `viewBox` shows what it
+    /// is over without a single number in a mark being rewritten.
+    ///
+    /// Both axes, because a page can be wider than the window as easily as it
+    /// is taller: a table that will not fit, a line that will not wrap, a box
+    /// pushed off the side.
+    pub at: (f32, f32),
+    /// How far the marks reach, which is not always as far as the picture.
+    ///
+    /// `height` is the picture's, and for a whole page they are the same thing.
+    /// Sideways they are not: a screenshot is as wide as the viewport and clips
+    /// whatever hangs off the edge, the same as every other browser, while a
+    /// window has to know how far it may be scrolled to see it.
+    pub widest: f32,
+    /// How many pixels of a window one unit of the marks is drawn as.
+    ///
+    /// The marks are in CSS pixels, which is what layout deals in and what a
+    /// page's own scripts are answered in. Zoom is the ratio between those and
+    /// the pixels a window actually has: at 200% the page is laid out in a
+    /// viewport half as wide and every mark in it is drawn twice as big, which
+    /// is why zooming reflows the text and leaves it sharp.
+    ///
+    /// `width` and `height` stay in CSS pixels with everything else. What comes
+    /// out of the rasterizer is this much bigger.
+    pub scale: f32,
+}
+
+impl Default for Scene {
+    fn default() -> Self {
+        Self {
+            marks: Vec::new(),
+            pictures: BTreeMap::new(),
+            faces: BTreeMap::new(),
+            width: 0,
+            height: 0,
+            at: (0.0, 0.0),
+            widest: 0.0,
+            scale: 1.0,
+        }
+    }
 }
 
 impl Scene {
+    /// The size the rasterizer draws this at.
+    pub fn drawn(&self) -> (u32, u32) {
+        let sized = |css: u32| ((css as f32 * self.scale).round() as u32).max(1);
+        (sized(self.width), sized(self.height))
+    }
+
     /// Takes a copy of these bytes if they are not already held, and answers
     /// what to call them.
     pub fn remember_picture(&mut self, bytes: std::sync::Arc<[u8]>, format: Format) -> Digest {

@@ -19,6 +19,7 @@ pub(super) const ELEMENT_KEY: &str = "element-6066-11e4-a52e-4f735466cecf";
 const DEFAULT_VIEWPORT: Viewport = Viewport {
     width: 1280,
     height: Some(720),
+    zoom: Viewport::NORMAL,
 };
 
 /// One WebDriver session: the windows it has open, which one it is looking at,

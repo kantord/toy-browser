@@ -9,19 +9,31 @@
 //! window shows a band of it, which is what a scroll is when nothing is
 //! animated.
 
-use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use anyhow::{Context as _, Result};
 use toy_browser::tiny_skia::Pixmap;
-use toy_browser::{Browser, PageId, Point, Resources, Viewport};
+use toy_browser::{Area, Browser, PageId, Resources, Viewport};
 use winit::application::ApplicationHandler;
-use winit::event::{MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::ModifiersState;
 use winit::window::{Window, WindowId};
 
 /// How far one notch of the wheel moves the page.
 const NOTCH: f32 = 60.0;
+
+/// The zoom levels ctrl and the wheel step through, in per cent.
+///
+/// A ladder rather than a multiplier, because that is what a browser offers and
+/// because the rungs are chosen: 90 and 110 are close together where people
+/// actually sit, and the ends are far apart where they are only visiting.
+const LADDER: [u16; 17] = [
+    25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500,
+];
+
+/// Which rung [`LADDER`] is unzoomed at.
+const NORMAL: usize = 7;
 
 /// Opens a window showing `url`, and does not return until it is closed.
 pub fn open(url: &str, width: u32, height: u32) -> Result<()> {
@@ -31,7 +43,7 @@ pub fn open(url: &str, width: u32, height: u32) -> Result<()> {
         &page,
         Viewport {
             width,
-            height: None,
+            ..Viewport::default()
         },
     );
     browser
@@ -47,12 +59,16 @@ pub fn open(url: &str, width: u32, height: u32) -> Result<()> {
         size: (width, height),
         shown: None,
         painted: None,
-        band: None,
+        over: None,
         pointer: (0.0, 0.0),
         stirred: false,
         turned: 0.0,
-        scrolled: 0.0,
-        tallest: None,
+        shoved: 0.0,
+        pinched: 0.0,
+        held: ModifiersState::empty(),
+        rung: NORMAL,
+        scrolled: (0.0, 0.0),
+        reaches: None,
     };
     event_loop
         .run_app(&mut open)
@@ -70,116 +86,38 @@ struct Open {
     /// The page as pixels, kept until something changes it. Laying a page out
     /// is the expensive part and a redraw is not a reason to do it again.
     painted: Option<Pixmap>,
-    /// Which band `painted` holds: how far down, and how tall. A window moved
-    /// over the page needs a new one even though nothing about the page changed.
-    band: Option<(u32, u32)>,
+    /// Which part of the page `painted` holds, in CSS pixels. A window moved
+    /// over the page needs a new one even though nothing about the page
+    /// changed.
+    over: Option<Area>,
     pointer: (f32, f32),
     /// Whether the pointer has moved since it was last acted on.
     stirred: bool,
     /// How far the wheel has turned since it was last acted on, in pixels.
     turned: f32,
-    scrolled: f32,
-    /// How tall the page is, which is how far it can be scrolled. Kept because
-    /// it costs a Scene to work out and a wheel does not change it.
-    tallest: Option<f32>,
+    /// And how far it has been pushed sideways. A wheel that tilts says so
+    /// itself; a trackpad says it with two fingers; a mouse with one wheel says
+    /// it by holding shift, which is the convention everywhere.
+    shoved: f32,
+    /// How far the wheel has turned *with ctrl down* since it was last acted
+    /// on, in notches. Kept apart from `turned` because it means something
+    /// else entirely: one is where the page is, the other is how big it is.
+    pinched: f32,
+    /// Which modifier keys are down, which is what tells those two apart.
+    held: ModifiersState,
+    /// Which rung of [`LADDER`] the page is drawn at.
+    rung: usize,
+    /// How far the window has been moved over the page, across and down, in
+    /// CSS pixels.
+    scrolled: (f32, f32),
+    /// How far the page reaches, across and down. Kept because it costs a Scene
+    /// to work out and a wheel does not change it.
+    reaches: Option<(f32, f32)>,
 }
 
 struct Shown {
     window: Rc<Window>,
     surface: softbuffer::Surface<Rc<Window>, Rc<Window>>,
-}
-
-impl Open {
-    /// The band of the page the window is over, drawn again only if something
-    /// has changed it or the window has moved.
-    ///
-    /// A band rather than the whole page: drawing a 35,000px article to show
-    /// 800px of it took a second and a half, nearly all of it resvg shaping
-    /// words off screen. Every hover threw that away and did it again.
-    fn repainted(&mut self) -> Result<()> {
-        let band = (self.scrolled.max(0.0) as u32, self.size.1);
-        if self.painted.is_none() || self.band != Some(band) {
-            let clock = std::time::Instant::now();
-            self.painted = Some(self.browser.band(&self.page, band.0 as f32, band.1)?);
-            self.band = Some(band);
-            timed("band", &[("draw", clock.elapsed())]);
-        }
-        Ok(())
-    }
-
-    /// Where in the document the pointer is, which is where it is in the window
-    /// plus however far down the window has been moved.
-    fn at(&self) -> Point {
-        Point {
-            x: self.pointer.0,
-            y: self.pointer.1 + self.scrolled,
-        }
-    }
-
-    fn changed(&mut self) {
-        self.painted = None;
-        self.tallest = None;
-        // A page that has been navigated or resized has different things under
-        // a pointer that never moved, so the cursor is asked again here too.
-        self.hovered();
-        if let Some(shown) = &self.shown {
-            let url = self
-                .browser
-                .url(&self.page)
-                .unwrap_or(&self.title)
-                .to_owned();
-            shown.window.set_title(&format!("toy-browser — {url}"));
-            shown.window.request_redraw();
-        }
-    }
-
-    /// Blits the band of the page the window is over.
-    fn present(&mut self) -> Result<()> {
-        let clock = std::time::Instant::now();
-        let (width, height) = self.size;
-        self.repainted()?;
-        let drawn = clock.elapsed();
-        // Two fields, not the whole window: the page is only read and the
-        // surface is only written, so neither has to be copied to satisfy the
-        // other. Cloning the pixmap here was 4MB a frame.
-        let (Some(page), Some(shown)) = (self.painted.as_ref(), self.shown.as_mut()) else {
-            return Ok(());
-        };
-        let (Some(wide), Some(tall)) = (NonZeroU32::new(width), NonZeroU32::new(height)) else {
-            return Ok(());
-        };
-        shown
-            .surface
-            .resize(wide, tall)
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
-        let mut buffer = shown
-            .surface
-            .buffer_mut()
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
-        blit::onto(page, &mut buffer, (width, height));
-        buffer.present().map_err(|e| anyhow::anyhow!("{e}"))?;
-        timed(
-            "frame",
-            &[("page", drawn), ("blit", clock.elapsed() - drawn)],
-        );
-        Ok(())
-    }
-}
-
-/// Says what a turn of the loop cost, when asked to.
-///
-/// `TOY_BROWSER_TRACE_FRAME=1` turns it on, the same switch the browser's own
-/// [`band`](toy_browser::Browser::band) reports under, so one run accounts for
-/// a frame from the wheel to the window.
-fn timed(what: &str, parts: &[(&str, std::time::Duration)]) {
-    if std::env::var_os("TOY_BROWSER_TRACE_FRAME").is_none() {
-        return;
-    }
-    let mut line = format!("{what:<6}");
-    for (name, took) in parts {
-        line.push_str(&format!("  {name} {:>6.1}ms", took.as_secs_f32() * 1000.0));
-    }
-    eprintln!("{line}");
 }
 
 impl ApplicationHandler for Open {
@@ -207,6 +145,7 @@ impl ApplicationHandler for Open {
                     Viewport {
                         width: self.size.0,
                         height: None,
+                        ..Viewport::default()
                     },
                 );
                 // Nothing redraws on its own while the loop is waiting, so the
@@ -223,12 +162,19 @@ impl ApplicationHandler for Open {
     /// Everything the loop had has been handled, so the pointer has stopped
     /// somewhere: this is where a move is finally acted on.
     fn about_to_wait(&mut self, _: &ActiveEventLoop) {
-        // Scrolling first: it decides where in the document the pointer is, and
-        // a hover worked out before it would be about where the page used to
-        // be.
-        let turned = std::mem::take(&mut self.turned);
-        if turned != 0.0 {
-            self.wheeled(turned);
+        // Zoom before scroll before hover, which is the order they depend on
+        // each other: zooming lays the page out again and so moves everything a
+        // scroll is measured against, and both decide what the pointer is over.
+        let pinched = std::mem::take(&mut self.pinched);
+        if pinched != 0.0 {
+            self.zoomed(pinched);
+        }
+        let (turned, shoved) = (
+            std::mem::take(&mut self.turned),
+            std::mem::take(&mut self.shoved),
+        );
+        if turned != 0.0 || shoved != 0.0 {
+            self.wheeled(shoved, turned);
         }
         if std::mem::take(&mut self.stirred) {
             self.moved();
@@ -251,18 +197,8 @@ impl ApplicationHandler for Open {
                 self.pointer = (position.x as f32, position.y as f32);
                 self.stirred = true;
             }
-            WindowEvent::MouseWheel { delta, .. } => {
-                // Added up, not acted on, for the same reason a pointer move
-                // is: a trackpad reports a flick as dozens of events, and each
-                // one here is a hover and a repaint of the page. Acting on
-                // every one makes the queue fill faster than it drains, so the
-                // page arrives further behind the finger the longer the scroll
-                // goes on.
-                self.turned += match delta {
-                    MouseScrollDelta::LineDelta(_, lines) => lines * NOTCH,
-                    MouseScrollDelta::PixelDelta(at) => at.y as f32,
-                };
-            }
+            WindowEvent::ModifiersChanged(held) => self.held = held.state(),
+            WindowEvent::MouseWheel { delta, .. } => self.turned(delta),
             WindowEvent::MouseInput {
                 state,
                 button: MouseButton::Left,
@@ -282,3 +218,4 @@ impl ApplicationHandler for Open {
 
 mod acts;
 mod blit;
+mod showing;
