@@ -67,8 +67,7 @@ impl Browser {
                 held.drawn = None;
                 held.composed = Some(crate::Laid {
                     unit,
-                    width: viewport.width,
-                    height: viewport.height,
+                    viewport,
                     revisions,
                 });
             }
@@ -87,7 +86,7 @@ impl Browser {
         let Some(held) = self.pages.get(page).and_then(|held| held.composed.as_ref()) else {
             return true;
         };
-        held.width != viewport.width || held.height != viewport.height || held.revisions != now
+        held.viewport != viewport || held.revisions != now
     }
 
     /// Every page in the unit and how many times its document has changed.

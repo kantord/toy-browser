@@ -119,8 +119,7 @@ impl Browser {
         if let Some(page) = self.pages.get_mut(page) {
             page.measured = Some(Measured {
                 revision,
-                width: viewport.width,
-                height: viewport.height,
+                viewport,
                 boxes,
                 styles,
             });
@@ -141,9 +140,7 @@ impl Browser {
             .get(page)
             .and_then(|page| page.measured.as_ref())
             .is_some_and(|measured| {
-                measured.revision == revision
-                    && measured.width == viewport.width
-                    && measured.height == viewport.height
+                measured.revision == revision && measured.viewport == viewport
             });
         if fresh {
             return Ok(());

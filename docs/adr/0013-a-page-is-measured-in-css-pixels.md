@@ -94,9 +94,13 @@ reader can look is somewhere the page has an answer for.
 - The window scrolls in CSS pixels. `scrolled`, the band it asks for and the
   height it clamps against are all CSS, so none of them changes meaning when the
   zoom does.
-- The zoom is part of `Viewport`, which is the key both the layout cache and the
-  script environment are compared by — so changing it invalidates exactly what
-  it should, with no code that has to remember to.
+- The zoom is part of `Viewport`, which is the key the layout cache, the
+  composition cache and the script environment are all compared by — so changing
+  it invalidates exactly what it should, with no code that has to remember to.
+  Two of those three compared the viewport a field at a time and did not learn
+  about the zoom when it was added: a zoomed page was drawn bigger and never
+  laid out again, so nothing reflowed. They hold the whole value now, which is
+  what makes the next field safe.
 - It is whole per cent rather than a fraction, because `Viewport` has to compare
   by equality and floats do not.
 - The glyph atlas does not stamp at a scaled matrix, so a zoomed page takes the

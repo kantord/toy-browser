@@ -148,13 +148,28 @@ fn announce_navigation(page: &mut Page, browser: &mut Browser, before: &str) -> 
     }
 }
 
+/// The viewport a client asks for, and how big its pixels are.
+///
+/// `width` and `height` are CSS pixels and `deviceScaleFactor` says how many
+/// real ones each is drawn as — which is the same arrangement as our own
+/// Viewport with the multiplication done the other way round, so this is where
+/// the two are reconciled. A client asking for 400 CSS pixels at a factor of 2
+/// wants a 800-pixel picture of a page laid out in 400, which is a page zoomed
+/// to 200%.
 fn set_device_metrics(page: &mut Page, browser: &mut Browser, params: &Value) -> Outcome {
+    let across = params["width"].as_u64().unwrap_or(0) as f64;
+    let down = params["height"].as_u64().unwrap_or(0) as f64;
+    // Zero means "whatever the page is", and so does an absent factor.
+    let factor = match params["deviceScaleFactor"].as_f64() {
+        Some(factor) if factor > 0.0 => factor,
+        _ => 1.0,
+    };
     browser.set_viewport(
         &page.page,
         Viewport {
-            width: params["width"].as_u64().unwrap_or(0) as u32,
-            height: Some(params["height"].as_u64().unwrap_or(0) as u32),
-            ..Viewport::default()
+            width: (across * factor).round() as u32,
+            height: Some((down * factor).round() as u32),
+            zoom: (factor * 100.0).round() as u16,
         },
     );
     Outcome::ok(json!({}))
@@ -162,8 +177,11 @@ fn set_device_metrics(page: &mut Page, browser: &mut Browser, params: &Value) ->
 
 fn layout_metrics(page: &mut Page, browser: &mut Browser) -> Outcome {
     let viewport = browser.viewport(&page.page);
-    let width = viewport.width;
-    let height = viewport.height.unwrap_or(0);
+    // In CSS pixels, which is what a viewport is measured in everywhere a page
+    // can see it. Ours is the window's, and the zoom is the difference.
+    let scale = viewport.scale();
+    let width = (viewport.width as f32 / scale).round() as u32;
+    let height = (viewport.height.unwrap_or(0) as f32 / scale).round() as u32;
     Outcome::ok(json!({
         "layoutViewport": {
             "pageX": 0, "pageY": 0,
@@ -172,7 +190,7 @@ fn layout_metrics(page: &mut Page, browser: &mut Browser) -> Outcome {
         "visualViewport": {
             "offsetX": 0, "offsetY": 0, "pageX": 0, "pageY": 0,
             "clientWidth": width, "clientHeight": height,
-            "scale": 1, "zoom": 1,
+            "scale": 1, "zoom": scale,
         },
         "contentSize": { "x": 0, "y": 0, "width": width, "height": height },
     }))

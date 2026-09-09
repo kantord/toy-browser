@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>A table told to be a block</title>
+    <style>
+      body { margin: 0; font: 16px/1.5 sans-serif; }
+      table { width: 300px; display: block; }
+      td { background: #eef; }
+    </style>
+  </head>
+  <body>
+    <!--
+      `display` on a <table> is not decoration: a page that sets it means the
+      element is no longer a table, and its rows are wrapped in an anonymous one
+      of their own. Wikipedia does exactly this to an infobox below 720px, which
+      is why an article looks fine in a wide window and falls apart in a narrow
+      one — or, the same thing, when it is zoomed in.
+    -->
+    <table>
+      <tr><td>First row</td></tr>
+      <tr><td>Second row</td></tr>
+      <tr><td>Third row</td></tr>
+    </table>
+  </body>
+</html>

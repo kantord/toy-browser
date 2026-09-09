@@ -243,6 +243,30 @@ What the split settles is *where* the difference is. What it cannot settle is
 whether text inside an agreed box is drawn differently or placed differently;
 that needs geometry for the text, which this browser has none of.
 
+## The same page at six sizes
+
+A suite that only ever looks at a page one way cannot see what a zoom breaks. A
+rule read in `em`, a border rounded to a whole pixel, a line that fits at one
+width and wraps at another — none of those is exercised until the same document
+is laid out at several. `specs/zoom.spec.mjs` reads three pages at 50, 75, 100,
+150, 200 and 400 per cent, from both browsers, and keeps an expected file per
+level under `tests/corpus/expected/zoom/`.
+
+Both sides are asked the same way, and the way is worth writing down.
+`deviceScaleFactor` is how a client says *this many real pixels per CSS pixel*
+over CDP; Chromium then lays the page out in the CSS viewport it was given and
+draws it that much bigger, which is exactly what page zoom is. Our own
+`Emulation.setDeviceMetricsOverride` turns the same two numbers into a Viewport
+width and a zoom. So the pictures come out the same size, the boxes are in the
+same units, and a disagreement is about the page rather than about the setup.
+
+What it says today: the two focused pages disagree by exactly as much at 400%
+as at 50% — 11.97px on one, nothing at all on the other — so the zoom itself
+introduces no error there. Hacker News disagrees more at 150% and 200% than at
+100%, but it already disagrees at 100% for a reason `docs/upstream.md` records
+(a table's columns built from its first row only), and a narrower viewport gives
+that bug more to do. The growth is not yet attributable to zoom.
+
 ## Isolating one difference
 
 `just compare` names the element. It does not say what about it is wrong, and

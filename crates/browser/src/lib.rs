@@ -149,8 +149,14 @@ struct Pointer {
 
 struct Measured {
     revision: u64,
-    width: u32,
-    height: Option<u32>,
+    /// The whole Viewport, not the parts of it that seemed to matter.
+    ///
+    /// It used to be a width and a height compared one at a time, and when the
+    /// Viewport gained a zoom the comparison did not: changing it left this
+    /// looking fresh, so the page was drawn bigger without being laid out
+    /// again and nothing reflowed. Holding the value means a field added to it
+    /// is a field this compares by.
+    viewport: Viewport,
     boxes: toy_browser_engine::Boxes,
     /// What each element's style computed to, published with the boxes.
     styles: toy_browser_engine::Styles,
@@ -163,8 +169,9 @@ struct Measured {
 /// nothing in the host changed.
 struct Laid {
     unit: blitz::Composed,
-    width: u32,
-    height: Option<u32>,
+    /// What it was laid out for. The whole Viewport, for the reason
+    /// [`Measured`] gives.
+    viewport: Viewport,
     revisions: Vec<(PageId, u64)>,
 }
 

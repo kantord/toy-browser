@@ -122,3 +122,65 @@ fn a_zoomed_page_draws_more_ink_than_an_unzoomed_one() {
         "200% draws much more ink in the same window: {plain} against {zoomed}"
     );
 }
+
+#[test]
+fn changing_the_zoom_on_a_page_lays_it_out_again() {
+    // The one that was missing. Every test above sets the zoom before the page
+    // is loaded, and a page loaded at 200% laid out correctly all along — what
+    // did not work was *changing* it, because the layout cache compared the
+    // viewport's width and height one at a time and had never been told about
+    // the zoom. The page was drawn bigger and never reflowed.
+    let mut browser = browser();
+    let page = opened(&mut browser, 100);
+    let plain = first_paragraph(&mut browser, &page);
+
+    browser.set_viewport(
+        &page,
+        Viewport {
+            width: WIDE,
+            height: None,
+            zoom: 200,
+        },
+    );
+    let zoomed = first_paragraph(&mut browser, &page);
+    assert_eq!(
+        (plain, zoomed),
+        (WIDE as f32, WIDE as f32 / 2.0),
+        "the same page, laid out again in half the CSS pixels"
+    );
+}
+
+#[test]
+fn text_rewraps_when_the_zoom_changes() {
+    // What reflowing means to a reader: the same words, on more lines. Read
+    // from the page's own height, which is what a paragraph forced to wrap
+    // more makes taller.
+    let mut browser = browser();
+    let page = browser.new_page().unwrap();
+    browser.set_viewport(
+        &page,
+        Viewport {
+            width: WIDE,
+            height: None,
+            zoom: 100,
+        },
+    );
+    browser
+        .navigate(&page, fixture("wrapping.html").as_str())
+        .unwrap();
+    let plain = browser.height(&page).unwrap();
+
+    browser.set_viewport(
+        &page,
+        Viewport {
+            width: WIDE,
+            height: None,
+            zoom: 200,
+        },
+    );
+    let zoomed = browser.height(&page).unwrap();
+    assert!(
+        zoomed > plain * 1.5,
+        "half the width takes many more lines: {plain} then {zoomed}"
+    );
+}

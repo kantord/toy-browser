@@ -124,6 +124,48 @@ is every measurement, every `p.&nbsp;195`, every unit — the article reads
 
 ---
 
+## blitz-dom: `display` on a `<table>` is ignored and its rows go sideways
+
+**Version.** `blitz-dom 0.3.0-beta.2`.
+
+**What happens.** A `<table>` whose computed `display` is not a table value is
+still given a table's box construction, and its `<tr>` children are laid out as
+columns of a single row rather than stacked. Every row ends up on the same line,
+marching across the page.
+
+```html
+<style>table { width: 300px; display: block; }</style>
+<table>
+  <tr><td>First row</td></tr>
+  <tr><td>Second row</td></tr>
+  <tr><td>Third row</td></tr>
+</table>
+```
+
+|  | rows at | table height |
+|---|---|---|
+| Chromium | `(2,2) (2,30) (2,58)` | 86px |
+| blitz | `(0,0) (64,0) (151,0)` | 26px |
+
+**What should happen.** `display: block` makes the element a block box. Its
+`<tr>` children are then table-internal boxes with a non-table parent, so CSS 2.1
+§17.2.1 wraps them in an *anonymous table* — and they stack, as Chromium's
+column shows.
+
+**Where.** Box construction: the tree builder decides an element is a table from
+its tag rather than from its computed `display`, so no anonymous wrapping is
+generated and the rows are handed to the table algorithm directly.
+
+**Why it matters more than it looks.** It is not an exotic declaration. English
+Wikipedia gives `.infobox` a narrow-viewport rule below 720px, so every article
+lays out correctly in a wide window and comes apart in a narrow one — or, which
+is the same thing, as soon as the reader zooms in. Half the marks on the page end
+up drawn off the right-hand edge.
+
+**Also.** `display: block` on a `<tr>` or a `<tbody>` collapses the whole table
+to nothing — every box `0x0` — which is likely the same cause seen from the
+other side.
+
 ## What is not here
 
 `taffy` has no floats and `parley` no inline exclusions in the versions

@@ -1,0 +1,12 @@
+10 elements, 860.50px apart in total
+HTML 0  off by 60.00px  ours [0,0,800,26]  theirs [0,0,800,86]
+BODY 0/1  off by 60.00px  ours [0,0,800,26]  theirs [0,0,800,86]
+TABLE 0/1/0  off by 60.00px  ours [0,0,300,26]  theirs [0,0,300,86]
+TBODY 0/1/0/0  off by 213.50px  ours [0,0,300,26]  theirs [2,2,86.5,82]
+TR 0/1/0/0/0  off by 22.50px  ours [0,0,64,26]  theirs [2,2,86.5,26]
+TD 0/1/0/0/0/0  off by 22.50px  ours [0,0,64,26]  theirs [2,2,86.5,26]
+TR 0/1/0/0/1  off by 62.00px  ours [64,0,87,26]  theirs [2,30,86.5,26]
+TD 0/1/0/0/1/0  off by 62.00px  ours [64,0,87,26]  theirs [2,30,86.5,26]
+TR 0/1/0/0/2  off by 149.00px  ours [151,0,69,26]  theirs [2,58,86.5,26]
+TD 0/1/0/0/2/0  off by 149.00px  ours [151,0,69,26]  theirs [2,58,86.5,26]
+painted differently: 3 elements, 3.000 apart in colour in total
