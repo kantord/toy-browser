@@ -26,10 +26,16 @@ impl Open {
     /// Every move is told to the page, because entering and leaving an element
     /// is a difference between two of them and the page is entitled to both.
     pub(super) fn moved(&mut self) {
+        let clock = std::time::Instant::now();
         // Before the events, not after: `pointer_move` sets the hover state
         // too, and asking afterwards would always be told nothing had changed.
         self.hovered();
+        let hovered = clock.elapsed();
         let _ = self.browser.pointer_move(&self.page, self.at());
+        super::timed(
+            "move",
+            &[("hover", hovered), ("events", clock.elapsed() - hovered)],
+        );
     }
 
     /// Tells the page where the pointer is, and the window what to draw as one.

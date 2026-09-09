@@ -12,7 +12,7 @@
 use blitz_dom::Node;
 
 use crate::blitz::LaidOut;
-use crate::scene::{Mark, Scene};
+use crate::scene::Mark;
 
 /// The marker on a list item: a disc, a number, a letter — whatever the counter
 /// style says.
@@ -25,7 +25,13 @@ use crate::scene::{Mark, Scene};
 ///
 /// Only `list-style-position: outside`, which is the initial value. `inside`
 /// puts the marker in the text flow and blitz lays it out there itself.
-pub(super) fn of(page: &LaidOut, node: &Node, x: f32, y: f32, scene: &mut Scene) -> Vec<Mark> {
+pub(super) fn of(
+    page: &LaidOut,
+    node: &Node,
+    x: f32,
+    y: f32,
+    pass: &mut super::Pass<'_>,
+) -> Vec<Mark> {
     use blitz_dom::node::{ListItemLayout, ListItemLayoutPosition, Marker};
     let Some(element) = node.element_data() else {
         return Vec::new();
@@ -48,7 +54,7 @@ pub(super) fn of(page: &LaidOut, node: &Node, x: f32, y: f32, scene: &mut Scene)
     // On the baseline of the item's own first line rather than at the top of
     // its box, so the marker sits level with the words it belongs to.
     let down = y + level_with_the_text(element, layout);
-    super::words::written(page, layout, &text_of(marker), (across, down), scene)
+    super::words::written(page, layout, &text_of(marker), (across, down), pass)
 }
 
 /// What the marker reads.

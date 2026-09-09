@@ -58,7 +58,7 @@ fn painted(
         laid_out,
         mounted: Default::default(),
     };
-    let scene = toy_browser::blitz::paint::scene(&alone, viewport, resources);
+    let scene = toy_browser::blitz::paint::scene(&alone, viewport, resources, None);
     let rendered = toy_browser::render_scene(&scene)?;
     std::fs::write(into, &rendered.svg)?;
     let png = into.with_extension("png");

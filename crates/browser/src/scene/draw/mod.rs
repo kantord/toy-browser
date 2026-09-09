@@ -18,15 +18,17 @@
 //! and holds what every one of them needs — a surface, a matrix, a clip — and
 //! [`glyphs`], [`fills`] and [`blur`] each draw one kind.
 
+mod atlas;
 mod blur;
 mod fills;
 mod glyphs;
+mod images;
 
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use resvg::tiny_skia::{self, Pixmap, PixmapMut, Transform};
-use skrifa::FontRef;
+use skrifa::outline::OutlineGlyphCollection;
 
 use super::{Area, Digest, Mark, Paint, Scene};
 
@@ -40,7 +42,6 @@ pub fn draw(scene: &Scene) -> Result<Pixmap> {
     let start = Transform::from_translate(0.0, -scene.top);
     let mut hand = Hand {
         faces: HashMap::new(),
-        pictures: HashMap::new(),
         scene,
     };
     let mut onto = Onto {
@@ -56,11 +57,9 @@ pub fn draw(scene: &Scene) -> Result<Pixmap> {
 struct Hand<'a> {
     /// Opened once each rather than per glyph: reading a face's tables is the
     /// same work every time and a page draws thousands of glyphs from a few.
-    faces: HashMap<Digest, Option<FontRef<'a>>>,
-    /// Decoded once each. A tiled background asks for the same picture on
-    /// every fill, and decoding a PNG per fill would be worse than the SVG
-    /// round trip this file exists to avoid.
-    pictures: HashMap<Digest, Option<Pixmap>>,
+    /// The *collection* rather than the face, because asking a face for its
+    /// outlines parses those tables again — 129 of them was 6ms of a 8ms frame.
+    faces: HashMap<Digest, Option<OutlineGlyphCollection<'a>>>,
     scene: &'a Scene,
 }
 
@@ -101,12 +100,15 @@ impl Hand<'_> {
                 ..
             } => self.glyphs(onto, glyphs, *size, *paint, face),
             Mark::Image { area, picture, .. } => self.image(onto, area, picture),
-            Mark::Clip { to, marks, .. } => {
-                let inside = narrowed(onto, to);
-                let outer = std::mem::replace(&mut onto.clip, inside);
-                self.marks(onto, marks);
-                onto.clip = outer;
-            }
+            Mark::Clip { to, marks, .. } => match narrowed(onto, to, marks) {
+                // Cuts nothing, so whatever is already in force stays in force.
+                None => self.marks(onto, marks),
+                Some(inside) => {
+                    let outer = onto.clip.replace(inside);
+                    self.marks(onto, marks);
+                    onto.clip = outer;
+                }
+            },
             Mark::Moved {
                 by, about, marks, ..
             } => {
@@ -125,7 +127,16 @@ impl Hand<'_> {
 }
 
 /// The clip a `Clip` mark makes, narrowed by whatever it is already inside.
-fn narrowed(onto: &Onto<'_, '_>, to: &Area) -> Option<tiny_skia::Mask> {
+///
+/// `None` when there is nothing for it to do, and there usually is not. A mask
+/// is the size of the whole surface — allocated, filled, and intersected — and
+/// most of what a page marks `overflow: hidden` never overflows: at the top of
+/// one article, 25 clips cost 15ms of a 19ms frame and not one of them cut
+/// anything off.
+fn narrowed(onto: &Onto<'_, '_>, to: &Area, marks: &[Mark]) -> Option<tiny_skia::Mask> {
+    if reach(marks).is_some_and(|reach| holds(to, &reach)) {
+        return None;
+    }
     let (wide, tall) = (onto.pixmap.width(), onto.pixmap.height());
     let mut mask = match onto.clip.as_ref() {
         // Narrowing rather than replacing: a clip inside a clip shows only
@@ -149,6 +160,82 @@ fn narrowed(onto: &Onto<'_, '_>, to: &Area) -> Option<tiny_skia::Mask> {
     let path = rectangle(to)?;
     mask.intersect_path(&path, tiny_skia::FillRule::Winding, true, onto.at);
     Some(mask)
+}
+
+/// How far a group of marks reaches, or `None` if that cannot be said.
+///
+/// Generous where it is unsure, because the answer decides whether a clip is
+/// skipped: reaching too far keeps a clip that was not needed, and reaching too
+/// short would drop one that was.
+fn reach(marks: &[Mark]) -> Option<Area> {
+    marks.iter().try_fold(None, |so_far: Option<Area>, mark| {
+        let one = extent(mark)?;
+        Some(Some(so_far.map_or(one, |area| joined(&area, &one))))
+    })?
+}
+
+/// The box one mark draws inside, or `None` for one that cannot say.
+fn extent(mark: &Mark) -> Option<Area> {
+    match mark {
+        Mark::Fill { area, shadow, .. } => {
+            let cast = shadow.map_or(0.0, |it| it.blur + it.across.abs().max(it.down.abs()));
+            Some(Area {
+                x: area.x - cast,
+                y: area.y - cast,
+                width: area.width + cast * 2.0,
+                height: area.height + cast * 2.0,
+            })
+        }
+        Mark::Image { area, .. } => Some(*area),
+        // A line of text hangs above its baseline and drops below it. The font
+        // size rather than the face's own metrics, for the same reason the band
+        // uses it: measuring would mean opening the face to decide whether to
+        // open the face.
+        Mark::Glyphs {
+            places,
+            baseline,
+            size,
+            ..
+        } => {
+            // Least and greatest rather than first and last: a run laid out
+            // right to left runs the other way, and a negative width here
+            // would say a clip holds something it does not.
+            let least = places.iter().copied().fold(f32::INFINITY, f32::min);
+            let most = places.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            if !least.is_finite() || !most.is_finite() {
+                return None;
+            }
+            Some(Area {
+                x: least - size,
+                y: baseline - size * 1.5,
+                width: (most - least) + size * 2.0,
+                height: size * 2.0,
+            })
+        }
+        // Everything inside is already cut to this.
+        Mark::Clip { to, .. } => Some(*to),
+        // A matrix can put its contents anywhere.
+        Mark::Moved { .. } => None,
+    }
+}
+
+/// The smallest box holding both.
+fn joined(one: &Area, two: &Area) -> Area {
+    let (x, y) = (one.x.min(two.x), one.y.min(two.y));
+    Area {
+        x,
+        y,
+        width: (one.x + one.width).max(two.x + two.width) - x,
+        height: (one.y + one.height).max(two.y + two.height) - y,
+    }
+}
+
+/// Whether the first box holds all of the second.
+fn holds(outer: &Area, inner: &Area) -> bool {
+    outer.x <= inner.x
+        && outer.y <= inner.y
+        && outer.x + outer.width >= inner.x + inner.width
+        && outer.y + outer.height >= inner.y + inner.height
 }
 
 /// A rectangle as a path.

@@ -224,10 +224,19 @@ impl Scene {
     /// what to call them.
     pub fn remember_picture(&mut self, bytes: std::sync::Arc<[u8]>, format: Format) -> Digest {
         let digest = Digest::of(&bytes);
+        self.hold_picture(digest, bytes, format);
+        digest
+    }
+
+    /// Holds a picture's bytes under a name already worked out.
+    ///
+    /// The same door [`hold_face`](Self::hold_face) is, and for the same
+    /// reason: hashing a megabyte of JPEG is not something a caller can afford
+    /// to do once per element per frame.
+    pub fn hold_picture(&mut self, digest: Digest, bytes: std::sync::Arc<[u8]>, format: Format) {
         self.pictures
             .entry(digest)
             .or_insert(Picture { bytes, format });
-        digest
     }
 
     pub fn remember_face(&mut self, bytes: std::sync::Arc<[u8]>) -> Digest {

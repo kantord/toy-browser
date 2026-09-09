@@ -23,14 +23,20 @@ use crate::scene::{Digest, Mark, Paint, Scene};
 use toy_browser_engine::ids;
 
 /// Every run of text an element lays out, positioned glyph by glyph.
-pub(super) fn of(page: &LaidOut, node: &Node, x: f32, y: f32, scene: &mut Scene) -> Vec<Mark> {
+pub(super) fn of(
+    page: &LaidOut,
+    node: &Node,
+    x: f32,
+    y: f32,
+    pass: &mut super::Pass<'_>,
+) -> Vec<Mark> {
     let Some(inline) = node
         .element_data()
         .and_then(|it| it.inline_layout_data.as_ref())
     else {
         return Vec::new();
     };
-    written(page, &inline.layout, &inline.text, (x, y), scene)
+    written(page, &inline.layout, &inline.text, (x, y), pass)
 }
 
 /// One parley layout, drawn where it was put.
@@ -43,11 +49,17 @@ pub(super) fn written(
     layout: &parley::Layout<blitz_dom::node::TextBrush>,
     source: &str,
     origin: (f32, f32),
-    scene: &mut Scene,
+    pass: &mut super::Pass<'_>,
 ) -> Vec<Mark> {
     let (x, y) = origin;
     let mut marks = Vec::new();
     for line in layout.lines() {
+        // The whole reason the pass carries a zone. A long article lays out
+        // thousands of lines and a window is over about forty of them; turning
+        // the rest into positioned glyphs is most of what painting costs.
+        if !pass.wants(&covered(&line, origin)) {
+            continue;
+        }
         // Several glyph runs share one underlying run — one per span, one per
         // the text between them — and a glyph run does not say which part of it
         // is its own. They come in order, so the count already emitted from a
@@ -68,7 +80,7 @@ pub(super) fn written(
                 count,
                 origin: (x, y),
             };
-            let drawn = mark(page, &placed, source, scene);
+            let drawn = mark(page, &placed, source, pass.scene);
             marks.extend(super::around::behind(page, &placed));
             marks.extend(super::around::lines_over(page, &placed, drawn.as_ref()));
             marks.extend(drawn);
@@ -178,6 +190,25 @@ fn named(font: &parley::FontData) -> Known {
 struct Known {
     digest: Digest,
     bytes: Arc<[u8]>,
+}
+
+/// The box a line of text is drawn in.
+///
+/// From the line's own metrics: how far down it sits, how far it reaches, and
+/// how tall it is above and below the baseline. Generous, because it decides
+/// whether the line is drawn at all and the cost of keeping one too many is a
+/// few glyphs nobody sees.
+fn covered(
+    line: &parley::layout::Line<'_, blitz_dom::node::TextBrush>,
+    origin: (f32, f32),
+) -> crate::scene::Area {
+    let metrics = line.metrics();
+    crate::scene::Area {
+        x: origin.0 + metrics.inline_min_coord,
+        y: origin.1 + metrics.block_min_coord,
+        width: metrics.inline_max_coord - metrics.inline_min_coord,
+        height: metrics.block_max_coord - metrics.block_min_coord,
+    }
 }
 
 /// What part of the source a glyph run covers, and where each of its characters

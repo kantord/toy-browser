@@ -804,4 +804,4 @@ FORM 0/1/0/0/0/3/0/3/3  off by 148.00px  ours [8,1001,796,20]  theirs [8,1149,79
 INPUT 0/1/0/0/0/3/0/3/3/0  off by 150.00px  ours [278,999,306,21]  theirs [338.81,1149,184,24]
 1 styles computed differently
 INPUT 0/1/0/0/0/3/0/3/3/0  color: rgb(130, 130, 130), theirs rgb(0, 0, 0)
-painted differently: 155 elements, 72.600 apart in colour in total
+painted differently: 155 elements, 72.509 apart in colour in total

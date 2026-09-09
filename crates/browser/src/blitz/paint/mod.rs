@@ -26,6 +26,8 @@ use blitz_dom::{Node, NodeId};
 use crate::Viewport;
 use crate::blitz::{Composed, LaidOut};
 use crate::scene::{Area, Corners, Ink, Mark, Paint, Scene};
+
+use pass::Pass;
 use toy_browser_engine::ids;
 
 mod around;
@@ -33,6 +35,7 @@ mod boxes;
 mod edges;
 mod effects;
 mod markers;
+mod pass;
 mod pictures;
 pub(super) mod words;
 
@@ -45,13 +48,21 @@ pub fn scene(
     unit: &Composed,
     viewport: Viewport,
     resources: &toy_browser_fetch::Resources,
+    visible: Option<Area>,
 ) -> Scene {
     let mut scene = Scene {
         width: viewport.width.max(1),
         ..Scene::default()
     };
-    let mut height = 0.0f32;
-    let marks = compose(unit, 0.0, 0.0, &mut scene, &mut height, resources);
+    let mut pass = Pass {
+        scene: &mut scene,
+        resources,
+        height: 0.0,
+        seen: HashSet::new(),
+        visible,
+    };
+    let marks = compose(unit, 0.0, 0.0, &mut pass);
+    let height = pass.height;
     // Never nothing: a rasterizer refuses a picture with no area, and a page
     // that has not loaded yet is a real thing to be asked to draw.
     scene.height = viewport
@@ -102,24 +113,10 @@ fn paper(page: &LaidOut, area: Area) -> Mark {
 /// `across` and `down` carry the offset rather than each page being drawn into a
 /// space of its own, which is the whole point: every mark in the unit is in the
 /// same coordinates, so paint order is one order and a Point means one thing.
-fn compose(
-    unit: &Composed,
-    across: f32,
-    down: f32,
-    scene: &mut Scene,
-    height: &mut f32,
-    resources: &toy_browser_fetch::Resources,
-) -> Vec<Mark> {
-    let mut seen = HashSet::new();
-    let mut marks = subtree(
-        unit,
-        unit.laid_out.root_id(),
-        (across, down),
-        scene,
-        height,
-        resources,
-        &mut seen,
-    );
+fn compose(unit: &Composed, across: f32, down: f32, pass: &mut Pass<'_>) -> Vec<Mark> {
+    let seen = std::mem::take(&mut pass.seen);
+    let mut marks = subtree(unit, unit.laid_out.root_id(), (across, down), pass);
+    pass.seen = seen;
 
     for (node, (area, child)) in &unit.mounted {
         let to = Area {
@@ -131,16 +128,10 @@ fn compose(
         // A mounted page is as tall as it is, and only as much of it shows as
         // the frame allows. What it holds must not make the document taller —
         // the frame already counted, as a box in the page around it.
-        let mut clipped = 0.0;
+        let so_far = std::mem::take(&mut pass.height);
         let mut inner = vec![paper(&child.laid_out, to)];
-        inner.extend(compose(
-            child,
-            across + area.x,
-            down + area.y,
-            scene,
-            &mut clipped,
-            resources,
-        ));
+        inner.extend(compose(child, across + area.x, down + area.y, pass));
+        pass.height = so_far;
         marks.push(Mark::Clip {
             to,
             marks: inner,
@@ -157,31 +148,20 @@ fn compose(
 /// what is inside it off at its own edge, and `opacity` fades all of it
 /// together. Neither can be said about a list of marks that has forgotten which
 /// of them belong to whom.
-fn subtree(
-    unit: &Composed,
-    id: NodeId,
-    at: (f32, f32),
-    scene: &mut Scene,
-    height: &mut f32,
-    resources: &toy_browser_fetch::Resources,
-    seen: &mut HashSet<NodeId>,
-) -> Vec<Mark> {
-    let Some((node, x, y)) = arrived(unit, id, at, seen) else {
+fn subtree(unit: &Composed, id: NodeId, at: (f32, f32), pass: &mut Pass<'_>) -> Vec<Mark> {
+    let Some((node, x, y)) = arrived(unit, id, at, &mut pass.seen) else {
         return Vec::new();
     };
-    *height = height.max(y + node.final_layout().size.height);
+    pass.height = pass.height.max(y + node.final_layout().size.height);
+    // A transform can put this subtree anywhere, so where its boxes were laid
+    // out no longer says whether they show. Everything under one is painted in
+    // full.
+    let outside = match effects::turns(node) {
+        true => pass.visible.take(),
+        false => None,
+    };
 
-    // The box itself — what it is drawn *as*. Never clipped: a box does not
-    // cut off its own edge.
-    // A background picture paints over the colour, so it is offered to the
-    // Fill rather than drawn beside it — one fill, one rounding, one shadow.
-    let shown = shown(node);
-    let mut marks = Vec::new();
-    if shown {
-        let backdrop = pictures::backdrop(&unit.laid_out, node, x, y, scene, resources);
-        marks.extend(boxes::background(node, x, y, backdrop));
-        marks.extend(edges::of(node, x, y));
-    }
+    let mut marks = itself(unit, node, (x, y), pass);
 
     // Its content — what is drawn *in* it. This is what `overflow` cuts, and it
     // includes the element's own text: an inline root holds the words of
@@ -193,24 +173,14 @@ fn subtree(
     // under its own border. Nothing showed it for a long time because the boxes
     // that hold text on most pages have no padding; a table cell does, and
     // every one of them had its text against the rule.
-    let (across, down) = content(node, x, y);
-    let mut inside = Vec::new();
-    if shown {
-        inside.extend(pictures::of(
-            &unit.laid_out,
-            node,
-            across,
-            down,
-            scene,
-            resources,
-        ));
-        inside.extend(markers::of(&unit.laid_out, node, across, down, scene));
-        inside.extend(words::of(&unit.laid_out, node, across, down, scene));
-    }
+    let mut inside = within(unit, node, content(node, x, y), pass);
     // Children are walked either way: `visibility` is inherited but can be
     // turned back on, so a hidden box is not a hidden subtree.
     for child in unit.laid_out.paint_order(id) {
-        inside.extend(subtree(unit, child, at, scene, height, resources, seen));
+        inside.extend(subtree(unit, child, at, pass));
+    }
+    if let Some(zone) = outside {
+        pass.visible = Some(zone);
     }
 
     match boxes::clips(node) {
@@ -222,6 +192,39 @@ fn subtree(
         None => marks.extend(inside),
     }
     effects::turned(node, x, y, effects::faded(node, marks))
+}
+
+/// What a box is drawn *as*: its background and its edges.
+///
+/// Never clipped — a box does not cut off its own edge. A background picture
+/// paints over the colour, so it is offered to the Fill rather than drawn
+/// beside it: one fill, one rounding, one shadow.
+fn itself(unit: &Composed, node: &Node, at: (f32, f32), pass: &mut Pass<'_>) -> Vec<Mark> {
+    if !shown(node) {
+        return Vec::new();
+    }
+    let (x, y) = at;
+    let backdrop = pictures::backdrop(&unit.laid_out, node, x, y, pass);
+    let mut marks = boxes::background(node, x, y, backdrop);
+    marks.extend(edges::of(node, x, y));
+    marks
+}
+
+/// What is drawn *in* a box: its pictures, its marker, its words.
+///
+/// This is what `overflow` cuts, and it includes the element's own text: an
+/// inline root holds the words of everything inside it, so leaving them out
+/// here would let the one thing most likely to overflow escape the clip.
+fn within(unit: &Composed, node: &Node, at: (f32, f32), pass: &mut Pass<'_>) -> Vec<Mark> {
+    if !shown(node) {
+        return Vec::new();
+    }
+    let (across, down) = at;
+    let mut marks = Vec::new();
+    marks.extend(pictures::of(&unit.laid_out, node, across, down, pass));
+    marks.extend(markers::of(&unit.laid_out, node, across, down, pass));
+    marks.extend(words::of(&unit.laid_out, node, across, down, pass));
+    marks
 }
 
 /// The node this walk has reached and where it sits, or nothing at all.

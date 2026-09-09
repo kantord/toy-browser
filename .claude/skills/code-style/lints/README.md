@@ -38,6 +38,8 @@ Nothing here needs a runtime, an index to rebuild, or a tool to read it.
   — a signature longer than anyone holds. Usually a value nobody named yet.
 - [type-complexity](/.claude/skills/code-style/lints/type-complexity.md) — a
   nested generic that is a value nobody named.
+- [mem-replace-option-with-some](/.claude/skills/code-style/lints/mem-replace-option-with-some.md)
+  — longhand for `Option::replace`. Taken as written; nothing to weigh.
 
 Both of the last two were written the first time they fired, from a grilling in
 the session that tripped them — which is the arrangement

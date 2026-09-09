@@ -10,8 +10,7 @@ use resvg::tiny_skia::{self, Pixmap, Transform};
 
 use super::blur::blur;
 use super::{Area, Hand, Onto, colour, rectangle};
-use crate::scene::raster::decoded_pixmap;
-use crate::scene::{Corners, Digest, Ink, Shadow, Stop, Tiles};
+use crate::scene::{Corners, Ink, Shadow, Stop, Tiles};
 
 /// Everything a Fill needs beyond its shape.
 impl Hand<'_> {
@@ -59,6 +58,7 @@ impl Hand<'_> {
         let Some(cell) = self.tile(tiles, area) else {
             return;
         };
+        let cell = cell.as_ref();
         let brush = tiny_skia::Paint {
             anti_alias: true,
             shader: tiny_skia::Pattern::new(
@@ -100,77 +100,6 @@ impl Hand<'_> {
             layer.as_ref(),
             &tiny_skia::PixmapPaint::default(),
             Transform::identity(),
-            onto.clip.as_ref(),
-        );
-    }
-
-    /// One cell of the pattern a tiled background repeats.
-    ///
-    /// The picture drawn at the size `background-size` asked for, inside a cell
-    /// as big as the *box* on any axis that does not repeat — so `no-repeat`
-    /// draws one copy and the rest of the cell is empty. That is the same trick
-    /// the SVG writing plays with `<pattern>`, and doing it the same way is
-    /// what keeps the two writings of one Scene agreeing.
-    fn tile(&mut self, tiles: &Tiles, area: &Area) -> Option<Pixmap> {
-        let (across, down) = tiles.tile;
-        if across <= 0.0 || down <= 0.0 {
-            return None;
-        }
-        let wide = if tiles.repeat.0 {
-            across
-        } else {
-            area.width.max(across)
-        };
-        let tall = if tiles.repeat.1 {
-            down
-        } else {
-            area.height.max(down)
-        };
-        let picture = self.picture(&tiles.picture)?;
-        let (from_wide, from_tall) = (picture.width() as f32, picture.height() as f32);
-        let mut cell = Pixmap::new(wide.ceil().max(1.0) as u32, tall.ceil().max(1.0) as u32)?;
-        cell.draw_pixmap(
-            0,
-            0,
-            picture.as_ref(),
-            &tiny_skia::PixmapPaint {
-                quality: tiny_skia::FilterQuality::Bilinear,
-                ..Default::default()
-            },
-            Transform::from_scale(across / from_wide.max(1.0), down / from_tall.max(1.0)),
-            None,
-        );
-        Some(cell)
-    }
-
-    /// A Picture as pixels, decoded once and kept.
-    fn picture(&mut self, digest: &Digest) -> Option<&Pixmap> {
-        if !self.pictures.contains_key(digest) {
-            let decoded = self.scene.pictures.get(digest).and_then(decoded_pixmap);
-            self.pictures.insert(*digest, decoded);
-        }
-        self.pictures.get(digest).and_then(|it| it.as_ref())
-    }
-
-    pub(super) fn image(&mut self, onto: &mut Onto<'_, '_>, area: &Area, picture: &Digest) {
-        let Some(decoded) = self.picture(picture) else {
-            return;
-        };
-        let (wide, tall) = (decoded.width() as f32, decoded.height() as f32);
-        if wide <= 0.0 || tall <= 0.0 {
-            return;
-        }
-        let fitted = Transform::from_translate(area.x, area.y)
-            .pre_concat(Transform::from_scale(area.width / wide, area.height / tall));
-        onto.pixmap.draw_pixmap(
-            0,
-            0,
-            decoded.as_ref(),
-            &tiny_skia::PixmapPaint {
-                quality: tiny_skia::FilterQuality::Bilinear,
-                ..Default::default()
-            },
-            onto.at.pre_concat(fitted),
             onto.clip.as_ref(),
         );
     }

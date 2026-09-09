@@ -14,6 +14,16 @@ use blitz_dom::Node;
 use crate::scene::{Ink, Mark};
 use toy_browser_engine::ids;
 
+/// Whether this element carries a transform at all.
+///
+/// Asked before its subtree is painted, not after: everything under a
+/// transform has to be painted whether or not its boxes fall where anyone is
+/// looking, because the matrix decides where it ends up.
+pub(super) fn turns(node: &Node) -> bool {
+    node.primary_styles()
+        .is_some_and(|style| !style.get_box().transform.0.is_empty())
+}
+
 /// The same marks, moved, if this element carries a transform.
 ///
 /// About the centre of the border box, which is what `transform-origin`

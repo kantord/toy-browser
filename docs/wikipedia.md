@@ -206,13 +206,58 @@ article at 1200×800, with `TOY_BROWSER_TRACE_FRAME=1` and
 | whole page through resvg | 2.3s | 2.3s |
 | a band through resvg | 2.3s | 51ms |
 | a band, drawn directly | 424ms | 175ms |
-| …with the face named once | **310ms** | **36ms** |
+| …with the face named once | 310ms | 36ms |
+| …with the glyphs stamped | 285ms | 30ms |
+| …painting only what shows | **280ms** | **22ms** |
 
-The last row is one line of the story worth keeping. A Mark names its font by a
+Two of those rows are worth the sentence each. A Mark names its font by a
 `Digest`, which is a hash of the whole font file, and `face()` worked one out per
 glyph run — so a page with two thousand runs hashed and copied the same
 half-megabyte of Noto two thousand times, and *that* was 140ms of the 157ms it
 took to paint the Scene. It hid behind resvg for as long as resvg was slower.
+
+Filling a glyph's outline was the next thing to dominate: 7.1ms of a 9ms band,
+for 2100 glyphs drawn from 129 distinct shapes, because tiny-skia builds an edge
+list and walks it per call whether the letter is new or not. Each shape is now
+filled once into a small pixmap and stamped — see `scene/draw/atlas.rs`, which
+also says why a glyph is kept per third of a pixel rather than per pixel.
+
+Then the pictures, which were paid for twice per frame and both times in full:
+
+- **Painting hashed every image file, per element.** A Mark names a picture by
+  a `Digest` the same way it names a font, and `remember_picture` hashed the
+  bytes to work one out — so a page of thumbnails spent **860ms** of a
+  second-long frame hashing pictures that had not changed. Kept now against the
+  `Arc` Resources handed over, so a re-fetch is still noticed.
+- **Drawing decoded every image, per frame.** The decoded-pixmap cache lived on
+  the painter, and the painter is made fresh for each frame, so a band with
+  photographs in it decoded them all again every time it was shown: 100ms of a
+  120ms frame at the top of the article. It is keyed by Digest, which names the
+  bytes, so what comes back can only be a picture of the same file.
+- **And resampled them again, per frame.** A page draws a picture at the same
+  size on every frame it is on screen, and scaling a photograph down to a
+  thumbnail is the same arithmetic each time. `scene/draw/images.rs` keeps the
+  patch at the size it goes down at — which turns out to be one idea for both
+  an `<img>` and a background, since an image is a patch the size of its box.
+
+And then painting itself, which had been about the whole document all along.
+Drawing was cut to a band early — that is what `Scene::band` is for — but the
+Scene handed to it was still built by walking all 38,663px and asking every box
+what it drew, so 92% of the marks were made to be thrown away. Turning a parley
+layout into positioned glyphs is 11ms of a 15ms paint; a fill or a picture is
+nearly free to make. So a pass now carries the part of the document being
+looked at, and a line of text outside it is not turned into glyphs.
+
+Three things are worth saying about that:
+
+- **It is a rectangle, not a pair of heights.** Nothing scrolls sideways today,
+  so a window's zone is always the full width and a vertical test would answer
+  the same. But the question *is* "does this overlap what can be seen", and the
+  narrower version would have to be undone the first time a page is zoomed.
+- **The page is still as tall as it is.** Height comes from every box, whether
+  or not it shows: how far a page scrolls is a fact about the whole of it.
+- **Nothing under a transform is skipped**, because where a box was laid out
+  says nothing about where a matrix puts it.
 
 Two things in the window cost more than the drawing did, and neither was drawing:
 
@@ -224,3 +269,7 @@ Two things in the window cost more than the drawing did, and neither was drawing
 - **The height was asked for per notch.** How far a page can scroll is the
   height of its picture, and working that out means painting the Scene. It
   cannot change while the wheel turns, so it is kept.
+
+And the blit copied the band before reading it — 4MB a frame — because it went
+through one method that borrowed the whole window. Reading the pixmap and
+writing the surface are two fields, and borrowing them separately costs nothing.

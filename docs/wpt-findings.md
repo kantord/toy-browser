@@ -8,10 +8,31 @@ Where it stood when this was written:
 
 | | tests |
 |---|---|
-| pass | 391 |
-| fail | 398 |
+| pass | 467 |
+| fail | 322 |
 | error | 24 |
 | timeout | 1 |
+
+391 of those passed before the screen stopped being drawn through SVG, and none
+of what moved it since was aimed here: **+8** for drawing a box's contents
+inside its padding rather than at its border box, and **+68** for rasterizing
+the marks directly rather than through resvg.
+
+A further +28 was once put down to the glyph atlas. That was wrong twice over
+and both halves are worth keeping written down.
+
+**The atlas was not running here.** A reftest renders a whole page, a whole page
+is drawn under the identity matrix, and `Transform::is_translate` answers *no*
+for the identity — so glyphs were stamped only when a window asked for a band,
+and never in this suite. The two paths therefore disagreed by a pixel on about
+one glyph in fifty; `tests/bands.rs` now holds them to the same answer.
+
+**And the number moves on its own.** Four runs read 467, 495, 469, 467 — three
+of them tight and one 26 higher, with nothing between them that the whole-page
+path would notice. So a swing of a few dozen here is not evidence, and the
+corpus is the instrument to read for a change this small: it compares exact
+numbers against Chromium on the same pages every time, and it put the atlas at
+a slight *improvement*, 72.600 to 72.509 apart in colour.
 
 **455 until the blitz 0.3 upgrade**, and the 64 that went are one thing: a
 split inline's border box now takes layout space, so every

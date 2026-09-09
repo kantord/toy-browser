@@ -17,6 +17,7 @@ mod navigate;
 mod pointer;
 mod scene;
 
+mod measure;
 mod script;
 mod view;
 
@@ -94,6 +95,13 @@ struct Page {
     /// scrolling, or being moved over. Thrown away when the composition is
     /// rebuilt, and when hovering restyles something.
     drawn: Option<scene::Scene>,
+    /// What part of the document `drawn` has the text of.
+    ///
+    /// A Scene painted for a window is complete about everything except words
+    /// outside the zone it was painted for — see `paint::Pass`. So it answers
+    /// for another zone only if it already covers it. `None` means it was
+    /// painted whole and answers for anything.
+    drawn_for: Option<scene::Area>,
     /// Where the mouse is and whether it is pressed. A setting of the Page, so
     /// it outlives each event the way a real pointer does.
     pointer: Pointer,
@@ -210,6 +218,7 @@ impl Browser {
                 measured: None,
                 composed: None,
                 drawn: None,
+                drawn_for: None,
                 pointer: Pointer::default(),
                 visited: Vec::new(),
                 mounted: HashMap::new(),

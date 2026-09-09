@@ -96,13 +96,15 @@ impl Open {
     /// A band rather than the whole page: drawing a 35,000px article to show
     /// 800px of it took a second and a half, nearly all of it resvg shaping
     /// words off screen. Every hover threw that away and did it again.
-    fn pixels(&mut self) -> Result<&Pixmap> {
+    fn repainted(&mut self) -> Result<()> {
         let band = (self.scrolled.max(0.0) as u32, self.size.1);
         if self.painted.is_none() || self.band != Some(band) {
+            let clock = std::time::Instant::now();
             self.painted = Some(self.browser.band(&self.page, band.0 as f32, band.1)?);
             self.band = Some(band);
+            timed("band", &[("draw", clock.elapsed())]);
         }
-        Ok(self.painted.as_ref().expect("just filled in"))
+        Ok(())
     }
 
     /// Where in the document the pointer is, which is where it is in the window
@@ -133,9 +135,14 @@ impl Open {
 
     /// Blits the band of the page the window is over.
     fn present(&mut self) -> Result<()> {
+        let clock = std::time::Instant::now();
         let (width, height) = self.size;
-        let page = self.pixels()?.clone();
-        let Some(shown) = &mut self.shown else {
+        self.repainted()?;
+        let drawn = clock.elapsed();
+        // Two fields, not the whole window: the page is only read and the
+        // surface is only written, so neither has to be copied to satisfy the
+        // other. Cloning the pixmap here was 4MB a frame.
+        let (Some(page), Some(shown)) = (self.painted.as_ref(), self.shown.as_mut()) else {
             return Ok(());
         };
         let (Some(wide), Some(tall)) = (NonZeroU32::new(width), NonZeroU32::new(height)) else {
@@ -149,35 +156,30 @@ impl Open {
             .surface
             .buffer_mut()
             .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-        // The pixmap is already the band this window is over, so it starts at
-        // its own first row.
-        let from = 0usize;
-        let across = page.width() as usize;
-        for y in 0..height as usize {
-            for x in 0..width as usize {
-                let pixel = page
-                    .pixels()
-                    .get((from + y) * across + x)
-                    .filter(|_| x < across);
-                buffer[y * width as usize + x] = match pixel {
-                    // Over white, because that is what the page is on.
-                    Some(pixel) => {
-                        let clear = 255 - u32::from(pixel.alpha());
-                        let (r, g, b) = (
-                            u32::from(pixel.red()) + clear,
-                            u32::from(pixel.green()) + clear,
-                            u32::from(pixel.blue()) + clear,
-                        );
-                        (r.min(255) << 16) | (g.min(255) << 8) | b.min(255)
-                    }
-                    None => 0x00ff_ffff,
-                };
-            }
-        }
+        blit::onto(page, &mut buffer, (width, height));
         buffer.present().map_err(|e| anyhow::anyhow!("{e}"))?;
+        timed(
+            "frame",
+            &[("page", drawn), ("blit", clock.elapsed() - drawn)],
+        );
         Ok(())
     }
+}
+
+/// Says what a turn of the loop cost, when asked to.
+///
+/// `TOY_BROWSER_TRACE_FRAME=1` turns it on, the same switch the browser's own
+/// [`band`](toy_browser::Browser::band) reports under, so one run accounts for
+/// a frame from the wheel to the window.
+fn timed(what: &str, parts: &[(&str, std::time::Duration)]) {
+    if std::env::var_os("TOY_BROWSER_TRACE_FRAME").is_none() {
+        return;
+    }
+    let mut line = format!("{what:<6}");
+    for (name, took) in parts {
+        line.push_str(&format!("  {name} {:>6.1}ms", took.as_secs_f32() * 1000.0));
+    }
+    eprintln!("{line}");
 }
 
 impl ApplicationHandler for Open {
@@ -279,3 +281,4 @@ impl ApplicationHandler for Open {
 }
 
 mod acts;
+mod blit;
