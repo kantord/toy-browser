@@ -10,6 +10,18 @@ use anyhow::Result;
 
 use crate::{Browser, Measured, PageId, Viewport};
 
+/// The state a page's scripts have already been told about.
+///
+/// Not the boxes themselves — those are large and are what this exists to avoid
+/// copying. These are what they are derived from, so two of these being equal
+/// means the boxes would be too.
+#[derive(PartialEq, Eq)]
+pub(crate) struct Told {
+    revision: u64,
+    viewport: Viewport,
+    url: String,
+}
+
 impl Browser {
     /// What the page's own relative references resolve against.
     pub(crate) fn base_url(&self, page: &PageId) -> Option<toy_browser_fetch::Url> {
@@ -34,15 +46,47 @@ impl Browser {
 
         self.remeasure_if_stale(page, revision, viewport)?;
 
+        // Only when something the page would hear about has changed. Telling it
+        // means copying the whole page's geometry, and a window comes through
+        // here on the way into every frame.
+        let told = Told {
+            revision,
+            viewport,
+            url,
+        };
+        if self
+            .pages
+            .get(page)
+            .is_some_and(|held| held.told.as_ref() == Some(&told))
+        {
+            return Ok(());
+        }
+        self.tell(page, &session, &told)?;
+        if let Some(held) = self.pages.get_mut(page) {
+            held.told = Some(told);
+        }
+        Ok(())
+    }
+
+    /// Hands the page's scripts their surroundings: how big the window is,
+    /// where they are, and where every element sits.
+    ///
+    /// The boxes are not a global a page reads — every element asks for its own
+    /// — so they go to the realm rather than into the script.
+    fn tell(
+        &mut self,
+        page: &PageId,
+        session: &toy_browser_engine::SessionId,
+        told: &Told,
+    ) -> Result<()> {
         let measured = self.pages.get(page).and_then(|page| page.measured.as_ref());
         let boxes = measured.map(|it| it.boxes.clone()).unwrap_or_default();
         let styles = measured.map(|it| it.styles.clone()).unwrap_or_default();
-
         self.engine.set_environment(
-            &session,
+            session,
             &toy_browser_engine::Environment {
-                viewport: (viewport.width, viewport.height.unwrap_or(0)),
-                url,
+                viewport: (told.viewport.width, told.viewport.height.unwrap_or(0)),
+                url: told.url.clone(),
                 boxes,
                 styles,
             },

@@ -208,7 +208,8 @@ article at 1200×800, with `TOY_BROWSER_TRACE_FRAME=1` and
 | a band, drawn directly | 424ms | 175ms |
 | …with the face named once | 310ms | 36ms |
 | …with the glyphs stamped | 285ms | 30ms |
-| …painting only what shows | **280ms** | **22ms** |
+| …painting only what shows | 280ms | 22ms |
+| …telling the scripts only when it changed | **275ms** | **9ms** |
 
 Two of those rows are worth the sentence each. A Mark names its font by a
 `Digest`, which is a hash of the whole font file, and `face()` worked one out per
@@ -258,6 +259,13 @@ Three things are worth saying about that:
   or not it shows: how far a page scrolls is a fact about the whole of it.
 - **Nothing under a transform is skipped**, because where a box was laid out
   says nothing about where a matrix puts it.
+
+The last of it was not drawing or painting at all. Anything that might run a
+script goes through `sync` first, because a script may ask where an element is —
+and `sync` handed the realm a copy of every box and every computed style on the
+way past, whether or not anything had moved, and the realm copied them again.
+3.4ms a frame to tell a page something it had already been told. It is told now
+only when the revision, the viewport or the URL has changed.
 
 Two things in the window cost more than the drawing did, and neither was drawing:
 

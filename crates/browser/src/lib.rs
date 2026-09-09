@@ -81,6 +81,13 @@ struct Page {
     /// The last measurement, and the state it described. Re-measuring is a full
     /// layout pass, so it happens only when that state has moved on.
     measured: Option<Measured>,
+    /// What the page's scripts were last told about their surroundings.
+    ///
+    /// Telling them means handing the realm a copy of every element's box and
+    /// every element's computed style — two copies, since the realm keeps its
+    /// own — and that is 3.4ms on a long article. It was being done on the way
+    /// into anything that might run a script, which on a window is every frame.
+    told: Option<measure::Told>,
     /// The last composition, and the state it described.
     ///
     /// Separate from `measured` because it holds far more — every page in the
@@ -216,6 +223,7 @@ impl Browser {
                 viewport: Viewport::default(),
                 run_scripts: true,
                 measured: None,
+                told: None,
                 composed: None,
                 drawn: None,
                 drawn_for: None,
@@ -281,7 +289,7 @@ impl Browser {
 }
 
 /// The size a document is laid out and rendered at.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Viewport {
     pub width: u32,
     /// Height in px; `None` lets the layout size the output to its content.
