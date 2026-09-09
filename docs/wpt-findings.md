@@ -8,8 +8,8 @@ Where it stood when this was written:
 
 | | tests |
 |---|---|
-| pass | 467 |
-| fail | 322 |
+| pass | 553 |
+| fail | 236 |
 | error | 24 |
 | timeout | 1 |
 
@@ -27,12 +27,32 @@ for the identity — so glyphs were stamped only when a window asked for a band,
 and never in this suite. The two paths therefore disagreed by a pixel on about
 one glyph in fifty; `tests/bands.rs` now holds them to the same answer.
 
-**And the number moves on its own.** Four runs read 467, 495, 469, 467 — three
-of them tight and one 26 higher, with nothing between them that the whole-page
-path would notice. So a swing of a few dozen here is not evidence, and the
-corpus is the instrument to read for a change this small: it compares exact
-numbers against Chromium on the same pages every time, and it put the atlas at
-a slight *improvement*, 72.600 to 72.509 apart in colour.
+**And the number moved on its own**, which was itself the finding. Four runs
+read 467, 495, 469, 467 with nothing between them the whole-page path would
+notice, and that was written down here as suite flakiness. It was not: it was a
+race of ours, and it is the next entry.
+
+## Every page with a picture was a coin toss — *fixed*, +86
+
+A read that finished *before* the settling loop was reached was never handed to
+the document. The loop sampled how many reads had completed, then waited, then
+broke out if that number had not moved — so bytes that had already landed made
+the count go up before the sample was taken, the round saw no change, and
+`handle_messages` was never called at all. The picture was there and the
+document was never told.
+
+Which way it went depended on whether the read won the race, so it changed run
+to run on the same file. One page laid its image out 96x96 three times and 0x0
+three times in six runs.
+
+It is worth what it is worth: **46 of the 347 failures shared just two reference
+pages**, and both draw a PNG through `<img>`. Delivery is taken first now, and
+the round goes again only if resolving asked for something new or something
+arrived while it was happening. 467 to 553.
+
+The lesson is not about images. A loop that asks "did anything arrive while I
+waited" cannot also be the loop that takes delivery, unless it takes delivery
+first.
 
 **455 until the blitz 0.3 upgrade**, and the 64 that went are one thing: a
 split inline's border box now takes layout space, so every

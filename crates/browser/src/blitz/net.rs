@@ -91,6 +91,15 @@ impl Files {
         self.outstanding.done.load(Ordering::SeqCst)
     }
 
+    /// Whether anything is still on its way.
+    ///
+    /// Asked after taking delivery, because taking delivery is what starts the
+    /// next round: a stylesheet that has just been read names the pictures it
+    /// wants, and those are in flight before this returns.
+    pub fn flying(&self) -> bool {
+        self.outstanding.count.load(Ordering::SeqCst) > 0
+    }
+
     /// Waits until nothing is still on its way, or until patience runs out.
     pub fn settle(&self) {
         let mut held = self

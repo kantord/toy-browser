@@ -100,14 +100,24 @@ pub fn lay_out(
     // the handler, so the bytes were already parsed into a stylesheet or an
     // image and posted to the document. This waits for the reads to finish and
     // tells it to take delivery.
+    //
+    // Delivery is taken *first*, before asking whether anything new arrived.
+    // Sampling the count before the wait and stopping when it had not moved
+    // meant a read that finished before this loop was reached — a warm file, a
+    // fast disk — was never handed to the document at all: the bytes had
+    // landed, the number had already gone up, and the round broke without
+    // calling `handle_messages`. An image was then laid out at nothing by
+    // nothing, on some runs and not others, depending on which won the race.
     for _ in 0..ROUNDS {
-        let before = files.delivered();
         files.settle();
-        if files.delivered() == before {
-            break;
-        }
+        let taken = files.delivered();
         document.handle_messages();
         document.resolve(0.0);
+        // Round again only if resolving asked for something, or something
+        // arrived while it was happening.
+        if files.delivered() == taken && !files.flying() {
+            break;
+        }
     }
     Ok(LaidOut {
         document,
