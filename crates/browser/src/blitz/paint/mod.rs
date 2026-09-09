@@ -31,12 +31,14 @@ use pass::Pass;
 use toy_browser_engine::ids;
 
 mod around;
+mod backdrop;
 mod boxes;
 mod edges;
 mod effects;
 mod markers;
 mod pass;
 mod pictures;
+mod rows;
 pub(super) mod words;
 
 /// One render unit, as one Scene.
@@ -190,7 +192,7 @@ fn subtree(unit: &Composed, id: NodeId, at: (f32, f32), pass: &mut Pass<'_>) -> 
     // under its own border. Nothing showed it for a long time because the boxes
     // that hold text on most pages have no padding; a table cell does, and
     // every one of them had its text against the rule.
-    let mut inside = within(unit, node, content(node, x, y), pass);
+    let mut inside = within(unit, node, boxes::content(node, x, y), pass);
     // Children are walked either way: `visibility` is inherited but can be
     // turned back on, so a hidden box is not a hidden subtree.
     for child in unit.laid_out.paint_order(id) {
@@ -199,6 +201,8 @@ fn subtree(unit: &Composed, id: NodeId, at: (f32, f32), pass: &mut Pass<'_>) -> 
     if let Some(zone) = outside {
         pass.visible = Some(zone);
     }
+
+    marks.extend(rows::painted(unit, node, id, pass));
 
     match boxes::clips(node) {
         Some(to) => marks.push(Mark::Clip {
@@ -217,12 +221,19 @@ fn subtree(unit: &Composed, id: NodeId, at: (f32, f32), pass: &mut Pass<'_>) -> 
 /// paints over the colour, so it is offered to the Fill rather than drawn
 /// beside it: one fill, one rounding, one shadow.
 fn itself(unit: &Composed, node: &Node, at: (f32, f32), pass: &mut Pass<'_>) -> Vec<Mark> {
-    if !shown(node) {
+    if !boxes::shown(node) {
         return Vec::new();
     }
     let (x, y) = at;
-    let backdrop = pictures::backdrop(&unit.laid_out, node, x, y, pass);
-    let mut marks = boxes::background(node, x, y, backdrop);
+    let laid = node.final_layout().size;
+    let area = Area {
+        x,
+        y,
+        width: laid.width,
+        height: laid.height,
+    };
+    let backdrop = backdrop::of(&unit.laid_out, node, x, y, pass);
+    let mut marks = boxes::background(node, area, backdrop);
     marks.extend(edges::of(node, x, y));
     marks
 }
@@ -233,7 +244,7 @@ fn itself(unit: &Composed, node: &Node, at: (f32, f32), pass: &mut Pass<'_>) -> 
 /// inline root holds the words of everything inside it, so leaving them out
 /// here would let the one thing most likely to overflow escape the clip.
 fn within(unit: &Composed, node: &Node, at: (f32, f32), pass: &mut Pass<'_>) -> Vec<Mark> {
-    if !shown(node) {
+    if !boxes::shown(node) {
         return Vec::new();
     }
     let (across, down) = at;
@@ -270,34 +281,6 @@ fn arrived<'a>(
     }
     let placed = node.absolute_position(0.0, 0.0);
     Some((node, placed.x + at.0, placed.y + at.1))
-}
-
-/// Where this box's contents start: its border box, moved in by whatever the
-/// border and padding take.
-fn content(node: &Node, x: f32, y: f32) -> (f32, f32) {
-    let laid = node.final_layout();
-    (
-        x + laid.border.left + laid.padding.left,
-        y + laid.border.top + laid.padding.top,
-    )
-}
-
-/// Whether this element paints itself at all.
-///
-/// `visibility: hidden` keeps the box — it still takes up room and still lays
-/// out what is inside it — and draws nothing. That is what makes it different
-/// from `display: none`, and it is the difference every collapsed menu on
-/// Wikipedia is built on.
-///
-/// Per element rather than per subtree, because the property is inherited but
-/// can be set back to `visible` further down, and a browser honours that. The
-/// one place this is approximate is an inline root: its words include those of
-/// everything inside it, so a visible span inside a hidden paragraph loses its
-/// text along with the paragraph's.
-fn shown(node: &Node) -> bool {
-    use style::computed_values::visibility::T as Visibility;
-    node.primary_styles()
-        .is_none_or(|style| style.get_inherited_box().visibility == Visibility::Visible)
 }
 
 /// A colour as the Scene holds one, from the floats a style system deals in.

@@ -8,8 +8,8 @@ Where it stood when this was written:
 
 | | tests |
 |---|---|
-| pass | 553 |
-| fail | 236 |
+| pass | 625 |
+| fail | 164 |
 | error | 24 |
 | timeout | 1 |
 
@@ -32,71 +32,8 @@ read 467, 495, 469, 467 with nothing between them the whole-page path would
 notice, and that was written down here as suite flakiness. It was not: it was a
 race of ours, and it is the next entry.
 
-## Every page with a picture was a coin toss — *fixed*, +86
-
-A read that finished *before* the settling loop was reached was never handed to
-the document. The loop sampled how many reads had completed, then waited, then
-broke out if that number had not moved — so bytes that had already landed made
-the count go up before the sample was taken, the round saw no change, and
-`handle_messages` was never called at all. The picture was there and the
-document was never told.
-
-Which way it went depended on whether the read won the race, so it changed run
-to run on the same file. One page laid its image out 96x96 three times and 0x0
-three times in six runs.
-
-It is worth what it is worth: **46 of the 347 failures shared just two reference
-pages**, and both draw a PNG through `<img>`. Delivery is taken first now, and
-the round goes again only if resolving asked for something new or something
-arrived while it was happening. 467 to 553.
-
-The lesson is not about images. A loop that asks "did anything arrive while I
-waited" cannot also be the loop that takes delivery, unless it takes delivery
-first.
-
-**455 until the blitz 0.3 upgrade**, and the 64 that went are one thing: a
-split inline's border box now takes layout space, so every
-`block-in-inline-insert` and `-remove` case differs from its reference by the
-border width. `docs/upstream.md` has it written up. It was taken knowingly —
-what the upgrade bought is floats, and `docs/wikipedia.md` measures that on a
-real page. This is the sharpest the two axes have ever disagreed.
-
-It started this session at 82 passing. The canvas being painted at the root
-box's size rather than the picture's took it to 333; the XHTML parse dropping
-everything after the first `</script>` took it to 355 and 46 timeouts to 1.
-
-Then borders took it **down** to 353, which is the more interesting number.
-Painting them won 13 tests that could not have passed without them and lost 15
-that had been passing *vacuously* — "test passes if there is no red" cases that
-passed because we painted no red, and no anything. Those 15 now fail for a true
-reason, and it is not the border: an `<iframe>` has no intrinsic size here, so
-`width: auto` fills the parent instead of falling back to 300×150. The scoreboard
-went down by two and the suite started measuring something real. `GAPS.md` 2
-records it.
-
-Installing Ahem then took it to **362**. All nine gained tests use it, which is
-as clean an attribution as this suite gives.
-
-Block-in-inline took it to **371** — nine won, none lost. Then one line of
-`Cargo.toml` took it to **449**: blitz depends on the `image` crate with
-`default-features = false`, so it could decode no format at all, and every
-`<img>` without explicit dimensions measured 0×0 and was never drawn. See
-`docs/gaps-closed.md` 0.
-
-Painting what a page actually asks for — rounded corners, shadows, gradients,
-opacity, transforms, clipping — then took it to **455**, which is the smaller
-half of that change. The larger half is that a modern page stops looking like a
-wireframe; `docs/what-real-pages-need.md` measures that axis instead.
-
-The next three paint features — `background-image: url()`, `text-decoration`
-and list markers — moved it **not at all**, and neither did the seven things
-found by rendering Wikipedia (`docs/wikipedia.md`), which included
-`visibility: hidden` being ignored outright and every link inside a table being
-unclickable. That is the clearest statement of
-the disagreement this file has. All of them match Chromium
-on their probe or take a real page measurably closer; none of them is what
-`normal-flow` measures, which is where a box goes and not what is drawn in it.
-A feature can be worth having and be invisible here.
+What has been fixed, and what each was worth, is in
+`docs/wpt-fixed.md`. This file is what is still wrong.
 
 ## How this was worked out
 

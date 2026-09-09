@@ -41,6 +41,7 @@ dom_api! {
     "getElementById" => |d, id: String| d.get_element_by_id(&id),
     "elementsByTag" => |d, tag: String| d.elements_by_tag(&tag),
     "createElement" => |d, tag: String| d.create_element(&tag),
+    "createElementNS" => |d, _ns: String, tag: String| d.create_element(&tag),
     "createTextNode" => |d, text: String| d.create_text_node(&text),
     "tagName" => |d, id: usize| d.tag_name(id),
     "text" => |d, id: usize| d.text(id),

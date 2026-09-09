@@ -34,6 +34,33 @@ impl Dom {
             .unwrap_or_default()
     }
 
+    /// Everything under `id` that the selector matches, in tree order.
+    ///
+    /// Scoped rather than a whole-document query narrowed afterwards. The
+    /// difference is a subtree that has been built but not yet inserted: it is
+    /// in no document, so a document-wide query cannot see it, and
+    /// `element.querySelector` on it answered nothing. testharness.js builds
+    /// its whole results table that way before putting it on the page.
+    pub fn query_all_in(&self, id: usize, selector: &str) -> Vec<usize> {
+        self.doc
+            .borrow()
+            .query_selector_all_in(ids::of(id), selector)
+            .map(|found| found.iter().copied().map(ids::raw).collect())
+            .unwrap_or_default()
+    }
+
+    /// Whether this node matches the selector.
+    ///
+    /// Asked of the node rather than answered from a document-wide query, for
+    /// the reason [`query_all_in`](Self::query_all_in) gives: a node that has
+    /// been built and not yet inserted is in no document and matched nothing.
+    pub fn matches(&self, id: usize, selector: &str) -> bool {
+        self.doc
+            .borrow()
+            .matches_selector(ids::of(id), selector)
+            .unwrap_or(false)
+    }
+
     /// Every child, text and comments included.
     pub fn child_nodes(&self, id: usize) -> Vec<usize> {
         let doc = self.doc.borrow();

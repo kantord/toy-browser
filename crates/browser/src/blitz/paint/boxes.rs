@@ -15,12 +15,11 @@ use super::channels;
 use toy_browser_engine::ids;
 
 /// An element's own background, if it paints one.
-pub(super) fn background(node: &Node, x: f32, y: f32, backdrop: Option<Ink>) -> Vec<Mark> {
+pub(super) fn background(node: &Node, area: Area, backdrop: Option<Ink>) -> Vec<Mark> {
     let Some(style) = node.primary_styles() else {
         return Vec::new();
     };
-    let size = node.final_layout().size;
-    if size.width <= 0.0 || size.height <= 0.0 {
+    if area.width <= 0.0 || area.height <= 0.0 {
         return Vec::new();
     }
     // A box with no background still casts its shadow, so this cannot bail on a
@@ -34,12 +33,6 @@ pub(super) fn background(node: &Node, x: f32, y: f32, backdrop: Option<Ink>) -> 
     if !ink.shows() && cast.is_none() && backdrop.is_none() {
         return Vec::new();
     }
-    let area = Area {
-        x,
-        y,
-        width: size.width,
-        height: size.height,
-    };
     let corners = radii(&style, &area);
     let fill = |ink, shadow| Mark::Fill {
         corners,
@@ -196,4 +189,32 @@ pub(super) fn heading(direction: &style::values::computed::image::LineDirection)
             (X::Right, Y::Bottom) => 135.0,
         },
     }
+}
+
+/// Where this box's contents start: its border box, moved in by whatever the
+/// border and padding take.
+pub(super) fn content(node: &Node, x: f32, y: f32) -> (f32, f32) {
+    let laid = node.final_layout();
+    (
+        x + laid.border.left + laid.padding.left,
+        y + laid.border.top + laid.padding.top,
+    )
+}
+
+/// Whether this element paints itself at all.
+///
+/// `visibility: hidden` keeps the box — it still takes up room and still lays
+/// out what is inside it — and draws nothing. That is what makes it different
+/// from `display: none`, and it is the difference every collapsed menu on
+/// Wikipedia is built on.
+///
+/// Per element rather than per subtree, because the property is inherited but
+/// can be set back to `visible` further down, and a browser honours that. The
+/// one place this is approximate is an inline root: its words include those of
+/// everything inside it, so a visible span inside a hidden paragraph loses its
+/// text along with the paragraph's.
+pub(super) fn shown(node: &Node) -> bool {
+    use style::computed_values::visibility::T as Visibility;
+    node.primary_styles()
+        .is_none_or(|style| style.get_inherited_box().visibility == Visibility::Visible)
 }

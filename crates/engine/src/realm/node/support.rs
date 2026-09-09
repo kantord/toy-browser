@@ -218,21 +218,12 @@ pub(super) fn step(dom: &Dom, id: usize, elements: bool, offset: isize) -> Optio
 }
 
 /// Everything under `id` that the selector matches. The DOM only offers a
-/// document-wide query, so the narrowing happens here.
-pub(super) fn descendants_matching(dom: &Dom, id: usize, selector: &str) -> Vec<usize> {
-    dom.query_all(selector)
-        .into_iter()
-        .filter(|&found| descends_from(dom, found, id))
-        .collect()
-}
-
 /// `id` itself, or the nearest ancestor the selector matches. The other
 /// direction from [`descendants_matching`], and narrowed the same way.
 pub(super) fn nearest_matching(dom: &Dom, id: usize, selector: &str) -> Option<usize> {
-    let matching = dom.query_all(selector);
     let mut at = Some(id);
     while let Some(current) = at {
-        if matching.contains(&current) {
+        if dom.matches(current, selector) {
             return Some(current);
         }
         at = dom.parent(current);
@@ -269,4 +260,52 @@ pub(super) fn element_from_point(ctx: &Ctx<'_>, x: f64, y: f64) -> rquickjs::Res
         x: x as f32,
         y: y as f32,
     }))
+}
+
+/// Moving nodes about, which is the same four operations every DOM has.
+///
+/// Here rather than in the class because the class is a binding surface: what
+/// it does with the ids belongs beside the other tree arithmetic, and the
+/// method above it is then one line saying which operation it is.
+pub(super) fn appended<'js>(dom: &Dom, parent: usize, child: Class<'js, Node>) -> Class<'js, Node> {
+    dom.append_child(parent, child.borrow().id);
+    child
+}
+
+/// Places `node` ahead of `anchor`. A missing anchor appends.
+pub(super) fn inserted<'js>(
+    dom: &Dom,
+    parent: usize,
+    node: Class<'js, Node>,
+    anchor: Option<Class<'js, Node>>,
+) -> Class<'js, Node> {
+    match anchor {
+        Some(anchor) => {
+            dom.insert_before(node.borrow().id, anchor.borrow().id);
+            node
+        }
+        None => appended(dom, parent, node),
+    }
+}
+
+/// Takes a node out of the tree.
+///
+/// The child says which node to remove, not the parent it was asked of: a
+/// caller naming the wrong parent is asking for something that cannot happen,
+/// and doing what they meant is closer to the answer than refusing.
+pub(super) fn removed<'js>(dom: &Dom, child: Class<'js, Node>) -> Class<'js, Node> {
+    dom.remove_node(child.borrow().id);
+    child
+}
+
+/// Puts `fresh` where `stale` was, and hands back the one taken out.
+pub(super) fn replaced<'js>(
+    dom: &Dom,
+    fresh: Class<'js, Node>,
+    stale: Class<'js, Node>,
+) -> Class<'js, Node> {
+    let (fresh_id, stale_id) = (fresh.borrow().id, stale.borrow().id);
+    dom.insert_before(fresh_id, stale_id);
+    dom.remove_node(stale_id);
+    stale
 }

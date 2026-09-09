@@ -1,0 +1,5 @@
+4 elements, 676.00px apart in total
+HTML 0  off by 1.00px  ours [0,0,800,51]  theirs [0,0,800,52]
+BODY 0/1  off by 1.00px  ours [8,8,784,35]  theirs [8,8,784,36]
+DIV 0/1/0  off by 673.00px  ours [8,8,111,17]  theirs [8,8,784,18]
+SPAN 0/1/1  off by 1.00px  ours [8,25,222,18]  theirs [8,26,222,18]

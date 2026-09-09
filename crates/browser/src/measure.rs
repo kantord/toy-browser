@@ -139,9 +139,7 @@ impl Browser {
             .pages
             .get(page)
             .and_then(|page| page.measured.as_ref())
-            .is_some_and(|measured| {
-                measured.revision == revision && measured.viewport == viewport
-            });
+            .is_some_and(|measured| measured.revision == revision && measured.viewport == viewport);
         if fresh {
             return Ok(());
         }

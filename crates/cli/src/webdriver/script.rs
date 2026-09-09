@@ -16,6 +16,43 @@ use super::session::Sessions;
 use super::{Answer, Failure};
 use crate::webdriver::session::{ELEMENT_KEY, internal};
 
+/// The function a script is run as.
+fn wrapped(script: &str, wait: Wait) -> String {
+    match wait {
+        // Wrapped so that an element comes back as one. A script is run by
+        // *value*, because a client asking for an object wants the object
+        // — and a DOM node serialised by value is a plain dictionary, which
+        // is not something a client can click. Every element carries the id
+        // the DOM knows it by, so this reports that instead and the answer
+        // is turned back into a reference below.
+        //
+        // wptrunner opens every test this way: `return
+        // document.documentElement`, then a click on what came back.
+        Wait::No => format!(
+            "function() {{ \
+               const it = (function() {{ {script} }}).apply(this, arguments); \
+               return it && typeof it === 'object' && it.{ID} !== undefined \
+                 ? {{ {FOUND}: it.{ID} }} \
+                 : it; \
+             }}"
+        ),
+        Wait::Yes => format!(
+            "function() {{ \
+               globalThis.{DONE} = undefined; \
+               const args = [...arguments, value => {{ globalThis.{DONE} = [value]; }}]; \
+               (function() {{ {script} }}).apply(null, args); \
+             }}"
+        ),
+    }
+}
+
+/// What an element calls the id the DOM knows it by, in the page's own scripts.
+const ID: &str = "__id";
+
+/// What the wrapper above answers with in place of an element. Not a name a
+/// page could return by accident.
+const FOUND: &str = "__toy_browser_element";
+
 /// Where an asynchronous script leaves what it was given.
 const DONE: &str = "__tb_async_result";
 
@@ -46,16 +83,7 @@ impl Sessions {
             .map(|argument| self.remote_of(id, argument))
             .collect();
 
-        let declaration = match wait {
-            Wait::No => format!("function() {{ {script} }}"),
-            Wait::Yes => format!(
-                "function() {{ \
-                   globalThis.{DONE} = undefined; \
-                   const args = [...arguments, value => {{ globalThis.{DONE} = [value]; }}]; \
-                   (function() {{ {script} }}).apply(null, args); \
-                 }}"
-            ),
-        };
+        let declaration = wrapped(script, wait);
         let result = self
             .browser
             .call(&page, &declaration, None, &arguments, true)
@@ -65,7 +93,7 @@ impl Sessions {
         }
 
         match result {
-            Remote::Value(value) => Ok(value),
+            Remote::Value(value) => Ok(self.named(id, value)?),
             Remote::Threw(message) => Err(Failure::new("javascript error", message)),
             other => {
                 let session = self.session_mut(id)?;
@@ -94,6 +122,20 @@ impl Sessions {
                 "the script never called back",
             )),
         }
+    }
+
+    /// A script result, with any element in it named as a reference the client
+    /// can send back.
+    ///
+    /// Only the result itself, not elements nested inside an object it
+    /// returned: WebDriver says those become references too, and nothing has
+    /// needed it yet.
+    fn named(&mut self, id: &str, value: Value) -> Answer {
+        let Some(node) = value.get(FOUND).and_then(Value::as_u64) else {
+            return Ok(value);
+        };
+        let session = self.session_mut(id)?;
+        Ok(session.remember(Remote::Element(node as usize)))
     }
 
     /// A script argument: an element reference if the client sent one back,

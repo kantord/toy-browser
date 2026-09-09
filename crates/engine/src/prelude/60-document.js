@@ -58,6 +58,16 @@
 
   globals.window = globals;
   globals.self = globals;
+  // A page at the top of its own tree is its own parent and its own top. Code
+  // walks up by comparing the two — `while (w != w.parent) w = w.parent` — and
+  // leaving them undefined does not end that walk, it makes the next turn of it
+  // read a property of nothing. testharness.js does exactly this before it runs
+  // a single test.
+  globals.parent = globals;
+  globals.top = globals;
+  // Nothing opened this. Null rather than absent, because that is the answer,
+  // and `window.opener` is read for it.
+  globals.opener = null;
   globals.console = __console;
 
   // Set from the outside whenever the viewport changes, because nothing here

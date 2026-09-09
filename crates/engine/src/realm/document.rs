@@ -102,6 +102,23 @@ impl Document {
         wrap_id(&ctx, self.dom.create_element(&tag.0))
     }
 
+    /// The same, for callers that name a namespace.
+    ///
+    /// The namespace is read and ignored: every document here is HTML, and an
+    /// element made in the XHTML namespace is the element it would have made
+    /// anyway. Refusing instead is not neutral — testharness.js builds its
+    /// results table with `createElementNS`, so a missing one meant every test
+    /// in the suite ran and then threw on its way to reporting.
+    #[qjs(rename = "createElementNS")]
+    pub fn create_element_ns<'js>(
+        &self,
+        ctx: Ctx<'js>,
+        _namespace: Coerced<String>,
+        tag: Coerced<String>,
+    ) -> rquickjs::Result<Value<'js>> {
+        wrap_id(&ctx, self.dom.create_element(&tag.0))
+    }
+
     #[qjs(rename = "createTextNode")]
     pub fn create_text_node<'js>(
         &self,

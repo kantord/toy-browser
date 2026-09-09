@@ -117,6 +117,23 @@ collapse. `U+00A0` is explicitly not one of them; that is the point of it.
 somewhere later — the tree builder's white-space mode, or the trimming done at
 inline element boundaries.
 
+**And it takes the whole box with it.** An element whose *only* content is a
+non-breaking space is given no box at all — its own `width` and `height` are
+ignored, and it paints nothing:
+
+```html
+<style>div { width: 2em; height: 1em; background: green; }</style>
+<div>&#160;</div>   <!-- 0x0, nothing painted -->
+<div>x</div>        <!-- 32x16 green, correct -->
+<div></div>         <!-- 32x16 green, correct — an *empty* one is fine -->
+```
+
+That is the same collapse seen from further up: with the space gone the element
+has no content, and something then decides it has no box either. An empty
+element with the same declarations is laid out correctly, which is what makes it
+a bug rather than a reading of the cascade. In `css/CSS2/normal-flow` eight
+tests use `&#160;` as their filler and fail for this alone.
+
 **Why it matters.** MediaWiki emits every non-breaking space as its own
 element: `<span typeof="mw:Entity">\u{a0}</span>`. On one Wikipedia article that
 is every measurement, every `p.&nbsp;195`, every unit — the article reads
@@ -165,6 +182,45 @@ up drawn off the right-hand edge.
 **Also.** `display: block` on a `<tr>` or a `<tbody>` collapses the whole table
 to nothing — every box `0x0` — which is likely the same cause seen from the
 other side.
+
+## blitz-dom: a `<style>` block has its character references decoded
+
+**Version.** `blitz-dom 0.3.0-beta.2`.
+
+**What happens.** `<style>` is a raw text element, so what sits between the tags
+is CSS exactly as written: `&gt;` is four characters, not a child combinator, and
+a selector containing one is invalid. blitz decodes it before parsing, so the
+rule applies.
+
+```html
+<style>
+body &gt; div { width: 111px; }
+body > span { width: 222px; display: block; }
+</style>
+<div>first</div><span>second</span>
+```
+
+|  | first div | span |
+|---|---|---|
+| Chromium | 784px — the rule is invalid and ignored | 222px |
+| blitz | **111px** — the rule applied | 222px |
+
+**Where it is not.** The parse is right: reading `textContent` of that `<style>`
+gives 31 characters containing `&gt;` and no `>` at all, which is what html5ever
+should produce. Something between the text node and stylo's selector parser is
+decoding it — the stylesheet extraction rather than the tokenizer.
+
+**What should happen.** HTML §13.2.5: the tokenizer never consumes a character
+reference in a raw text element. CSS Syntax then rejects the selector, and the
+declaration block goes with it.
+
+**Why it matters.** It makes a page render as its author did *not* write it,
+which is the wrong direction for a bug to fail in — and it hides itself, because
+the rule usually does what a reader of the source expects. It was found by a
+test whose reference disagreed for reasons that had nothing to do with what the
+test was about.
+
+`tests/corpus/053-entities-in-a-style-block.html` pins it.
 
 ## What is not here
 

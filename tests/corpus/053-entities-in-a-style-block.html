@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>An escaped character inside a style block</title>
+    <style>
+body &gt; div { width: 111px; }
+body > span { width: 222px; display: block; }
+    </style>
+  </head>
+  <body>
+    <!--
+      `<style>` is a raw text element: what is between the tags is CSS exactly
+      as written, and `&gt;` is four characters, not a child combinator. So the
+      first rule is invalid and applies to nothing, and the second one — which
+      says the same thing with a real `>` — applies.
+
+      Both divs should be the width of the body. The span should be 222px.
+    -->
+    <div>first</div>
+    <span>second</span>
+  </body>
+</html>

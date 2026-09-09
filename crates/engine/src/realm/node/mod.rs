@@ -31,10 +31,7 @@ pub(super) use events::{
 };
 use events::{add_listener, dispatch, remove_listener};
 pub use support::Sharing;
-use support::{
-    descendants_matching, descends_from, dom_of, nearest_matching, or_null, step, wrap, wrap_all,
-    wrap_maybe,
-};
+use support::{descends_from, dom_of, nearest_matching, or_null, step, wrap, wrap_all, wrap_maybe};
 
 pub(super) use support::{wrap as wrap_id, wrap_all as wrap_all_ids, wrap_maybe as wrap_maybe_id};
 
@@ -235,8 +232,7 @@ dom_members! {
         /// Moves `child` here, and hands it back the way the DOM does.
         #[qjs(rename = "appendChild")]
         pub fn append_child<'js>(&self, child: Class<'js, Node>) -> Class<'js, Node> {
-            self.dom.append_child(self.id, child.borrow().id);
-            child
+            support::appended(&self.dom, self.id, child)
         }
 
         /// Places `node` ahead of `anchor`. A missing anchor appends.
@@ -246,17 +242,27 @@ dom_members! {
             node: Class<'js, Node>,
             anchor: Option<Class<'js, Node>>,
         ) -> Class<'js, Node> {
-            match anchor {
-                Some(anchor) => {
-                    self.dom.insert_before(node.borrow().id, anchor.borrow().id);
-                    node
-                }
-                None => self.append_child(node),
-            }
+            support::inserted(&self.dom, self.id, node, anchor)
         }
 
         pub fn remove(&self) {
             self.dom.remove_node(self.id);
+        }
+
+        /// Takes `child` out, and hands it back the way the DOM does.
+        #[qjs(rename = "removeChild")]
+        pub fn remove_child<'js>(&self, child: Class<'js, Node>) -> Class<'js, Node> {
+            support::removed(&self.dom, child)
+        }
+
+        /// Puts `fresh` where `stale` was, and hands back the one taken out.
+        #[qjs(rename = "replaceChild")]
+        pub fn replace_child<'js>(
+            &self,
+            fresh: Class<'js, Node>,
+            stale: Class<'js, Node>,
+        ) -> Class<'js, Node> {
+            support::replaced(&self.dom, fresh, stale)
         }
 
         /// Whether `other` is this node or sits under it. Callers pass all
@@ -279,7 +285,7 @@ dom_members! {
 
         /// Whether the document's own selector engine counts this a match.
         pub fn matches(&self, selector: Coerced<String>) -> bool {
-            self.dom.query_all(&selector.0).contains(&self.id)
+            self.dom.matches(self.id, &selector.0)
         }
 
         #[qjs(rename = "querySelectorAll")]
@@ -288,7 +294,7 @@ dom_members! {
             ctx: Ctx<'js>,
             selector: Coerced<String>,
         ) -> rquickjs::Result<Vec<Value<'js>>> {
-            wrap_all(&ctx, descendants_matching(&self.dom, self.id, &selector.0))
+            wrap_all(&ctx, self.dom.query_all_in(self.id, &selector.0))
         }
 
         #[qjs(rename = "querySelector")]
@@ -297,7 +303,7 @@ dom_members! {
             ctx: Ctx<'js>,
             selector: Coerced<String>,
         ) -> rquickjs::Result<Value<'js>> {
-            wrap_maybe(&ctx, descendants_matching(&self.dom, self.id, &selector.0).first().copied())
+            wrap_maybe(&ctx, self.dom.query_all_in(self.id, &selector.0).first().copied())
         }
 
         /// This node, or the nearest ancestor, that matches.

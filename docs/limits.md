@@ -93,3 +93,19 @@ because it is: the table approximation, the missing inline boxes and the
 extracted stylesheet were all properties of that renderer. `TAKUMI-ISSUES.md`
 keeps the findings as a record, and `docs/adr/0012` says why it could not follow
 the move to a Scene.
+
+## Inline SVG is laid out and never drawn
+
+`<svg>` markup written into a page gets a box — blitz counts the tag as replaced
+content for layout, so it takes up the room it should — and nothing is ever
+painted inside it. There is no code in blitz-dom that turns an inline `<svg>`
+subtree into anything drawable: `ImageData::Svg` is built from a *fetched*
+resource, which is what `<img src="…svg">` gives it, and the inline case has no
+resource to build from.
+
+So `<img src="x.svg">` draws and `<svg><rect/></svg>` does not.
+
+It is a missing feature rather than a bug, which is why it is here rather than
+in `docs/upstream.md`. It holds 11 tests in `css/CSS2/normal-flow`:
+`inline-replaced-width-*` and `replaced-intrinsic-*`. The latter also want
+`<object data="…svg">`, which is a second thing again.
