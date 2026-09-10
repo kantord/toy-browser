@@ -8,8 +8,8 @@ Where it stood when this was written:
 
 | | tests |
 |---|---|
-| pass | 628 |
-| fail | 161 |
+| pass | 630 |
+| fail | 159 |
 | harness OK, subtests failing | 22 |
 | timeout | 3 |
 
@@ -18,12 +18,10 @@ box geometry compared against Chromium's for the same page. Of the 165 failures
 before the last change, **161 differ in layout** — that is blitz, and it waits
 on an upstream release — and **four agreed in layout exactly**, disagreeing only
 in what was painted over what. Those four were the whole of the work available
-here, and one of them is now fixed; see Appendix E painting order in
-`docs/wpt-fixed.md`. The other three are
-`resizable-iframe-paint-order.html`,
-`cross-domain-iframe-paint-order.sub.html` and
-`margin-collapse-through-for-various-height-values.tentative.html`, all of which
-need a frame to render into rather than a paint-order change.
+here, and three of them are now fixed — see Appendix E painting order and
+`<iframe>` in `docs/wpt-fixed.md`. The one left is
+`margin-collapse-through-for-various-height-values.tentative.html`, which times
+out rather than failing.
 
 391 of those passed before the screen stopped being drawn through SVG, and none
 of what moved it since was aimed here: **+8** for drawing a box's contents

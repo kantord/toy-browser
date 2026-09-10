@@ -29,6 +29,7 @@ mod agent;
 mod export;
 pub(crate) mod fonts;
 mod geometry;
+mod held;
 mod net;
 mod order;
 
@@ -37,6 +38,8 @@ use fonts::context;
 
 use export::{colour, font_size};
 pub mod paint;
+
+pub use held::{Kind, Source, Webview};
 
 /// A document, laid out.
 pub struct LaidOut {
@@ -167,30 +170,6 @@ impl Composed {
     }
 }
 
-/// One `<webview>` in a document: a rectangle the host lays out, holding a page
-/// the host has nothing to do with.
-///
-/// Not an iframe. An iframe is a browsing context inside the document that
-/// holds it — same engine, same event loop, reachable across the boundary when
-/// the origins agree. A webview is a **separate browser**: its own session, its
-/// own DOM, its own JavaScript realm, sharing nothing but the rectangle it is
-/// drawn into. This browser has had that separation since the beginning,
-/// because every `PageId` already is one; a webview is the element that says
-/// where to put one.
-pub struct Webview {
-    /// The element, so the page behind it can be remembered against it.
-    pub node: NodeId,
-    /// The engine's own id for it, which survives being laid out again — the
-    /// same document parsed twice gives the same nodes, but nothing promises
-    /// that, and a measurement attached to the wrong frame is worse than none.
-    pub key: Option<usize>,
-    pub src: String,
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-}
-
 /// A page with no height of its own still has to be laid out in something; a
 /// browser would call this the window.
 const DEFAULT_HEIGHT: u32 = 600;
@@ -201,36 +180,6 @@ const DEFAULT_HEIGHT: u32 = 600;
 const ROUNDS: usize = 8;
 
 impl LaidOut {
-    /// Every `<webview>` the document holds, with the box it was given.
-    pub fn webviews(&self) -> Vec<Webview> {
-        let mut found = Vec::new();
-        self.walk(&mut |node, x, y| {
-            let Some(element) = node.element_data() else {
-                return;
-            };
-            if element.name.local.as_ref() != "webview" {
-                return;
-            }
-            let Some(src) = element.attr(blitz_dom::local_name!("src")) else {
-                return;
-            };
-            // No size test. A frame with no height yet is the one that most
-            // needs finding: what gives it a height is the page inside it, and
-            // that page cannot be laid out until this has been noticed.
-            let size = node.final_layout().size;
-            found.push(Webview {
-                node: node.id,
-                key: keyed(node),
-                src: src.to_owned(),
-                x,
-                y,
-                width: size.width,
-                height: size.height,
-            });
-        });
-        found
-    }
-
     /// What colour the page is behind everything on it.
     ///
     /// A document's background is not just another element's: the root's
@@ -302,7 +251,7 @@ fn painted_with(node: &Node) -> Option<[f32; 4]> {
 }
 
 /// The engine's node id for an element, read off the marker class it carries.
-fn keyed(node: &Node) -> Option<usize> {
+pub(super) fn keyed(node: &Node) -> Option<usize> {
     node.element_data()?
         .attr(blitz_dom::local_name!("class"))
         .and_then(key_of)

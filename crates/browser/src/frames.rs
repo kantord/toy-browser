@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use toy_browser_engine::Keyed;
 
+use crate::blitz::{Kind, Source};
 use crate::{Browser, PageId, Viewport};
 
 impl Browser {
@@ -167,11 +168,17 @@ impl Browser {
             };
             self.set_viewport(&child, width);
             let composed = self.compose(&child, width)?;
-            told.push_str(&format!(
-                ":where(.{}{key}) {{ height: {:.0}px }}\n",
-                toy_browser_engine::KEY_CLASS_PREFIX,
-                composed.laid_out.height(),
-            ));
+            // Only a webview is measured by what is in it. An iframe keeps the
+            // size the page holding it gave it however tall its document turns
+            // out to be, and scrolls the rest — telling the host otherwise is
+            // how a frame around a long article swallows the page around it.
+            if frame.kind == Kind::Webview {
+                told.push_str(&format!(
+                    ":where(.{}{key}) {{ height: {:.0}px }}\n",
+                    toy_browser_engine::KEY_CLASS_PREFIX,
+                    composed.laid_out.height(),
+                ));
+            }
             inside.insert(key, composed);
         }
         Ok((inside, told))
@@ -183,34 +190,50 @@ impl Browser {
     /// whenever it happens to be somewhere else: it is somewhere else because a
     /// link in it was followed, which is what a webview is for.
     fn inhabitant(&mut self, page: &PageId, frame: &crate::blitz::Webview) -> Result<PageId> {
-        let src = self
-            .base_url(page)
-            .and_then(|base| base.join(&frame.src).ok())
-            .map_or_else(|| frame.src.clone(), |url| url.to_string());
+        let base = self.base_url(page).map(|url| url.to_string());
+        let source = resolved(&frame.source, base.as_deref());
         let held = self
             .pages
             .get(page)
             .and_then(|held| held.mounted.get(&frame.node))
-            .map(|held| (held.page.clone(), held.src.clone()));
+            .map(|held| (held.page.clone(), held.source.clone()));
         let (child, sent) = match held {
             Some(held) => held,
-            None => (self.new_page()?, String::new()),
+            None => (self.new_page()?, Source::Url(String::new())),
         };
-        if sent != src {
-            self.navigate(&child, &src)
-                .map_err(|error| anyhow::anyhow!("{error}"))?;
+        // A frame that will not load leaves an empty frame, the way a broken
+        // image leaves an empty box. Letting the error out means one dead
+        // `<iframe src>` on a page — an ad, an embed, anything third-party —
+        // takes the whole document down with it, and the page around a frame is
+        // not the frame's to lose. The source is remembered either way, so a
+        // load that failed is not attempted again every frame.
+        if sent != source {
+            let _ = self.send(&child, &source, base.as_deref());
         }
         if let Some(held) = self.pages.get_mut(page) {
             held.mounted.insert(
                 frame.node,
                 crate::Mounted {
                     page: child.clone(),
-                    src,
+                    source,
                     area: crate::ElementBox::default(),
                 },
             );
         }
         Ok(child)
+    }
+
+    /// Puts the document a frame asked for into the page behind it.
+    fn send(&mut self, child: &PageId, source: &Source, base: Option<&str>) -> Result<()> {
+        match source {
+            Source::Url(url) => self.navigate(child, url).map(|_| ()),
+            // A `srcdoc` document inherits the URL of the page holding it, and
+            // `about:blank` when that page has none of its own.
+            Source::Markup(markup) => self
+                .load_markup(child, markup, base.unwrap_or("about:blank"))
+                .map(|_| ()),
+        }
+        .map_err(|error| anyhow::anyhow!("{error}"))
     }
 
     /// Where each frame ended up, once the host had been laid out knowing how
@@ -241,4 +264,19 @@ impl Browser {
         }
         mounted
     }
+}
+
+/// A frame's source with its URL made absolute, if it has one.
+///
+/// Markup is left as it is: it did not come from anywhere, so there is nothing
+/// to resolve.
+fn resolved(source: &Source, base: Option<&str>) -> Source {
+    let Source::Url(url) = source else {
+        return source.clone();
+    };
+    let absolute = base
+        .and_then(|base| url::Url::parse(base).ok())
+        .and_then(|base| base.join(url).ok())
+        .map_or_else(|| url.clone(), |it| it.to_string());
+    Source::Url(absolute)
 }

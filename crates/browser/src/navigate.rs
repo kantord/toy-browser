@@ -85,21 +85,49 @@ impl Browser {
         url: &str,
         remembering: Remembering,
     ) -> Result<Loaded, NavigationError> {
+        let target = Url::parse(url).map_err(|_| NavigationError::Malformed(url.to_owned()))?;
+        let source = self.document(&target)?;
+        self.arrive(page, url, &target, &source, remembering)
+    }
+
+    /// Puts markup into a page directly, at a URL it did not come from.
+    ///
+    /// What `<iframe srcdoc>` is: the document is written in the attribute, so
+    /// there is nothing to fetch, and HTML says it inherits the URL of the page
+    /// holding it — which is what `base` carries, so a relative link inside
+    /// resolves against the parent.
+    pub fn load_markup(
+        &mut self,
+        page: &PageId,
+        markup: &str,
+        base: &str,
+    ) -> Result<Loaded, NavigationError> {
+        let target = Url::parse(base).map_err(|_| NavigationError::Malformed(base.to_owned()))?;
+        // Never remembered: a document that was never navigated to is not
+        // somewhere Back could return you to.
+        self.arrive(page, base, &target, markup, Remembering::No)
+    }
+
+    /// A document, however it was come by, becoming this page's.
+    fn arrive(
+        &mut self,
+        page: &PageId,
+        url: &str,
+        target: &Url,
+        source: &str,
+        remembering: Remembering,
+    ) -> Result<Loaded, NavigationError> {
         let session = self
             .session(page)
             .map_err(|error| NavigationError::Failed(error.to_string()))?;
         let run_scripts = self.pages.get(page).is_none_or(|page| page.run_scripts);
-
-        let target = Url::parse(url).map_err(|_| NavigationError::Malformed(url.to_owned()))?;
-        let source = self.document(&target)?;
-
         let outcome = self
             .engine
             .load_page(
                 &session,
                 LoadPage {
-                    source: &source,
-                    base_url: &target,
+                    source,
+                    base_url: target,
                     run_scripts,
                 },
             )

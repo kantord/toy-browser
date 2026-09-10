@@ -6,7 +6,7 @@ almost nothing to do with the tests, and every one of them was a bug a real page
 had too.
 
 The directory is `css/CSS2/normal-flow`, 814 tests. It stood at 467 before any
-of this, and stands at 628.
+of this, and stands at 630.
 
 ## The shape of it
 
@@ -152,6 +152,43 @@ Worth more than the +1 suggests. Only 4 of the 165 remaining failures are ours
 at all — the other 161 differ from Chromium in layout, which is blitz — so this
 was the whole of the work available without an upstream release, and it is a
 correctness gap that shows on ordinary pages rather than only in the suite.
+
+## `<iframe>` was not an element — *fixed*, +2
+
+Only `<webview>` mounted a page. An `<iframe>` was an empty box, so the two
+tests that put a document in one had nothing to paint.
+
+They are the same test twice — one `srcdoc`, one cross-origin — and both check
+one rule: a frame's *background* is an ordinary block background, but what is
+*in* the frame is inline-level content. A later element with a negative margin
+covers the background and is covered by the contents. That is the Appendix E
+split above, so once a frame held a page at all, the ordering was already right.
+
+Three things had to be true first, and each is a rule about real pages rather
+than about the suite:
+
+**A frame is not a webview.** They mount identically and mean different things.
+A `<webview>` is ours, invented, and is sized by what is inside it, the way an
+image is sized by its picture. An `<iframe>` is HTML's and is not: it is 300×150
+until CSS says otherwise, and however tall its document turns out to be the
+frame keeps the size the page gave it. Telling the host otherwise is how a frame
+around a long article swallows the page around it. `Kind` is that difference,
+and the intrinsic-height rule now runs for one of the two.
+
+**A frame's padding belongs to the page around it.** Both were mounting into the
+border box, so the document inside covered the frame's own background — which is
+exactly the band these tests are about. The content box is what a page is drawn
+into.
+
+**A frame that will not load leaves an empty frame.** The error used to come
+out, so one dead `<iframe src>` — an ad, an embed, anything third-party — took
+the whole document down with it. A broken image leaves an empty box; so does
+this. `tests/corpus/054-iframe-srcdoc.html` freezes the rest against Chromium,
+and disagrees with it about nothing.
+
+`srcdoc` needed a way to put markup into a page without fetching it. HTML says
+such a document inherits the URL of the page holding it, so `load_markup` takes
+that URL as its base and there is nothing to resolve.
 
 ## Nothing driven by JavaScript could run at all — *fixed*
 

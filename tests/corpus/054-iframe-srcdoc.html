@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>A frame's padding, and what paints over it</title>
+    <style>
+      body { margin: 0; font: 16px/1.5 sans-serif; }
+      iframe {
+        display: block;
+        width: 200px;
+        height: 120px;
+        padding: 20px;
+        border: none;
+        box-sizing: border-box;
+        background: #c00;
+      }
+      #over { width: 200px; height: 120px; background: #0a0; margin-top: -120px; }
+    </style>
+  </head>
+  <body>
+    <!--
+      Two rules at once, and they pull against each other.
+
+      A frame's padding belongs to the page around it: the frame's own
+      background shows through there, and the document inside starts inside it.
+      So the red band is 20px wide and the frame's page fills what is left.
+
+      And CSS 2.1 Appendix E: a frame's background is an ordinary block
+      background, but what is in the frame is inline-level content. #over comes
+      later in the document with a negative margin, so it covers the red band
+      and is itself covered by the frame's content.
+
+      What should show: a green ring, a blue middle. Getting either rule wrong
+      loses one of the two.
+    -->
+    <iframe srcdoc="<style>html { background: #04a; margin: 0 }</style>"></iframe>
+    <div id="over"></div>
+  </body>
+</html>

@@ -130,7 +130,7 @@ struct Mounted {
     /// What the element asked for. Kept so the page is only sent there once: a
     /// webview whose page was reloaded whenever it did not match its `src`
     /// would undo every link the person using it followed.
-    src: String,
+    source: crate::blitz::Source,
     /// The box it was drawn into, so a click in it can be given to it.
     area: ElementBox,
 }
