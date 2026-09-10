@@ -89,6 +89,25 @@ window may scroll across to see, and never what a screenshot is sized by. The
 page's canvas colour is painted across the whole of it, because everywhere a
 reader can look is somewhere the page has an answer for.
 
+## The one place the two meet in the middle
+
+Layout hands back two kinds of number, and this took a while to notice because
+each is right on its own. The box an element was given is in CSS pixels. What
+comes out of parley is not: blitz shapes text at the size it will be *drawn*, so
+on a page at 200% a 16px font is shaped at 32 and every offset, baseline and
+advance arrives in the window's pixels.
+
+That is the right thing for blitz to do — text shaped at the size it is
+rasterized at is text that stays sharp, which is most of the point of doing zoom
+this way rather than with a magnifying glass. But a Scene cannot hold both
+units, and one that did got the zoom applied twice to its words and once to
+everything else: text sized for nothing, in a box measured for text half as big.
+Layout was correct, and every test of it passed.
+
+So every number read from a run comes back through `paint/placed.rs`, which
+divides by the scale parley was given. It is a file for one small thing on
+purpose: a unit boundary is worth being able to point at.
+
 ## Consequences
 
 - The window scrolls in CSS pixels. `scrolled`, the band it asks for and the
