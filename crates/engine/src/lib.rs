@@ -176,6 +176,23 @@ impl Boxes {
         self.by_node.insert(node, area);
     }
 
+    /// The same, for an element painted in more than one piece.
+    ///
+    /// An inline element that wraps is several rectangles on several lines,
+    /// and the two questions want different answers. *Where is it* is the
+    /// union, which is what `getBoundingClientRect` is defined to report.
+    /// *What did this click reach* is one of the pieces — never the union,
+    /// which is a rectangle spanning everything between the first piece and
+    /// the last, most of which the element does not cover at all. A link
+    /// three words from the end of a line would otherwise answer for every
+    /// word on the line below it.
+    pub fn spread(&mut self, node: NodeId, whole: ElementBox, pieces: &[ElementBox]) {
+        for piece in pieces {
+            self.painted.push((node, *piece));
+        }
+        self.by_node.insert(node, whole);
+    }
+
     /// Where `node` was measured, if layout produced a box for it at all.
     pub fn get(&self, node: NodeId) -> Option<ElementBox> {
         self.by_node.get(&node).copied()

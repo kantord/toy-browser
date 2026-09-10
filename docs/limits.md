@@ -109,3 +109,32 @@ It is a missing feature rather than a bug, which is why it is here rather than
 in `docs/upstream.md`. It holds 11 tests in `css/CSS2/normal-flow`:
 `inline-replaced-width-*` and `replaced-intrinsic-*`. The latter also want
 `<object data="…svg">`, which is a second thing again.
+
+## A click reaches what was painted, not what was measured
+
+Two things a box table cannot say on its own, both found by clicking links on
+Wikipedia and both fixed in `blitz/geometry.rs`:
+
+**An inline element that wraps is not a rectangle.** It is several, on several
+lines, and the one box around them spans everything in between. `Sub-Saharan
+Africa` in the lead of *Lion* wraps at the end of a line and measures 709×44 —
+wide enough to cover both lines end to end. Since a hit is answered by the last
+box covering the point, that one link took every click on both lines: clicking
+*cat* went to Sub-Saharan Africa. Hit testing asks the fragments now;
+`getBoundingClientRect` still answers with the union, which is what the DOM
+defines it as.
+
+**An element clipped away still had a box.** A collapsed menu is `height: 0;
+overflow: hidden` and its items keep the sizes layout gave them. Nothing paints,
+and every one of them answered for clicks — so Wikipedia's whole sidebar sat
+invisibly over the article, taking what was meant for the text. Hit testing
+honours the same clip rule the painter uses.
+
+What is still wrong on that page is layout rather than hit testing: the
+collapsed menu's *own* box is 110×415 and blitz puts it on top of the article
+instead of beside it. An invisible box over text takes clicks in a real browser
+too, so there is nothing to fix here until the box is in the right place.
+
+`tests/window/` is how this was found: a real window on an Xvfb display in a
+container, clicked with `xdotool`, which answers "what does this actually do"
+without borrowing anyone's screen.

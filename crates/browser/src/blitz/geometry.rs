@@ -43,6 +43,16 @@ impl Around {
         }
     }
 
+    /// The one box around a run of them, which is what the DOM reports for an
+    /// element painted in pieces: `getBoundingClientRect` is defined as the
+    /// union of the fragments, however many lines they fell on.
+    pub(super) fn whole(pieces: &[Around]) -> Option<Around> {
+        pieces
+            .iter()
+            .copied()
+            .reduce(|so_far, piece| so_far.with(piece))
+    }
+
     fn into_box(self) -> ElementBox {
         ElementBox {
             x: self.left,
@@ -67,8 +77,8 @@ impl LaidOut {
     /// **Rows and row groups** are structural in a table: the cells are laid
     /// out, and `<tr>` is what they are laid out in. A browser reports a box for
     /// one anyway, so it is the cells it holds.
-    pub(super) fn implied(&self) -> HashMap<NodeId, Around> {
-        let mut found: HashMap<NodeId, Around> = HashMap::new();
+    pub(super) fn implied(&self) -> HashMap<NodeId, Vec<Around>> {
+        let mut found: HashMap<NodeId, Vec<Around>> = HashMap::new();
         self.walk(&mut |node, x, y| {
             if !rendered(node) {
                 return;
@@ -97,11 +107,15 @@ impl LaidOut {
                         run.advance(),
                         metrics.ascent + metrics.descent,
                     );
+                    // Each run kept, not folded into one box. An inline
+                    // element that wraps is painted in pieces on different
+                    // lines, and the union of them is a rectangle covering
+                    // everything between — including whatever else is on those
+                    // lines. Answering a click from that union is how a link
+                    // near the end of a line comes to swallow every word above
+                    // and below it.
                     let owner = run.style().brush.id;
-                    found
-                        .entry(owner)
-                        .and_modify(|held| *held = held.with(around))
-                        .or_insert(around);
+                    found.entry(owner).or_default().push(around);
                 }
             }
         });
@@ -110,7 +124,7 @@ impl LaidOut {
     }
 
     /// Gives an element with no box of its own the one around what it holds.
-    fn enclose(&self, id: NodeId, found: &mut HashMap<NodeId, Around>) -> Option<Around> {
+    fn enclose(&self, id: NodeId, found: &mut HashMap<NodeId, Vec<Around>>) -> Option<Around> {
         let node = self.document.get_node(id)?;
         if !rendered(node) {
             // Nothing under a box that is not drawn is drawn either, so a
@@ -126,19 +140,26 @@ impl LaidOut {
             let at = node.absolute_position(0.0, 0.0);
             return Some(Around::of(at.x, at.y, size.width, size.height));
         }
-        if let Some(held) = held {
-            found.insert(id, held);
+        if !held.is_empty() {
+            found.insert(id, held.clone());
         }
-        held
+        Around::whole(&held)
     }
 
-    /// The one box around everything a node holds, and around whatever the
-    /// node's own glyph runs already put there.
-    fn around_contents(&self, node: &Node, found: &mut HashMap<NodeId, Around>) -> Option<Around> {
-        let mut held: Option<Around> = found.get(&node.id).copied();
+    /// Every piece a node was painted in: whatever its own glyph runs put
+    /// there, and whatever its children turned out to be.
+    ///
+    /// A list rather than the box around them, because the box around them is
+    /// only one of the two things it is asked for — see [`Boxes::spread`].
+    fn around_contents(
+        &self,
+        node: &Node,
+        found: &mut HashMap<NodeId, Vec<Around>>,
+    ) -> Vec<Around> {
+        let mut held = found.get(&node.id).cloned().unwrap_or_default();
         for child in &node.children {
             if let Some(around) = self.enclose(*child, found) {
-                held = Some(held.map_or(around, |so_far| so_far.with(around)));
+                held.push(around);
             }
         }
         held
@@ -166,15 +187,81 @@ impl LaidOut {
         let mut boxes = Boxes::default();
         self.walk(&mut |node, x, y| {
             let Some(key) = keyed(node) else { return };
-            boxes.insert(key, placed(node, x, y, &implied));
+            let whole = placed(node, x, y, &implied);
+            // Where it is, always. What a click can reach, only if anything of
+            // it was painted.
+            if clipped_away(self, node, whole) {
+                boxes.spread(key, whole, &[]);
+                return;
+            }
+            // Only an element layout gave no box of its own is in pieces; one
+            // that has a box is that box, however its contents fell.
+            match pieces(node, &implied) {
+                Some(parts) => boxes.spread(key, whole, &parts),
+                None => boxes.insert(key, whole),
+            }
         });
         boxes
     }
 }
 
+/// Whether an ancestor's `overflow` cuts this box away to nothing.
+///
+/// Only hit testing asks. `getBoundingClientRect` reports a box whether or not
+/// anything of it shows — that is what a browser does — but a click cannot
+/// reach what was never painted, and the difference matters on any page with a
+/// collapsed menu. Wikipedia's `.vector-dropdown-content` is `height: 0;
+/// overflow: hidden`, and the items inside keep the boxes layout gave them: the
+/// whole sidebar sits invisibly over the article, taking every click meant for
+/// the text under it.
+fn clipped_away(page: &LaidOut, node: &Node, area: ElementBox) -> bool {
+    let mut id = node.parent;
+    while let Some(parent) = id.and_then(|it| page.document.get_node(it)) {
+        if let Some(to) = crate::blitz::paint::boxes::clips(parent) {
+            let at = parent.absolute_position(0.0, 0.0);
+            let (left, top) = (at.x + to.x, at.y + to.y);
+            if area.x >= left + to.width
+                || area.y >= top + to.height
+                || area.x + area.width <= left
+                || area.y + area.height <= top
+            {
+                return true;
+            }
+        }
+        id = parent.parent;
+    }
+    false
+}
+
+/// The rectangles an element was painted in, when it was painted in more than
+/// one and layout gave it no box of its own.
+///
+/// Nothing for an element with a box: a `<div>` is its box whatever its text
+/// did, and a click inside it reaches it. This is about the inline case, where
+/// the element *is* its fragments.
+fn pieces(node: &Node, implied: &HashMap<NodeId, Vec<Around>>) -> Option<Vec<ElementBox>> {
+    if !rendered(node) {
+        return None;
+    }
+    let size = node.final_layout().size;
+    if size.width > 0.0 || size.height > 0.0 {
+        return None;
+    }
+    let parts = implied.get(&node.id)?;
+    match parts.len() > 1 {
+        true => Some(parts.iter().map(|it| it.into_box()).collect()),
+        false => None,
+    }
+}
+
 /// Where an element is: the box layout gave it, or the one around what it
 /// holds when layout gave it none.
-pub(super) fn placed(node: &Node, x: f32, y: f32, implied: &HashMap<NodeId, Around>) -> ElementBox {
+pub(super) fn placed(
+    node: &Node,
+    x: f32,
+    y: f32,
+    implied: &HashMap<NodeId, Vec<Around>>,
+) -> ElementBox {
     if !rendered(node) {
         return NOWHERE;
     }
@@ -189,8 +276,8 @@ pub(super) fn placed(node: &Node, x: f32, y: f32, implied: &HashMap<NodeId, Arou
     }
     implied
         .get(&node.id)
-        .copied()
-        .map_or(ElementBox { x, y, ..NOWHERE }, Around::into_box)
+        .and_then(|pieces| Around::whole(pieces))
+        .map_or(ElementBox { x, y, ..NOWHERE }, |it| it.into_box())
 }
 
 /// The box a browser reports for an element it never drew.

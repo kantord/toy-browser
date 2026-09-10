@@ -33,7 +33,7 @@ use toy_browser_engine::ids;
 
 mod around;
 mod backdrop;
-mod boxes;
+pub(super) mod boxes;
 mod edges;
 mod effects;
 mod markers;

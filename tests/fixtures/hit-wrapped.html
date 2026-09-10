@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>What a click reaches</title>
+    <style>
+      body { margin: 0; font: 16px/20px monospace; width: 400px }
+      /* A collapsed menu, the shape every site's dropdown uses: the box is
+         squeezed to nothing and what is inside keeps the size layout gave it.
+         Positioned last and over the text, so an item that still answered for
+         a click would take one — which is what the whole of Wikipedia's
+         sidebar was doing to the article under it. */
+      #menu {
+        position: absolute; top: 0; left: 0;
+        height: 0; overflow: hidden;
+      }
+      #hidden { display: block; width: 400px; height: 80px; background: #f00 }
+    </style>
+  </head>
+  <body>
+    <p id="para"><a id="short" href="/short">aaa</a> bbbbb ccccc ddddd eeeee
+      <a id="wraps" href="/wraps">fffff ggggg hhhhh iiiii jjjjj kkkkk</a> lll</p>
+    <div id="menu"><a id="hidden" href="/hidden">hidden</a></div>
+  </body>
+</html>

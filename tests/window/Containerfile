@@ -1,0 +1,33 @@
+# A window, on a screen nobody is sitting at.
+#
+# `toy-browser browse` opens a real window and answers a real mouse, and until
+# now the only way to try one was to open it on the developer's own display and
+# click at it — which moves their pointer, steals their focus, and answers
+# questions about their window manager as much as about this browser.
+#
+# Xvfb is a display that exists only for as long as the question does. What
+# comes out is the same thing a person would have looked at: a screenshot, and
+# whatever the window's title says it is showing.
+
+FROM docker.io/library/rust:1-trixie
+
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        xvfb x11-utils xdotool scrot \
+        ca-certificates pkg-config \
+        libwayland-dev libxkbcommon-dev libfontconfig-dev libxcb1-dev \
+        libx11-6 libx11-xcb1 libxi6 libxcursor1 libxrandr2 libxinerama1 \
+        libxkbcommon-x11-dev libxcb-xkb1 libxcb-cursor0 \
+        fonts-liberation fontconfig \
+    && rm -rf /var/lib/apt/lists/*
+
+# 24-bit, because a browser is asked what colour things are and a lesser depth
+# answers approximately.
+ENV DISPLAY=:99 \
+    SCREEN=1200x900x24
+
+WORKDIR /repo
+
+COPY entrypoint.sh /usr/local/bin/window-run
+RUN chmod +x /usr/local/bin/window-run
+
+ENTRYPOINT ["/usr/local/bin/window-run"]

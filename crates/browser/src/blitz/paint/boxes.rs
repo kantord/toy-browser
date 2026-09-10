@@ -55,7 +55,7 @@ pub(super) fn background(node: &Node, area: Area, backdrop: Option<Ink>) -> Vec<
 }
 
 /// The box this element cuts its contents off at, if it cuts them off.
-pub(super) fn clips(node: &Node) -> Option<Area> {
+pub(crate) fn clips(node: &Node) -> Option<Area> {
     use style::values::computed::Overflow;
     let style = node.primary_styles()?;
     let box_ = style.get_box();

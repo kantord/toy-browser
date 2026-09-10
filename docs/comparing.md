@@ -2,7 +2,8 @@
 
 A toy browser is expected to differ from a real one. The point of measuring is
 not to pass: it is to have a number that moves, and a list of what is furthest
-off, so that a change can be shown to have helped.
+off, so that a change can be shown to have helped. This is about what a page
+*looks* like; where a click on it lands is `docs/window.md`.
 
 ```sh
 just compare                                    # Hacker News, by default

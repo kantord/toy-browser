@@ -31,7 +31,7 @@ impl LaidOut {
         &self,
         id: NodeId,
         path: String,
-        implied: &HashMap<NodeId, Around>,
+        implied: &HashMap<NodeId, Vec<Around>>,
         into: &mut Vec<serde_json::Value>,
     ) {
         let Some(node) = self.document.get_node(id) else {

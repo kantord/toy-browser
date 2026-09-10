@@ -148,6 +148,15 @@ shots:
     @echo out/compare/side-by-side.png   "# ours left, chromium right"
     @echo out/compare/difference.png     "# reference dimmed, differences red"
 
+# Open a real window on a screen in a container, click where told, photograph
+# it. `just window https://example.com/ 100,200 300,400`
+window url="https://en.wikipedia.org/wiki/Lion" *POINTS:
+    podman build -t toy-browser-window {{ justfile_directory() }}/tests/window
+    podman run --rm \
+        -v {{ justfile_directory() }}:/repo \
+        -v toy-browser-wpt-target:/repo/target \
+        toy-browser-window {{ url }} {{ POINTS }}
+
 # --- the gate a session has to pass ---
 
 # Clippy, then the code-style checks over what has changed.
