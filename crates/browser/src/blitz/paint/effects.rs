@@ -14,6 +14,19 @@ use blitz_dom::Node;
 use crate::scene::{Ink, Mark};
 use toy_browser_engine::ids;
 
+/// Whether this element paints as a stacking context of its own.
+///
+/// Only the two this file knows how to make: a transform and a fade. Both wrap
+/// their subtree in a single Mark, so what is inside has to be gathered before
+/// the wrapping — which is the same thing as saying the subtree is painted as a
+/// unit. `z-index` makes one too and blitz has already hoisted those.
+pub(super) fn a_context(node: &Node) -> bool {
+    turns(node)
+        || node
+            .primary_styles()
+            .is_some_and(|style| style.get_effects().opacity < 1.0)
+}
+
 /// Whether this element carries a transform at all.
 ///
 /// Asked before its subtree is painted, not after: everything under a

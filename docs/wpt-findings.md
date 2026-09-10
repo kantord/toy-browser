@@ -8,10 +8,22 @@ Where it stood when this was written:
 
 | | tests |
 |---|---|
-| pass | 625 |
-| fail | 164 |
-| error | 24 |
-| timeout | 1 |
+| pass | 628 |
+| fail | 161 |
+| harness OK, subtests failing | 22 |
+| timeout | 3 |
+
+**Almost none of what is left is ours.** Every failing test was rendered and its
+box geometry compared against Chromium's for the same page. Of the 165 failures
+before the last change, **161 differ in layout** — that is blitz, and it waits
+on an upstream release — and **four agreed in layout exactly**, disagreeing only
+in what was painted over what. Those four were the whole of the work available
+here, and one of them is now fixed; see Appendix E painting order in
+`docs/wpt-fixed.md`. The other three are
+`resizable-iframe-paint-order.html`,
+`cross-domain-iframe-paint-order.sub.html` and
+`margin-collapse-through-for-various-height-values.tentative.html`, all of which
+need a frame to render into rather than a paint-order change.
 
 391 of those passed before the screen stopped being drawn through SVG, and none
 of what moved it since was aimed here: **+8** for drawing a box's contents
@@ -209,11 +221,10 @@ Cheap individually. The reason to do them is the next directory, not this one.
 
 ## What is not a rendering bug
 
-- **24 errors** are the WebDriver surface, not the renderer. They currently stop
-  at an element response shape the runner's client does not recognise
-  (`'dict' object has no attribute 'click'`). Fixing them changes what can be
-  *run*, not what is drawn.
-- **1 timeout**, down from 46. The other 45 were the XHTML parse.
+- **22 tests run their harness and fail 45 subtests.** They were 24 errors — the
+  WebDriver surface, not the renderer — and they now report geometry we really
+  do get wrong. See `docs/wpt-fixed.md`.
+- **3 timeouts**, down from 46. Most of the 46 were the XHTML parse.
 
 ## Order worth taking them in
 

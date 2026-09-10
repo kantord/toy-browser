@@ -7,11 +7,12 @@
 //! Everything here reads the computed style and answers in the Scene's own
 //! terms, so nothing above it has to know what stylo calls anything.
 
-use blitz_dom::Node;
+use blitz_dom::{Node, NodeId};
 
 use crate::scene::{Area, Corners, Ink, Mark, Shadow};
 
 use super::channels;
+use super::phases::Phases;
 use toy_browser_engine::ids;
 
 /// An element's own background, if it paints one.
@@ -79,6 +80,25 @@ pub(super) fn clips(node: &Node) -> Option<Area> {
         y: 0.0,
         width: size.width,
         height: size.height,
+    })
+}
+
+/// What is inside this box, cut off at its edge if `overflow` says so.
+///
+/// The cut goes round each pass rather than round the marks as a whole,
+/// because a clip is about a subtree and a subtree's marks are spread across
+/// the passes. See `Phases::wrapped`.
+pub(super) fn cut(node: &Node, id: NodeId, at: (f32, f32), inside: Phases) -> Phases {
+    let Some(to) = clips(node) else {
+        return inside;
+    };
+    let (x, y) = at;
+    inside.wrapped(|marks| {
+        vec![Mark::Clip {
+            to: Area { x, y, ..to },
+            marks,
+            node: Some(ids::raw(id)),
+        }]
     })
 }
 

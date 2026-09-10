@@ -6,7 +6,7 @@ almost nothing to do with the tests, and every one of them was a bug a real page
 had too.
 
 The directory is `css/CSS2/normal-flow`, 814 tests. It stood at 467 before any
-of this.
+of this, and stands at 628.
 
 ## The shape of it
 
@@ -116,6 +116,42 @@ the disagreement this file has. All of them match Chromium
 on their probe or take a real page measurably closer; none of them is what
 `normal-flow` measures, which is where a box goes and not what is drawn in it.
 A feature can be worth having and be invisible here.
+
+## A page was painted in tree order — *fixed*, +1
+
+Tree order is not paint order. CSS 2.1 Appendix E lays a stacking context down
+in passes: negative-`z-index` contexts first, then every in-flow block's
+background and borders in tree order, then the floats, then all the inline-level
+content, then anything positioned. So a paragraph's words are painted *after*
+the background of a box that comes later in the document.
+
+Painting each element and then its children — which is what this did — gets that
+right whenever nothing overlaps, and wrong the moment something does. The test
+that says so is `overflow-scroll-paint-order.html`, whose own comment names the
+order it wants:
+
+| | painted |
+|---|---|
+| wanted | red yellow **green** blue magenta |
+| before | red yellow **blue** green magenta |
+
+A subtree therefore no longer returns marks. It returns `Phases` — one list per
+pass — and whoever owns the stacking context joins them. A box painted as a unit
+(a float, an inline box, anything positioned, anything with a transform or an
+opacity) hands its parent one pass rather than five, which is what makes an
+`inline-block` atomic and what keeps a positioned subtree from having its parts
+dealt into passes already laid down.
+
+The first version lumped every positioned element into one late pass and lost
+four tests to it: `inline-replaced-height-010`, `-011`, `inline-replaced-width-016`
+and `-017` each put a `position: absolute; z-index: -1` div under a green block,
+and painting it late drew it over the thing it asked to be under. Negative
+`z-index` is now its own pass, first.
+
+Worth more than the +1 suggests. Only 4 of the 165 remaining failures are ours
+at all — the other 161 differ from Chromium in layout, which is blitz — so this
+was the whole of the work available without an upstream release, and it is a
+correctness gap that shows on ordinary pages rather than only in the suite.
 
 ## Nothing driven by JavaScript could run at all — *fixed*
 

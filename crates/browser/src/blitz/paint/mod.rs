@@ -28,6 +28,7 @@ use crate::blitz::{Composed, LaidOut};
 use crate::scene::{Area, Corners, Ink, Mark, Paint, Scene};
 
 use pass::Pass;
+use phases::Phases;
 use toy_browser_engine::ids;
 
 mod around;
@@ -37,6 +38,7 @@ mod edges;
 mod effects;
 mod markers;
 mod pass;
+mod phases;
 mod pictures;
 mod placed;
 mod rows;
@@ -130,7 +132,7 @@ fn paper(page: &LaidOut, area: Area) -> Mark {
 /// same coordinates, so paint order is one order and a Point means one thing.
 fn compose(unit: &Composed, across: f32, down: f32, pass: &mut Pass<'_>) -> Vec<Mark> {
     let seen = std::mem::take(&mut pass.seen);
-    let mut marks = subtree(unit, unit.laid_out.root_id(), (across, down), pass);
+    let mut marks = subtree(unit, unit.laid_out.root_id(), (across, down), pass).flat();
     pass.seen = seen;
 
     for (node, (area, child)) in &unit.mounted {
@@ -166,9 +168,9 @@ fn compose(unit: &Composed, across: f32, down: f32, pass: &mut Pass<'_>) -> Vec<
 /// what is inside it off at its own edge, and `opacity` fades all of it
 /// together. Neither can be said about a list of marks that has forgotten which
 /// of them belong to whom.
-fn subtree(unit: &Composed, id: NodeId, at: (f32, f32), pass: &mut Pass<'_>) -> Vec<Mark> {
+fn subtree(unit: &Composed, id: NodeId, at: (f32, f32), pass: &mut Pass<'_>) -> Phases {
     let Some((node, x, y)) = arrived(unit, id, at, &mut pass.seen) else {
-        return Vec::new();
+        return Phases::default();
     };
     let size = node.final_layout().size;
     pass.height = pass.height.max(y + size.height);
@@ -181,39 +183,39 @@ fn subtree(unit: &Composed, id: NodeId, at: (f32, f32), pass: &mut Pass<'_>) -> 
         false => None,
     };
 
-    let mut marks = itself(unit, node, (x, y), pass);
-
-    // Its content — what is drawn *in* it. This is what `overflow` cuts, and it
-    // includes the element's own text: an inline root holds the words of
-    // everything inside it, so leaving them out here would let the one thing
-    // most likely to overflow escape the clip.
-    // From the *content* box, not the border box. A box's padding and border are
-    // room its contents do not get, and parley lays a run out from zero at the
-    // content edge — so adding the border-box origin instead put every word
-    // under its own border. Nothing showed it for a long time because the boxes
-    // that hold text on most pages have no padding; a table cell does, and
-    // every one of them had its text against the rule.
-    let mut inside = within(unit, node, boxes::content(node, x, y), pass);
+    let role = phases::role_of(node);
+    // The box itself belongs to its own pass; what is written *in* it is
+    // inline-level whatever the box is, because words are inline content.
+    let mut own = itself(unit, node, (x, y), pass);
+    own.extend(rows::painted(unit, node, id, pass));
+    let mut mine = Phases {
+        blocks: own,
+        ..Phases::default()
+    };
+    let mut inside = Phases {
+        inlines: within(unit, node, boxes::content(node, x, y), pass),
+        ..Phases::default()
+    };
     // Children are walked either way: `visibility` is inherited but can be
     // turned back on, so a hidden box is not a hidden subtree.
     for child in unit.laid_out.paint_order(id) {
-        inside.extend(subtree(unit, child, at, pass));
+        inside.absorb(subtree(unit, child, at, pass));
     }
-    if let Some(zone) = outside {
-        pass.visible = Some(zone);
-    }
+    // And back, for whatever is painted after this subtree. `or` rather than an
+    // assignment because only a transform took the zone away in the first
+    // place: everywhere else `outside` is nothing and the zone still stands.
+    pass.visible = pass.visible.take().or(outside);
 
-    marks.extend(rows::painted(unit, node, id, pass));
+    mine.absorb(boxes::cut(node, id, (x, y), inside));
 
-    match boxes::clips(node) {
-        Some(to) => marks.push(Mark::Clip {
-            to: Area { x, y, ..to },
-            marks: inside,
-            node: Some(ids::raw(id)),
-        }),
-        None => marks.extend(inside),
+    let moved = mine.wrapped(|marks| effects::turned(node, x, y, effects::faded(node, marks)));
+    // A box that is painted as a unit hands its parent one pass, not four: an
+    // `inline-block` is atomic, a float is laid down whole, and a positioned
+    // subtree must not have its parts dealt into passes that are already down.
+    match role.atomic() || effects::a_context(node) {
+        true => moved.into_one(role),
+        false => moved,
     }
-    effects::turned(node, x, y, effects::faded(node, marks))
 }
 
 /// What a box is drawn *as*: its background and its edges.

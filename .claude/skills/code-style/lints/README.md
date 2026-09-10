@@ -42,8 +42,14 @@ Nothing here needs a runtime, an index to rebuild, or a tool to read it.
   — longhand for `Option::replace`. Taken as written; nothing to weigh.
 - [unused-imports](/.claude/skills/code-style/lints/unused-imports.md) — a
   name nothing needs. Deleted, with one exception worth checking for.
+- [wrong-self-convention](/.claude/skills/code-style/lints/wrong-self-convention.md)
+  — a name promising a receiver the signature does not take. Says which of the
+  two to change.
+- [field-reassign-with-default](/.claude/skills/code-style/lints/field-reassign-with-default.md)
+  — a default built and then written over. Says what the struct literal buys,
+  and the conditional shape that is not this.
 
-Both of the last two were written the first time they fired, from a grilling in
+The last four were written the first time they fired, from a grilling in
 the session that tripped them — which is the arrangement
 [ADR-0008](/docs/adr/0008-a-budget-set-below-the-code.md) argues for and the
 cognitive-complexity node predates.
