@@ -35,6 +35,7 @@ use bindings::install_globals;
 use convert::quote;
 
 pub use eval::{Argument, Evaluated, Handle};
+pub use node::support::Relayout;
 
 /// The prelude, in the order its files are evaluated. Each is a standalone
 /// script; together they build the environment on one shared `__tb` namespace,
@@ -110,6 +111,7 @@ impl Realm {
         run_scripts: bool,
         init_scripts: &[String],
         resources: Resources,
+        relayout: Option<node::support::Relayout>,
     ) -> Result<Self> {
         let doc = crate::dom::parse(source, base_url);
         let survey = crate::scripts::survey(&doc, base_url, &resources);
@@ -127,6 +129,14 @@ impl Realm {
 
         context.with(|ctx| {
             install_globals(&ctx, &dom, &report)?;
+            // Before the page's own scripts, which is the whole point: one that
+            // measures what it just built runs here, long before anything
+            // outside gets a turn.
+            if let Some(relayout) = relayout.clone()
+                && let Some(shared) = ctx.userdata::<node::Sharing>()
+            {
+                shared.set_relayout(relayout);
+            }
             for (name, source) in PRELUDE {
                 load::evaluate(&ctx, &report, &format!("<prelude/{name}>"), source);
             }
@@ -224,6 +234,16 @@ impl Realm {
                 shared.set_styles(environment.styles.clone());
             }
             let _ = ctx.eval::<Value, _>(script);
+        });
+    }
+
+    /// Records how this document is to be measured again when a script asks
+    /// for geometry the last measure cannot answer for.
+    pub fn set_relayout(&self, relayout: node::support::Relayout) {
+        self.context.with(|ctx| {
+            if let Some(shared) = ctx.userdata::<node::Sharing>() {
+                shared.set_relayout(relayout);
+            }
         });
     }
 

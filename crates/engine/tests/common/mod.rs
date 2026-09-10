@@ -26,6 +26,7 @@ pub fn page(body: &str) -> (Engine, SessionId) {
                 source: &source,
                 base_url: &url,
                 run_scripts: true,
+                relayout: None,
             },
         )
         .expect("load");

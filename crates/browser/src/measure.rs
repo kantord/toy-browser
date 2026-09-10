@@ -45,6 +45,7 @@ impl Browser {
         };
 
         self.remeasure_if_stale(page, revision, viewport)?;
+        self.arm_relayout(page, &session, viewport)?;
 
         // Only when something the page would hear about has changed. Telling it
         // means copying the whole page's geometry, and a window comes through
@@ -66,6 +67,39 @@ impl Browser {
             held.told = Some(told);
         }
         Ok(())
+    }
+
+    /// Says how this page is measured again when one of its own scripts asks
+    /// for geometry the last measure cannot answer for.
+    ///
+    /// What a browser calls a forced synchronous layout. A page that adds an
+    /// element and then asks how big it is has moved the document past
+    /// whatever was last published, and the honest answer needs the document
+    /// laid out as it stands now.
+    ///
+    /// The closure holds nothing of this Browser: a clone of the resource
+    /// cache, the base URL and the viewport, which is everything `lay_out`
+    /// wants. That is what makes it installable at all — the engine calls it
+    /// from inside a script, and this Browser is borrowed by the engine for as
+    /// long as that runs.
+    ///
+    /// The page alone, without whatever is mounted in it. A frame's own box is
+    /// in this layout either way; what is missing is the height the page inside
+    /// it would have asked for, and a forced layout is not the place to open
+    /// documents.
+    fn arm_relayout(
+        &mut self,
+        page: &PageId,
+        session: &toy_browser_engine::SessionId,
+        viewport: Viewport,
+    ) -> Result<()> {
+        let base = self
+            .base_url(page)
+            .map(|url| url.to_string())
+            .unwrap_or_else(|| "about:blank".to_owned());
+        let resources = self.resources.clone();
+        self.engine
+            .set_relayout(session, relayout_with(resources, base, viewport))
     }
 
     /// Hands the page's scripts their surroundings: how big the window is,
@@ -146,4 +180,21 @@ impl Browser {
 
         self.remeasure_with_blitz(page, revision, viewport)
     }
+}
+
+/// One way of measuring a document again, holding only what `lay_out` wants.
+///
+/// Free-standing rather than a method for the reason [`Browser::arm_relayout`]
+/// gives: nothing of the Browser may travel into it, because the engine calls
+/// it while the Browser is borrowed.
+pub(crate) fn relayout_with(
+    resources: toy_browser_fetch::Resources,
+    base: String,
+    viewport: Viewport,
+) -> toy_browser_engine::Relayout {
+    std::rc::Rc::new(move |html: &str| {
+        crate::blitz::lay_out(html, &[], viewport, &base, &resources)
+            .map(|laid| (laid.boxes(), laid.styles()))
+            .unwrap_or_default()
+    })
 }

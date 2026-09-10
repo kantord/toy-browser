@@ -190,6 +190,63 @@ and disagrees with it about nothing.
 such a document inherits the URL of the page holding it, so `load_markup` takes
 that URL as its base and there is nothing to resolve.
 
+## A script could not see what it had just done — *fixed*, +72 subtests
+
+`getBoundingClientRect` answered zero for everything. Not only for an element a
+script had just created — for one that had been in the document all along.
+
+Geometry is published to the realm before anything that runs JavaScript, and
+that was true and beside the point: a page's *own* scripts run inside the parse,
+before the browser has laid the document out even once. Every measurement taken
+at load time read an empty table. And a script that changed something and then
+measured read the table from before the change, which is worse, because it looks
+like an answer.
+
+Browsers call the fix a **forced synchronous layout**, and it is what the name
+says: reading geometry the last measure cannot answer for lays the document out
+again, then and there.
+
+Laying out is not the engine's to do, so this needs a way back out of it:
+
+```rust
+pub type Relayout = Rc<dyn Fn(&str) -> (Boxes, Styles)>;
+```
+
+The document goes out as HTML and where everything landed comes back. Nothing of
+the `Browser` travels into the closure — only a clone of the resource cache, the
+base URL and the viewport, which is all `lay_out` wants — and that is the whole
+reason it can be called at all: the engine runs it from inside a script, while
+the `Browser` that installed it is borrowed by the engine.
+
+It arrives with `LoadPage` rather than being installed afterwards, because the
+load builds the realm the page's scripts run in, and they run before anything
+outside gets a turn.
+
+**A page that only reads pays nothing.** The boxes carry the DOM revision they
+describe, and a measure is forced only when the document has moved past it. A
+Hacker News render still reports one full layout.
+
+72 subtests, across 16 tests that now fail nothing at all: every
+`block-in-inline` hit test — hit testing goes through the same door — six of the
+`containing-block-percent-*`, both `unresolvable-*-height`, and 47 of the 72 in
+`margin-collapse-through-for-various-height-values`. That last test was a
+timeout until `Node.append` existed to build its fixtures with; what is left of
+it is real layout disagreement, 49px against 50px and the `stretch` and `calc`
+values blitz does not implement.
+
+## A node could not be moved the short way — *fixed*, 1 timeout
+
+`append`, `prepend`, `replaceChildren`, `before`, `after` and `replaceWith` —
+what DOM calls the ParentNode and ChildNode mixins — did not exist. They are six
+lines each in the prelude on top of the four long-form methods Rust already
+owns.
+
+Worth writing down because of *how* it failed. A testharness page builds its own
+fixtures before registering any subtest, and one that meets a missing method
+throws there — so the suite reports a **timeout**, which reads like slowness and
+is nothing of the kind. A missing method is a fast failure wearing a slow
+failure's clothes.
+
 ## Nothing driven by JavaScript could run at all — *fixed*
 
 24 tests reported an error rather than a result, and had for as long as the

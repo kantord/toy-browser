@@ -121,6 +121,11 @@ impl Browser {
             .session(page)
             .map_err(|error| NavigationError::Failed(error.to_string()))?;
         let run_scripts = self.pages.get(page).is_none_or(|page| page.run_scripts);
+        let viewport = self
+            .pages
+            .get(page)
+            .map(|page| page.viewport)
+            .unwrap_or_default();
         let outcome = self
             .engine
             .load_page(
@@ -128,24 +133,17 @@ impl Browser {
                 LoadPage {
                     source,
                     base_url: target,
+                    relayout: Some(crate::measure::relayout_with(
+                        self.resources.clone(),
+                        target.to_string(),
+                        viewport,
+                    )),
                     run_scripts,
                 },
             )
             .map_err(|error| NavigationError::Failed(error.to_string()))?;
 
-        if let Some(page) = self.pages.get_mut(page) {
-            if remembering == Remembering::Yes && !page.url.is_empty() {
-                page.visited.push(std::mem::take(&mut page.url));
-            }
-            page.url = url.to_owned();
-            // The old document's geometry describes nothing now. Both caches,
-            // and by hand rather than by revision: a load replaces the Realm and
-            // the count starts again, so a fresh document can wear a number the
-            // previous one already used.
-            page.measured = None;
-            page.composed = None;
-        }
-
+        self.landed(page, url, remembering);
         Ok(Loaded {
             emitted: Emitted {
                 console: outcome.console,
@@ -155,6 +153,23 @@ impl Browser {
             executed: outcome.value.executed,
             skipped: outcome.value.skipped,
         })
+    }
+
+    /// Records that this page is now somewhere else.
+    fn landed(&mut self, page: &PageId, url: &str, remembering: Remembering) {
+        let Some(page) = self.pages.get_mut(page) else {
+            return;
+        };
+        if remembering == Remembering::Yes && !page.url.is_empty() {
+            page.visited.push(std::mem::take(&mut page.url));
+        }
+        page.url = url.to_owned();
+        // The old document's geometry describes nothing now. Both caches, and by
+        // hand rather than by revision: a load replaces the Realm and the count
+        // starts again, so a fresh document can wear a number the previous one
+        // already used.
+        page.measured = None;
+        page.composed = None;
     }
 
     /// The document behind a URL. `about:` names markup rather than bytes, so

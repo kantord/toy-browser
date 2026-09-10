@@ -28,6 +28,7 @@ fn loaded(source: &str) -> (Engine, SessionId) {
                 source,
                 base_url: &url,
                 run_scripts: true,
+                relayout: None,
             },
         )
         .expect("load");
@@ -121,6 +122,7 @@ fn a_load_replaces_the_realm_but_not_the_session() {
                     source: &source,
                     base_url: &url,
                     run_scripts: true,
+                    relayout: None,
                 },
             )
             .unwrap();
@@ -145,6 +147,7 @@ fn page_globals_do_not_survive_a_load() {
                     source: PAGE,
                     base_url: &url,
                     run_scripts: true,
+                    relayout: None,
                 },
             )
             .unwrap();

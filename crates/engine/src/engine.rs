@@ -105,6 +105,7 @@ impl Engine {
             page.run_scripts,
             &init_scripts,
             self.resources.clone(),
+            page.relayout,
         )?;
 
         let report = LoadReport {
@@ -170,6 +171,16 @@ impl Engine {
         environment: &Environment,
     ) -> Result<()> {
         self.realm(session)?.set_environment(environment);
+        Ok(())
+    }
+
+    /// Says how a Session's document is measured again.
+    ///
+    /// Layout is not the engine's to do, so a script that asks how big
+    /// something is after changing the document has to reach back out to
+    /// whoever can measure. This is that way out, installed once and kept.
+    pub fn set_relayout(&mut self, session: &SessionId, relayout: crate::Relayout) -> Result<()> {
+        self.realm(session)?.set_relayout(relayout);
         Ok(())
     }
 

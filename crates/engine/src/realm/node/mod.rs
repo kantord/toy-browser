@@ -21,7 +21,7 @@ mod events;
 mod install;
 mod objects;
 mod style;
-mod support;
+pub(super) mod support;
 mod tasks;
 
 use binder::dom_members;

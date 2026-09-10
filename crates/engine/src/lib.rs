@@ -25,7 +25,7 @@ use toy_browser_fetch::Url;
 
 pub use dom::parse_document;
 pub use engine::Engine;
-pub use realm::{Argument, Evaluated, Handle};
+pub use realm::{Argument, Evaluated, Handle, Relayout};
 pub use scripts::{EntryKind, EntryPoint, Fetch, Payload, ScriptSurvey, Timing};
 pub use serialize::{KEY_CLASS_PREFIX, key_of};
 
@@ -57,6 +57,11 @@ pub struct LoadPage<'a> {
     pub base_url: &'a Url,
     /// Whether to run the page's scripts at all.
     pub run_scripts: bool,
+    /// How to measure this document again, for a script that asks about
+    /// geometry before anyone has measured or after it has changed something.
+    /// Arrives with the load because the load builds the Realm the scripts run
+    /// in, and they run before anything else gets a chance to install one.
+    pub relayout: Option<Relayout>,
 }
 
 /// Facts a Realm cannot discover about itself.

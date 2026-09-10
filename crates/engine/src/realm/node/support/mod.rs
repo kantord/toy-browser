@@ -1,5 +1,10 @@
 //! What a Realm shares with every node in it, and the wrapper cache.
 //!
+//! `measure` is a child rather than a sibling because nothing reaches it except
+//! through here: the last measure of the document is a thing `Sharing` holds,
+//! and asking a node how big it is goes through the same door as asking what it
+//! is called.
+//!
 //! A node always presents the same wrapper, so a page comparing two references
 //! gets the answer the DOM promises. That means remembering the object made for
 //! each node id, and the memory is what makes drop order matter: QuickJS aborts
@@ -8,10 +13,14 @@
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
+mod measure;
+
 use rquickjs::{Class, Ctx, JsLifetime, Object, Persistent, Value};
 
 use super::Node;
 use crate::{Boxes, ElementBox, Point, dom::Dom};
+use measure::Measure;
+pub use measure::Relayout;
 
 /// The document every `Node` in a Realm belongs to, plus the wrappers already
 /// handed out for it.
@@ -33,12 +42,9 @@ pub struct Sharing {
     pub(super) listeners: RefCell<HashMap<String, Vec<super::events::Registered>>>,
     /// Timers and animation frames waiting for the lifecycle to drain them.
     pub(super) tasks: super::tasks::Queue,
-    /// Where layout put each element and which is in front, published from
-    /// outside after a measure. Nothing in here can work it out, so until
-    /// someone measures, every box is empty — the same answer a browser gives
-    /// for a `display: none` element, and nothing is anywhere to be hit.
-    boxes: RefCell<Boxes>,
-    styles: RefCell<crate::Styles>,
+    /// Where layout put each element and what it computed to, and how to have
+    /// that worked out again when the document has moved on.
+    pub(super) measure: Measure,
 }
 
 unsafe impl<'js> JsLifetime<'js> for Sharing {
@@ -53,34 +59,28 @@ impl Sharing {
             prototypes: RefCell::new(HashMap::new()),
             listeners: RefCell::new(HashMap::new()),
             tasks: super::tasks::Queue::default(),
-            boxes: RefCell::new(Boxes::default()),
-            styles: RefCell::new(crate::Styles::default()),
+            measure: Measure::default(),
         }
+    }
+
+    /// Records how to measure the document again.
+    pub fn set_relayout(&self, relayout: Relayout) {
+        self.measure.set_relayout(relayout);
     }
 
     /// Publishes where layout put things, replacing whatever was known before.
     pub fn set_boxes(&self, boxes: Boxes) {
-        *self.boxes.borrow_mut() = boxes;
+        self.measure.set_boxes(boxes, self.dom.revision());
     }
 
     /// Publishes what each element's style computed to.
     pub fn set_styles(&self, styles: crate::Styles) {
-        *self.styles.borrow_mut() = styles;
+        self.measure.set_styles(styles);
     }
 
-    /// What `id` computed, or nothing when it was never styled.
-    pub(super) fn style_of(&self, id: usize) -> Vec<(String, String)> {
-        self.styles.borrow().of(id).to_vec()
-    }
-
-    /// The box measured for `id`, or an empty one.
-    pub(super) fn box_of(&self, id: usize) -> ElementBox {
-        self.boxes.borrow().of(id)
-    }
-
-    /// The topmost element at `point`. Reads the last measure and runs nothing.
+    /// The topmost element at `point`.
     pub(crate) fn hit(&self, point: Point) -> Option<usize> {
-        self.boxes.borrow().hit(point)
+        self.measure.hit(&self.dom, point)
     }
 
     /// Records the prototype to give wrappers for `tag`.
@@ -237,14 +237,14 @@ pub(super) fn styled(ctx: &Ctx<'_>, id: usize) -> rquickjs::Result<Vec<(String, 
     let shared = ctx
         .userdata::<Sharing>()
         .ok_or_else(|| rquickjs::Error::new_from_js("Realm", "a document to belong to"))?;
-    Ok(shared.style_of(id))
+    Ok(shared.measure.style_of(&shared.dom, id))
 }
 
 pub(super) fn measured(ctx: &Ctx<'_>, id: usize) -> rquickjs::Result<ElementBox> {
     let shared = ctx
         .userdata::<Sharing>()
         .ok_or_else(|| rquickjs::Error::new_from_js("Realm", "a document to belong to"))?;
-    Ok(shared.box_of(id))
+    Ok(shared.measure.box_of(&shared.dom, id))
 }
 
 /// What `document.elementFromPoint` answers: the topmost element at a Point.

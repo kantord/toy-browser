@@ -10,8 +10,8 @@ Where it stood when this was written:
 |---|---|
 | pass | 630 |
 | fail | 159 |
-| harness OK, subtests failing | 22 |
-| timeout | 3 |
+| harness OK, subtests failing | 23 |
+| timeout | 2 |
 
 **Almost none of what is left is ours.** Every failing test was rendered and its
 box geometry compared against Chromium's for the same page. Of the 165 failures
@@ -219,10 +219,11 @@ Cheap individually. The reason to do them is the next directory, not this one.
 
 ## What is not a rendering bug
 
-- **22 tests run their harness and fail 45 subtests.** They were 24 errors — the
-  WebDriver surface, not the renderer — and they now report geometry we really
-  do get wrong. See `docs/wpt-fixed.md`.
-- **3 timeouts**, down from 46. Most of the 46 were the XHTML parse.
+- **23 tests run their harness**, and 16 of them now fail nothing. The 45
+  subtests still failing are geometry we really do get wrong — see
+  `docs/wpt-fixed.md`, which also records the 72 that stopped failing when a
+  script could finally see what it had just done.
+- **2 timeouts**, down from 46. Most of the 46 were the XHTML parse.
 
 ## Order worth taking them in
 
