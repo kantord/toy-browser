@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Several links, and which one a click reaches</title>
+    <style>
+      body { margin: 0; font: 16px/20px monospace; width: 400px }
+      /* A menu the way a real site collapses one: squeezed to nothing, its
+         contents keeping the size layout gave them, painted nowhere. Placed
+         over the paragraph so an item that still answered for a click would
+         take one meant for the text. */
+      #menu { position: absolute; top: 0; left: 0; height: 0; overflow: hidden }
+      #hidden { display: block; width: 400px; height: 80px }
+    </style>
+  </head>
+  <body>
+    <!--
+      One link per test would make "did the click navigate" the only question
+      that could be asked, and it is the wrong one. A click that reaches the
+      wrong link navigates perfectly well.
+
+      So: neighbours on one line, a link that wraps across two, and an
+      invisible one laid over all of them.
+    -->
+    <p id="para"><a id="one" href="one.html">aaa</a>
+      <a id="two" href="two.html">bbb</a>
+      <a id="three" href="three.html">ccc</a> ddddd eeeee fffff ggggg
+      <a id="wraps" href="wraps.html">hhhhh iiiii jjjjj kkkkk lllll</a> mmm</p>
+    <div id="menu"><a id="hidden" href="hidden.html">hidden</a></div>
+  </body>
+</html>

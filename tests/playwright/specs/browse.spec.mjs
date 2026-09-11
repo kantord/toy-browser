@@ -143,6 +143,21 @@ test("clicking a link inside a table navigates", async () => {
   expect(await page.textContent("h1")).toBe("Hello, toy browser");
 });
 
+test("a click reaches the link it landed on, not a neighbour", async () => {
+  // Every other click test here has one link in the fixture, so the only
+  // question it can ask is whether the click navigated — and a click that
+  // reaches the wrong link navigates perfectly well. This one has several:
+  // three side by side, one that wraps across two lines and so has a box
+  // covering all of them, and an invisible one from a collapsed menu laid
+  // over the lot. See docs/limits.md.
+  for (const [id, page_name] of [["one", "one.html"], ["two", "two.html"], ["three", "three.html"]]) {
+    await page.goto(fixture("activate-neighbours.html"));
+    const { x, y } = await centre(page, `#${id}`);
+    await page.mouse.click(x, y);
+    expect(page.url(), `clicking #${id}`).toContain(page_name);
+  }
+});
+
 // `page.mouse` works; `locator.click()` does not. Playwright checks a target is
 // actionable first, and that check awaits a promise from its injected script —
 // which comes back as `{}` because `Runtime.evaluate` ignores `awaitPromise`.

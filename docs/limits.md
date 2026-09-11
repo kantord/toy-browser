@@ -138,3 +138,16 @@ too, so there is nothing to fix here until the box is in the right place.
 `tests/window/` is how this was found: a real window on an Xvfb display in a
 container, clicked with `xdotool`, which answers "what does this actually do"
 without borrowing anyone's screen.
+
+### Why no test caught either
+
+Every click test had **one link in its fixture**, so the only question it could
+ask was whether the click navigated — and a click that reaches the wrong link
+navigates perfectly well. Both bugs passed that question for months.
+
+`tests/fixtures/activate-neighbours.html` is the shape that can be asked the
+right one: three links side by side, one that wraps across two lines and so has
+a box covering all of them, and an invisible one from a collapsed menu laid over
+the lot. Each test clicks a named link and asserts *which* page it reached. Run
+against the code before the fix, every one of them lands on the hidden menu
+item.
