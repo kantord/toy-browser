@@ -36,8 +36,11 @@ const LADDER: [u16; 17] = [
 const NORMAL: usize = 7;
 
 /// Opens a window showing `url`, and does not return until it is closed.
-pub fn open(url: &str, width: u32, height: u32) -> Result<()> {
+pub fn open(url: &str, width: u32, height: u32, scripts: bool) -> Result<()> {
     let mut browser = Browser::new(Resources::new())?;
+    // Before the page exists, because a page runs its scripts as it loads and
+    // there is no moment afterwards in which to have changed its mind.
+    browser.set_scripts(scripts);
     let page = browser.new_page()?;
     browser.set_viewport(
         &page,

@@ -60,21 +60,21 @@ impl Node {
 dom_members! {
     Node;
 
-    text {
-        input_type "type" => "type",
-        title "title" => "title",
-    }
-
+    // All written as well as read, because a page writes all of them: `title`
+    // in particular is cleared by any script that puts its own tooltip on an
+    // element, and a property with a getter and no setter throws in a module.
     text_rw {
         class_name / set_class_name "className" => "class",
         element_id / set_element_id "id" => "id",
         value / set_value "value" => "value",
+        title / set_title "title" => "title",
+        input_type / set_input_type "type" => "type",
     }
 
-    flag {
-        checked "checked" => "checked",
-        disabled "disabled" => "disabled",
-        hidden "hidden" => "hidden",
+    flag_rw {
+        checked / set_checked "checked" => "checked",
+        disabled / set_disabled "disabled" => "disabled",
+        hidden / set_hidden "hidden" => "hidden",
     }
 
     node {

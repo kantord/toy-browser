@@ -56,6 +56,10 @@ struct BrowseArgs {
 
     #[arg(long, default_value_t = 800)]
     height: u32,
+
+    /// Show the markup as parsed, without running the page's scripts.
+    #[arg(long)]
+    no_scripts: bool,
 }
 
 #[derive(clap::Args)]
@@ -126,6 +130,11 @@ struct WebdriverArgs {
     /// Port to listen on. Point a client at `http://127.0.0.1:<port>`.
     #[arg(long, default_value_t = 4444)]
     port: u16,
+
+    /// Serve every page as parsed, without running its scripts. A client can
+    /// still turn them back on for a page of its own.
+    #[arg(long)]
+    no_scripts: bool,
 }
 
 #[derive(clap::Args)]
@@ -133,6 +142,11 @@ struct ServeArgs {
     /// Port to listen on. Connect with `chromium.connectOverCDP("ws://127.0.0.1:<port>/")`.
     #[arg(long, default_value_t = 9222)]
     port: u16,
+
+    /// Serve every page as parsed, without running its scripts. A client can
+    /// still turn them back on for a page of its own.
+    #[arg(long)]
+    no_scripts: bool,
 }
 
 fn main() -> Result<()> {
@@ -141,14 +155,16 @@ fn main() -> Result<()> {
         Command::Serve(args) => {
             // One cache for the process. Every page every client opens reads
             // through it.
-            let browser = Browser::new(Resources::new())?;
+            let mut browser = Browser::new(Resources::new())?;
+            browser.set_scripts(!args.no_scripts);
             cdp::serve(args.port, browser)
         }
         Command::Webdriver(args) => {
-            let browser = Browser::new(Resources::new())?;
+            let mut browser = Browser::new(Resources::new())?;
+            browser.set_scripts(!args.no_scripts);
             webdriver::serve(args.port, browser)
         }
-        Command::Browse(args) => window::open(&args.url, args.width, args.height),
+        Command::Browse(args) => window::open(&args.url, args.width, args.height, !args.no_scripts),
         Command::Layout(args) => produce::layout(args),
         Command::Compare(args) => compare::run(
             &args.dir,

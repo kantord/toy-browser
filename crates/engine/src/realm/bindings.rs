@@ -65,6 +65,13 @@ dom_api! {
     "cloneNode" => |d, id: usize| d.clone_node(id),
     "elementChildren" => |d, id: usize| d.element_children(id),
     "appendHtml" => |d, id: usize, html: String| d.append_html(id, &html),
+    // What `fetch` is built on. A pair rather than a Result, because a
+    // rejection is a thing the page catches and an error here is not.
+    "parseUrl" => |d, href: String, base: Option<String>| d.parse_url(&href, base),
+    "read" => |d, url: String| match d.read(&url) {
+        Ok((url, body)) => vec![url, body, String::new()],
+        Err(reason) => vec![String::new(), String::new(), reason],
+    },
 }
 
 /// `__console`, which reports rather than prints: what a page logs is part of

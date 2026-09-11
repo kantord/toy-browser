@@ -192,6 +192,13 @@ pub struct Browser {
     /// cascades the whole document again look identical from outside, and cost
     /// about 48ms apart on a real page.
     laid: usize,
+    /// Whether a page opened from here runs its own scripts.
+    ///
+    /// A setting of the Browser rather than an argument to [`Self::new_page`]
+    /// because the pages that need it are the ones this process never names: a
+    /// CDP or WebDriver client opens its own, and a front end told to keep
+    /// scripts off has to be able to say so once rather than on each.
+    scripts: bool,
 }
 
 impl Browser {
@@ -204,6 +211,7 @@ impl Browser {
             pages: HashMap::new(),
             next_id: 0,
             laid: 0,
+            scripts: true,
         })
     }
 
@@ -230,7 +238,7 @@ impl Browser {
                 session: self.engine.create_session(),
                 url: String::new(),
                 viewport: Viewport::default(),
-                run_scripts: true,
+                run_scripts: self.scripts,
                 measured: None,
                 told: None,
                 composed: None,
@@ -271,6 +279,14 @@ impl Browser {
 
     /// Whether loads run the page's scripts. Off renders the markup as parsed,
     /// which is how a page that needs JavaScript is shown to need it.
+    /// Whether pages opened after this run their own scripts.
+    ///
+    /// Does not reach back to pages already open; [`Self::set_run_scripts`] is
+    /// the one that changes a page's mind.
+    pub fn set_scripts(&mut self, scripts: bool) {
+        self.scripts = scripts;
+    }
+
     pub fn set_run_scripts(&mut self, page: &PageId, run_scripts: bool) {
         if let Some(page) = self.pages.get_mut(page) {
             page.run_scripts = run_scripts;

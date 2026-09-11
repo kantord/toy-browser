@@ -40,7 +40,7 @@ pub use node::support::Relayout;
 /// The prelude, in the order its files are evaluated. Each is a standalone
 /// script; together they build the environment on one shared `__tb` namespace,
 /// so the order is the one their names give and nothing else.
-const PRELUDE: [(&str, &str); 8] = [
+const PRELUDE: [(&str, &str); 11] = [
     ("00-core", include_str!("../prelude/00-core.js")),
     ("10-node", include_str!("../prelude/10-node.js")),
     ("20-element", include_str!("../prelude/20-element.js")),
@@ -48,6 +48,9 @@ const PRELUDE: [(&str, &str); 8] = [
     ("40-events", include_str!("../prelude/40-events.js")),
     ("50-tasks", include_str!("../prelude/50-tasks.js")),
     ("55-storage", include_str!("../prelude/55-storage.js")),
+    ("56-address", include_str!("../prelude/56-address.js")),
+    ("57-network", include_str!("../prelude/57-network.js")),
+    ("58-shims", include_str!("../prelude/58-shims.js")),
     ("60-document", include_str!("../prelude/60-document.js")),
 ];
 

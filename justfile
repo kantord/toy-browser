@@ -155,6 +155,7 @@ window url="https://en.wikipedia.org/wiki/Lion" *POINTS:
     podman run --rm \
         -v {{ justfile_directory() }}:/repo \
         -v toy-browser-wpt-target:/repo/target \
+        -e WINDOW_ARGS \
         toy-browser-window {{ url }} {{ POINTS }}
 
 # --- the gate a session has to pass ---

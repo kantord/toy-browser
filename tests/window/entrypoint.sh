@@ -28,7 +28,10 @@ done
 xdpyinfo >/dev/null 2>&1 || { echo "window: X never came up" >&2; exit 1; }
 
 mkdir -p /repo/out/window
-/repo/target/release/toy-browser browse "$URL" >/repo/out/window/browser.log 2>&1 &
+# `WINDOW_ARGS=--no-scripts just window ...` to ask what a page looks like when
+# its scripts do not run.
+# shellcheck disable=SC2086
+/repo/target/release/toy-browser browse ${WINDOW_ARGS:-} "$URL" >/repo/out/window/browser.log 2>&1 &
 browser=$!
 
 # The window, once it exists. A title is how it says which page it is showing,

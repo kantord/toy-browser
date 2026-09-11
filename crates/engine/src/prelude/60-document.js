@@ -79,7 +79,12 @@
   globals.pageXOffset = 0;
   globals.pageYOffset = 0;
   globals.devicePixelRatio = 1;
-  globals.location = { href: "about:blank", protocol: "about:", toString: () => globals.location.href };
+
+  // Empty, which is what a browser answers for a page nothing linked to — and
+  // what every script reading it is prepared for. Absent is a different thing:
+  // `document.referrer.includes(...)` on undefined throws, and takes whatever
+  // the script was setting up with it.
+  document.referrer = "";
 
   globals.addEventListener = (type, listener, options) =>
     tb.addListener(tb.WINDOW, type, listener, options);

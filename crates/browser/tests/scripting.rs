@@ -56,3 +56,29 @@ fn a_page_whose_scripts_do_not_run_shows_its_fallback() {
         "the noscript fallback was hidden from a page whose scripts did not run",
     );
 }
+
+/// The same, said once for the whole browser rather than per page.
+///
+/// What a front end told `--no-scripts` needs: a CDP or WebDriver client opens
+/// pages this process never names, so there is no page to say it to.
+#[test]
+fn a_browser_told_to_run_no_scripts_opens_pages_that_do_not() {
+    let mut browser = browser();
+    browser.set_scripts(false);
+    let page = browser.new_page().unwrap();
+    browser.set_viewport(
+        &page,
+        Viewport {
+            width: 400,
+            height: Some(300),
+            ..Viewport::default()
+        },
+    );
+    browser
+        .navigate(&page, fixture("noscript.html").as_str())
+        .unwrap();
+    assert!(
+        fallback_shows(&mut browser, &page),
+        "a page opened with scripts off still hid its fallback",
+    );
+}

@@ -22,6 +22,7 @@ macro_rules! dom_members {
         $(text { $($tr:ident $tj:literal => $ta:literal),* $(,)? })?
         $(text_rw { $($wr:ident / $ws:ident $wj:literal => $wa:literal),* $(,)? })?
         $(flag { $($fr:ident $fj:literal => $fa:literal),* $(,)? })?
+        $(flag_rw { $($gr:ident / $gs:ident $gj:literal => $ga:literal),* $(,)? })?
         $(node { $($nr:ident $nj:literal => |$ns:ident| $nb:expr),* $(,)? })?
         $(list { $($lr:ident $lj:literal => |$ls:ident| $lb:expr),* $(,)? })?
         $(object { $($or:ident $oj:literal => |$oc:ident, $os:ident| $ob:expr),* $(,)? })?
@@ -59,6 +60,28 @@ macro_rules! dom_members {
                 #[qjs(get, rename = $fj)]
                 pub fn $fr(&self) -> bool {
                     self.dom.attribute(self.id, $fa).is_some()
+                }
+            )*)?
+
+            $($(
+                /// The same, written by adding or removing the attribute.
+                ///
+                /// Separate from the read-only shape because a page *sets*
+                /// these: a script hiding an element writes `hidden`, and a
+                /// property with a getter and no setter does not quietly fail
+                /// in a module — it throws, and takes the rest of the script
+                /// with it.
+                #[qjs(get, rename = $gj)]
+                pub fn $gr(&self) -> bool {
+                    self.dom.attribute(self.id, $ga).is_some()
+                }
+
+                #[qjs(set, rename = $gj)]
+                pub fn $gs(&self, on: bool) {
+                    match on {
+                        true => self.dom.set_attribute(self.id, $ga, ""),
+                        false => self.dom.remove_attribute(self.id, $ga),
+                    }
                 }
             )*)?
 

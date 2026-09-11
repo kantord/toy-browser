@@ -54,6 +54,52 @@ timeout until `Node.append` existed to build its fixtures with; what is left of
 it is real layout disagreement, 49px against 50px and the `stretch` and `calc`
 values blitz does not implement.
 
+## A real page found seven missing globals at once — *fixed*
+
+`hcker.news` is a client-rendered reader: an empty shell, and a bundle that
+fetches its stories. It rendered nothing but its own "JavaScript is turned off"
+banner — which was itself the `<noscript>` bug below, so the browser was
+advertising the very failure it was causing.
+
+Behind that, seven things a page reaches for that were not there. They are worth
+listing together because the failure mode is the same each time and it is not
+graceful: **a script reading a missing global stops at that line**, and takes
+with it everything it was about to set up.
+
+| missing | what died |
+|---|---|
+| `navigator` | three of the page's four scripts, on their first line |
+| `fetch` | the bundle; nothing could load |
+| `Intl` | the bundle again — QuickJS ships without ECMA-402 |
+| `location.pathname`, `search`, `hash`, … | the router; `location` had only `href` and `protocol` |
+| `URL`, `URLSearchParams`, `history`, `matchMedia` | absent outright |
+| `document.referrer` | the script that boots the app, on `.includes` of undefined |
+| settable `title`, `hidden`, `checked`, `type` | the hovercard setup |
+
+That last row is the one worth remembering. Those properties had getters and no
+setters, and **a bundle is a module, so assignment throws** rather than failing
+quietly the way it does in a classic script. A probe written as an ordinary
+`<script>` reported all of them as fine; the same probe with `'use strict'`
+named all twenty-four. A browser that only ever tests non-strict code cannot see
+this class of bug at all.
+
+Two things stayed true to the layering. **`fetch` reads through the same cache**
+the document and every subresource came through — a page fetching a file it
+already has gets the bytes it already has, and the same answer the `<img>`
+beside it would get. And **URLs are taken apart by the crate that resolves every
+other reference the document makes**, rather than by a regular expression in the
+prelude: a router and an `<a href>` that disagree about what a path is send the
+page somewhere it did not mean to go.
+
+`location` is also right *while the page's own scripts run* now, rather than
+only after the browser says so afterwards — a router reads it at exactly that
+moment, and used to be told the page was at `about:blank`.
+
+The feed still does not fill. `IntersectionObserver` is an alias for
+`MutationObserver` and never reports an intersection, so a list that asks for
+its first page when a sentinel scrolls into view never asks. Unverified, and the
+next thing to look at.
+
 ## Every "please enable JavaScript" banner was drawn — *fixed*
 
 `<noscript>` is the one element whose rendering is about the browser rather
