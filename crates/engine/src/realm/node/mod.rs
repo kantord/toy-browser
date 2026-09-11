@@ -107,13 +107,13 @@ dom_members! {
         client_rects "getClientRects" -> rquickjs::Array<'js> => |ctx, n| objects::client_rects(ctx, n.id),
     }
 
-    number {
-        offset_width "offsetWidth" => |ctx, n| Ok(support::measured(&ctx, n.id)?.width.into()),
-        offset_height "offsetHeight" => |ctx, n| Ok(support::measured(&ctx, n.id)?.height.into()),
-        // The border box, which is all we measure: padding and border are not
-        // subtracted because nothing here knows them.
-        client_width "clientWidth" => |ctx, n| Ok(support::measured(&ctx, n.id)?.width.into()),
-        client_height "clientHeight" => |ctx, n| Ok(support::measured(&ctx, n.id)?.height.into()),
+    inside {
+        offset_width "offsetWidth" => offset_width,
+        offset_height "offsetHeight" => offset_height,
+        client_width "clientWidth" => client_width,
+        client_height "clientHeight" => client_height,
+        scroll_width "scrollWidth" => scroll_width,
+        scroll_height "scrollHeight" => scroll_height,
     }
 
     event_target { |n| n.id.to_string() }

@@ -1,9 +1,10 @@
-# What fixing the web platform tests found
+# What this browser drew wrong
 
-Kept apart from `docs/wpt-findings.md`, which is about what is still wrong. This
-is the record of what moved and why — worth its own file because the causes have
-almost nothing to do with the tests, and every one of them was a bug a real page
-had too.
+Kept apart from `docs/wpt-findings.md`, which is about what is still wrong, and
+from `docs/wpt-answered.md`, which is the same record for what a page *asked*
+rather than what was drawn. This is what moved and why — worth writing down
+because the causes have almost nothing to do with the tests, and every one of
+them was a bug a real page had too.
 
 The directory is `css/CSS2/normal-flow`, 814 tests. It stood at 467 before any
 of this, and stands at 630.
@@ -190,116 +191,9 @@ and disagrees with it about nothing.
 such a document inherits the URL of the page holding it, so `load_markup` takes
 that URL as its base and there is nothing to resolve.
 
-## A script could not see what it had just done — *fixed*, +72 subtests
+## The other half
 
-`getBoundingClientRect` answered zero for everything. Not only for an element a
-script had just created — for one that had been in the document all along.
-
-Geometry is published to the realm before anything that runs JavaScript, and
-that was true and beside the point: a page's *own* scripts run inside the parse,
-before the browser has laid the document out even once. Every measurement taken
-at load time read an empty table. And a script that changed something and then
-measured read the table from before the change, which is worse, because it looks
-like an answer.
-
-Browsers call the fix a **forced synchronous layout**, and it is what the name
-says: reading geometry the last measure cannot answer for lays the document out
-again, then and there.
-
-Laying out is not the engine's to do, so this needs a way back out of it:
-
-```rust
-pub type Relayout = Rc<dyn Fn(&str) -> (Boxes, Styles)>;
-```
-
-The document goes out as HTML and where everything landed comes back. Nothing of
-the `Browser` travels into the closure — only a clone of the resource cache, the
-base URL and the viewport, which is all `lay_out` wants — and that is the whole
-reason it can be called at all: the engine runs it from inside a script, while
-the `Browser` that installed it is borrowed by the engine.
-
-It arrives with `LoadPage` rather than being installed afterwards, because the
-load builds the realm the page's scripts run in, and they run before anything
-outside gets a turn.
-
-**A page that only reads pays nothing.** The boxes carry the DOM revision they
-describe, and a measure is forced only when the document has moved past it. A
-Hacker News render still reports one full layout.
-
-72 subtests, across 16 tests that now fail nothing at all: every
-`block-in-inline` hit test — hit testing goes through the same door — six of the
-`containing-block-percent-*`, both `unresolvable-*-height`, and 47 of the 72 in
-`margin-collapse-through-for-various-height-values`. That last test was a
-timeout until `Node.append` existed to build its fixtures with; what is left of
-it is real layout disagreement, 49px against 50px and the `stretch` and `calc`
-values blitz does not implement.
-
-## A node could not be moved the short way — *fixed*, 1 timeout
-
-`append`, `prepend`, `replaceChildren`, `before`, `after` and `replaceWith` —
-what DOM calls the ParentNode and ChildNode mixins — did not exist. They are six
-lines each in the prelude on top of the four long-form methods Rust already
-owns.
-
-Worth writing down because of *how* it failed. A testharness page builds its own
-fixtures before registering any subtest, and one that meets a missing method
-throws there — so the suite reports a **timeout**, which reads like slowness and
-is nothing of the kind. A missing method is a fast failure wearing a slow
-failure's clothes.
-
-## Nothing driven by JavaScript could run at all — *fixed*
-
-24 tests reported an error rather than a result, and had for as long as the
-suite has been run here. The error was always the same and always in
-wptrunner's own code, which is what made it look like theirs:
-
-```
-File ".../executorwebdriver.py", line 593, in element
-    return element.click()
-AttributeError: 'dict' object has no attribute 'click'
-```
-
-It was five bugs of ours in a row, each hidden behind the one before.
-
-**A script returning an element gave back a dictionary.** Scripts are run *by
-value*, because a client asking for an object wants the object — and a DOM node
-serialised by value is a plain dictionary, which is not something a client can
-click. wptrunner opens every test with `return document.documentElement` and
-then clicks what came back. The wrapper now reports the id the DOM knows the
-element by, and the answer is turned back into a reference.
-
-**`clearTimeout(null)` threw.** The binding took a `u64` and refused anything
-else. HTML says an id matching no timer is simply not cancelled, and
-testharness.js clears a timeout it has not set yet — in its constructor. So no
-test in the suite could begin.
-
-**`window.parent`, `top` and `opener` did not exist.** Code walks up the frame
-tree with `while (w != w.parent) w = w.parent`. With `parent` undefined that
-does not end the walk; it makes the next turn read a property of nothing. A page
-at the top of its own tree is its own parent and its own top.
-
-**`removeChild`, `replaceChild` and `createElementNS` were missing.**
-
-**`querySelector` could not see a subtree that was not in the document.** It ran
-a document-wide query and filtered the results by ancestry, so a tree built but
-not yet inserted matched nothing — and testharness builds its entire results
-table that way before putting it on the page. It is scoped now, through blitz's
-own `query_selector_all_in`. `matches` and `closest` had the same bug and are
-fixed with it.
-
-They now report: 22 harness-OK, and 45 subtests failing on geometry we really do
-get wrong. That is worth more than it sounds. A test that errors says nothing;
-a test that runs and fails says exactly what.
-
-## The one that made the other five slow
-
-A task that threw reported this, and only this:
-
-```
-task threw: Exception generated by QuickJS
-```
-
-That is `rquickjs::Error` printed — the thrown value was sitting in the context
-untouched. Four of the five above were found in minutes once the message
-carried the exception and its stack, and hours before it did. A swallowed error
-is worse than a loud one by however long it takes to find.
+Half of what this suite found was not about drawing at all. A page asks the
+browser questions — how big is this, what is under that, put this node there —
+and a wrong answer fails a test exactly as a wrong pixel does. Those are in
+[what a page asked and was told wrong](/docs/wpt-answered.md).

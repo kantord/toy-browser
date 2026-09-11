@@ -10,7 +10,8 @@ use std::collections::HashMap;
 use blitz_dom::{Node, NodeId};
 
 use crate::blitz::LaidOut;
-use crate::blitz::geometry::{Around, placed};
+use crate::blitz::geometry::placed;
+use crate::blitz::implied::Around;
 
 /// The same account of a document the comparison tooling reads from a real
 /// browser, so the two can be put side by side.

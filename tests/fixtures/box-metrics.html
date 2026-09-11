@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>What a page can ask about a box</title>
+    <style>
+      body { margin: 0; font: 16px/20px monospace }
+      /* Content-box sizing, so each of the three answers is a different
+         number and no two can be confused for each other: the content is
+         200x100, the padding box 220x120, the border box 230x130. */
+      #plain { width: 200px; height: 100px; padding: 10px; border: 5px solid }
+      /* Nothing overflows, so the scrolling area is the padding box — which
+         is the assertion most of css/cssom-view is built on. */
+      #over { width: 200px; height: 100px; overflow: hidden; border: 0; padding: 0 }
+      #over > div { width: 500px; height: 400px }
+    </style>
+  </head>
+  <body>
+    <div id="plain">no overflow</div>
+    <div id="over"><div>overflowing</div></div>
+  </body>
+</html>

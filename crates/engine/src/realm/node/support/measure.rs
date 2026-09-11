@@ -64,6 +64,12 @@ impl Measure {
         self.styles.borrow().of(id).to_vec()
     }
 
+    /// What `id`'s box is made of, or zeroes.
+    pub fn inside_of(&self, dom: &Dom, id: usize) -> crate::Inside {
+        self.fresh(dom);
+        self.boxes.borrow().inside(id)
+    }
+
     /// The box measured for `id`, or an empty one.
     pub fn box_of(&self, dom: &Dom, id: usize) -> ElementBox {
         self.fresh(dom);

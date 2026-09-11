@@ -42,8 +42,9 @@ read 467, 495, 469, 467 with nothing between them the whole-page path would
 notice, and that was written down here as suite flakiness. It was not: it was a
 race of ours, and it is the next entry.
 
-What has been fixed, and what each was worth, is in
-`docs/wpt-fixed.md`. This file is what is still wrong.
+What has been fixed, and what each was worth, is in `docs/wpt-fixed.md` for
+what was drawn and `docs/wpt-answered.md` for what a page was told. This file is
+what is still wrong.
 
 ## How this was worked out
 
@@ -221,7 +222,7 @@ Cheap individually. The reason to do them is the next directory, not this one.
 
 - **23 tests run their harness**, and 16 of them now fail nothing. The 45
   subtests still failing are geometry we really do get wrong — see
-  `docs/wpt-fixed.md`, which also records the 72 that stopped failing when a
+  `docs/wpt-answered.md`, which also records the 72 that stopped failing when a
   script could finally see what it had just done.
 - **2 timeouts**, down from 46. Most of the 46 were the XHTML parse.
 

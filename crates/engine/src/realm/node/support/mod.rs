@@ -240,6 +240,14 @@ pub(super) fn styled(ctx: &Ctx<'_>, id: usize) -> rquickjs::Result<Vec<(String, 
     Ok(shared.measure.style_of(&shared.dom, id))
 }
 
+/// What `id`'s box is made of: its padding box and its scrolling area.
+pub(super) fn within(ctx: &Ctx<'_>, id: usize) -> rquickjs::Result<crate::Inside> {
+    let shared = ctx
+        .userdata::<Sharing>()
+        .ok_or_else(|| rquickjs::Error::new_from_js("Realm", "a document to belong to"))?;
+    Ok(shared.measure.inside_of(&shared.dom, id))
+}
+
 pub(super) fn measured(ctx: &Ctx<'_>, id: usize) -> rquickjs::Result<ElementBox> {
     let shared = ctx
         .userdata::<Sharing>()

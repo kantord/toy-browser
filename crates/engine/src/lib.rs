@@ -167,6 +167,35 @@ pub struct Point {
 pub struct Boxes {
     painted: Vec<(NodeId, ElementBox)>,
     by_node: HashMap<NodeId, ElementBox>,
+    inside: HashMap<NodeId, Inside>,
+}
+
+/// What a box is made of, beyond where it sits.
+///
+/// `getBoundingClientRect` answers with the border box and nothing else, so
+/// that is what an [`ElementBox`] is. CSSOM asks about two more:
+///
+/// - the **padding box**, which a page reads as `clientWidth`, and which is the
+///   border box with its borders taken off;
+/// - the **scrolling area**, read as `scrollWidth` — as big as the padding box,
+///   or as big as whatever overflows it.
+///
+/// The border box is here too, as `offset`. It is the same rectangle
+/// [`ElementBox`] carries, and it is repeated because the six are one question
+/// a page asks six ways: all of them are whole numbers, all of them come from
+/// the same measure, and answering them from one table is what keeps
+/// `scrollHeight` and `clientHeight` agreeing when nothing overflows.
+///
+/// Whole numbers because the IDL says `long`. A page comparing one against a
+/// length it set gets the number it wrote, not that number and a fraction.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Inside {
+    pub offset_width: f32,
+    pub offset_height: f32,
+    pub client_width: f32,
+    pub client_height: f32,
+    pub scroll_width: f32,
+    pub scroll_height: f32,
 }
 
 impl Boxes {
@@ -191,6 +220,17 @@ impl Boxes {
             self.painted.push((node, *piece));
         }
         self.by_node.insert(node, whole);
+    }
+
+    /// Records what `node`'s box is made of.
+    pub fn line(&mut self, node: NodeId, inside: Inside) {
+        self.inside.insert(node, inside);
+    }
+
+    /// The padding box and scrolling area of `node`, or zeroes — which is the
+    /// answer the DOM promises for an element that was never laid out.
+    pub fn inside(&self, node: NodeId) -> Inside {
+        self.inside.get(&node).copied().unwrap_or_default()
     }
 
     /// Where `node` was measured, if layout produced a box for it at all.

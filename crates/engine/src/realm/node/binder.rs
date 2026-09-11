@@ -27,6 +27,7 @@ macro_rules! dom_members {
         $(object { $($or:ident $oj:literal => |$oc:ident, $os:ident| $ob:expr),* $(,)? })?
         $(method { $($or2:ident $oj2:literal -> $ort:ty => |$oc2:ident, $os2:ident| $ob2:expr),* $(,)? })?
         $(number { $($mr:ident $mj:literal => |$mc:ident, $ms:ident| $mb:expr),* $(,)? })?
+        $(inside { $($ir:ident $ij:literal => $ifield:ident),* $(,)? })?
         $(event_target { |$er:ident| $ekey:expr })?
         rest { $($rest:tt)* }
     ) => {
@@ -99,6 +100,16 @@ macro_rules! dom_members {
                 pub fn $mr<'js>(&self, ctx: Ctx<'js>) -> rquickjs::Result<f64> {
                     let ($mc, $ms) = (ctx, self);
                     $mb
+                }
+            )*)?
+
+            $($(
+                /// One of the sizes CSSOM asks an element for: its border box,
+                /// its padding box, or its scrolling area. All six are the same
+                /// lookup, and a whole number, because the IDL says `long`.
+                #[qjs(get, rename = $ij)]
+                pub fn $ir<'js>(&self, ctx: Ctx<'js>) -> rquickjs::Result<f64> {
+                    Ok(support::within(&ctx, self.id)?.$ifield.into())
                 }
             )*)?
 
