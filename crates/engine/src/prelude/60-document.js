@@ -80,6 +80,17 @@
   globals.pageYOffset = 0;
   globals.devicePixelRatio = 1;
 
+  // This page is being looked at. Nothing here is ever in a background tab or
+  // behind another window — there is one page and it is the one being rendered
+  // — so the honest answer is the same every time.
+  //
+  // Undefined is a different answer, and a worse one: a feed that loads only
+  // when `document.visibilityState === "visible"` waits for ever if the
+  // comparison can never hold, and does it without an error to say so.
+  document.visibilityState = "visible";
+  document.hidden = false;
+  document.hasFocus = () => true;
+
   // Empty, which is what a browser answers for a page nothing linked to — and
   // what every script reading it is prepared for. Absent is a different thing:
   // `document.referrer.includes(...)` on undefined throws, and takes whatever

@@ -65,6 +65,20 @@
     return Promise.resolve(new Response(body, { url: resolved, status: 200 }));
   };
 
+  // What a service worker registration looks like from the page, holding no
+  // worker: nothing is installing, nothing is waiting, nothing is active.
+  const registration = {
+    scope: "/",
+    active: null,
+    installing: null,
+    waiting: null,
+    updateViaCache: "none",
+    update: () => Promise.resolve(),
+    unregister: () => Promise.resolve(true),
+    addEventListener() {},
+    removeEventListener() {},
+  };
+
   // Who the page is talking to. Read far more often than it is acted on — a
   // script asking for `navigator.userAgent` and finding nothing there stops at
   // that line, which is how three of hcker.news's four scripts died.
@@ -89,28 +103,18 @@
     doNotTrack: null,
     // No service workers: one is a background thread, and there is none.
     //
-    // Answered with a registration that holds nothing rather than a rejection,
-    // because almost nobody catches this. A page registering a worker is
-    // saying what it would like to happen next time, not asking a question it
-    // waits on — and a rejection nobody catches stops the boot it was written
-    // in the middle of. `ready` never settles, which is the truthful part: the
-    // worker it would hand over is never going to be active.
+    // Answered with a registration that holds nothing, rather than with a
+    // rejection or with a promise that never settles. Both of those were tried
+    // and both are worse: almost nobody catches `register`, so a rejection
+    // stops the boot it was written in the middle of — and a `ready` that never
+    // settles hangs whatever waited for it, silently and for ever, which is the
+    // hardest kind of nothing to debug.
     serviceWorker: {
       controller: null,
-      register: () =>
-        Promise.resolve({
-          scope: "/",
-          active: null,
-          installing: null,
-          waiting: null,
-          update: () => Promise.resolve(),
-          unregister: () => Promise.resolve(true),
-          addEventListener() {},
-          removeEventListener() {},
-        }),
-      getRegistration: () => Promise.resolve(undefined),
-      getRegistrations: () => Promise.resolve([]),
-      ready: new Promise(() => {}),
+      register: () => Promise.resolve(registration),
+      getRegistration: () => Promise.resolve(registration),
+      getRegistrations: () => Promise.resolve([registration]),
+      ready: Promise.resolve(registration),
       addEventListener() {},
       removeEventListener() {},
     },

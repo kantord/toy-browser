@@ -119,6 +119,48 @@
     return most !== null || least !== null;
   };
 
+  // `randomUUID` and `getRandomValues`, which is all a page usually wants —
+  // for a key in a list, a request id, a cache buster. Not cryptography: these
+  // come from `Math.random`, and anything that needs unguessable numbers must
+  // not ask this browser for them.
+  globalThis.crypto = {
+    randomUUID() {
+      const hex = (count) =>
+        Array.from({ length: count }, () =>
+          Math.floor(Math.random() * 16).toString(16),
+        ).join("");
+      // Version 4, variant 1: the two fixed nibbles are what tells a reader
+      // which kind of UUID this claims to be.
+      return `${hex(8)}-${hex(4)}-4${hex(3)}-${"89ab"[Math.floor(Math.random() * 4)]}${hex(3)}-${hex(12)}`;
+    },
+    getRandomValues(into) {
+      for (let at = 0; at < into.length; at += 1) {
+        into[at] = Math.floor(Math.random() * 0x100000000);
+      }
+      return into;
+    },
+    subtle: undefined,
+  };
+
+  // A deep copy, which is what a page uses it for. Structured clone can carry
+  // things JSON cannot — a Map, a Date, a cycle — and this cannot; what it can
+  // do is stop the call throwing.
+  globalThis.structuredClone = (value) => {
+    const seen = new WeakMap();
+    const copy = (it) => {
+      if (it === null || typeof it !== "object") return it;
+      if (seen.has(it)) return seen.get(it);
+      if (it instanceof Date) return new Date(it.getTime());
+      if (it instanceof Map) return new Map([...it].map(([k, v]) => [copy(k), copy(v)]));
+      if (it instanceof Set) return new Set([...it].map(copy));
+      const made = Array.isArray(it) ? [] : {};
+      seen.set(it, made);
+      for (const [name, held] of Object.entries(it)) made[name] = copy(held);
+      return made;
+    };
+    return copy(value);
+  };
+
   globalThis.matchMedia = (query) => ({
     media: String(query),
     matches: answers(query),
