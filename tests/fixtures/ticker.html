@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Does anything run after the load</title>
+    <style>
+      body { margin: 0; font: 64px/1.4 monospace; padding: 20px }
+      #tick { color: #b00 }
+    </style>
+  </head>
+  <body>
+    <!-- Three ways a page expects to be given a turn after it has loaded. If
+         the numbers below never move, the browser ran the script once and
+         never came back. -->
+    <div>timer <span id="tick">0</span></div>
+    <div>frame <span id="frame">0</span></div>
+    <div>promise <span id="soon">no</span></div>
+    <script>
+      let ticks = 0;
+      setInterval(() => { document.getElementById("tick").textContent = ++ticks; }, 100);
+      let frames = 0;
+      const spin = () => {
+        document.getElementById("frame").textContent = ++frames;
+        requestAnimationFrame(spin);
+      };
+      requestAnimationFrame(spin);
+      Promise.resolve().then(() => { document.getElementById("soon").textContent = "yes"; });
+    </script>
+  </body>
+</html>

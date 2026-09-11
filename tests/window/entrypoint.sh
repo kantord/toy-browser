@@ -2,7 +2,11 @@
 # Open a window on a display nobody is sitting at, click where told, and say
 # what happened.
 #
-#   window-run <url> [click-x,click-y ...]
+#   window-run <url> [x,y ...]
+#
+# A point is clicked. A point written `m100,200` is only moved to — which is how
+# to ask whether the window notices a page that changes itself under the pointer
+# without being clicked.
 #
 # Each step waits for the previous one to answer rather than sleeping at it: a
 # window that is mapped is not a window that has painted, and the difference is
@@ -49,13 +53,20 @@ shot 000-opened
 step=0
 for point in "$@"; do
     step=$((step + 1))
+    move_only=""
+    case "$point" in m*) move_only=yes; point="${point#m}" ;; esac
     x="${point%,*}"
     y="${point#*,}"
     xdotool mousemove --window "$id" "$x" "$y"
-    sleep 0.3
-    xdotool click 1
-    sleep 3
-    shot "$(printf '%03d' "$step")-clicked-$x-$y"
+    sleep 0.5
+    if [ -z "$move_only" ]; then
+        xdotool click 1
+        sleep 3
+        shot "$(printf '%03d' "$step")-clicked-$x-$y"
+    else
+        sleep 2
+        shot "$(printf '%03d' "$step")-moved-$x-$y"
+    fi
 done
 
 kill "$browser" 2>/dev/null || true

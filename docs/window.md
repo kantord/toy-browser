@@ -20,6 +20,18 @@ This is what found the hit-testing bugs in `docs/limits.md`. Neither showed up
 in the corpus, because both are about *where a click lands* rather than about
 what is drawn, and a screenshot cannot tell you that.
 
+## Moving without clicking
+
+A point written `m100,200` is moved to and not clicked. That is how to ask
+whether the window notices a page changing itself under the pointer — a hover
+card, a coordinate readout — which no click-only harness can tell apart from a
+page that never changed.
+
+It is also how the gap below was found. A page gets its turn at load and not
+after: `setInterval` fires once, `requestAnimationFrame` spins until it hits the
+task budget and stops, and nothing pumps the queue again except a mouse event.
+A clock does not tick.
+
 ## Why a container and not your desktop
 
 The first version of this investigation drove the developer's own X session. It

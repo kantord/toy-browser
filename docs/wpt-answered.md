@@ -54,6 +54,24 @@ timeout until `Node.append` existed to build its fixtures with; what is left of
 it is real layout disagreement, 49px against 50px and the `stretch` and `calc`
 values blitz does not implement.
 
+## Every "please enable JavaScript" banner was drawn — *fixed*
+
+`<noscript>` is the one element whose rendering is about the browser rather
+than about the document: it is `display: none` when scripting is enabled, and
+shows what it holds when it is not. This browser never said which, so it drew
+both — the page *and* the fallback that was meant to replace it.
+
+Found by asking the question rather than by a test: `<template>`, `<script>`
+text, `<style>` text, `[hidden]` and `<title>` were all correctly not drawn,
+and `<noscript>` was the one that was.
+
+The rule is worked out per page rather than written into the user-agent sheet
+once, because a page whose scripts were turned off is exactly the page that
+wants the fallback — and this browser can be told to turn them off.
+
+Still not drawn and should be: a `<textarea>`'s contents. That is a form
+control rather than a banner, so it is quieter and rarer.
+
 ## A node could not be moved the short way — *fixed*, 1 timeout
 
 `append`, `prepend`, `replaceChildren`, `before`, `after` and `replaceWith` —

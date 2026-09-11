@@ -1,0 +1,58 @@
+//! What the cascade is told about whether this page's scripts run.
+
+mod common;
+
+use common::{browser, fixture};
+use toy_browser::{Browser, PageId, Viewport};
+
+fn page(browser: &mut Browser, scripts: bool) -> PageId {
+    let page = browser.new_page().unwrap();
+    browser.set_run_scripts(&page, scripts);
+    browser.set_viewport(
+        &page,
+        Viewport {
+            width: 400,
+            height: Some(300),
+            ..Viewport::default()
+        },
+    );
+    browser
+        .navigate(&page, fixture("noscript.html").as_str())
+        .unwrap();
+    page
+}
+
+/// Whether the fallback was given a box to be drawn in.
+fn fallback_shows(browser: &mut Browser, page: &PageId) -> bool {
+    let element = browser.query(page, "#fallback").unwrap();
+    let Some(first) = element.first() else {
+        return false;
+    };
+    browser
+        .bounding_box(page, first)
+        .unwrap()
+        .is_some_and(|area| area.width > 0.0 && area.height > 0.0)
+}
+
+#[test]
+fn a_page_whose_scripts_run_does_not_show_its_fallback() {
+    let mut browser = browser();
+    let page = page(&mut browser, true);
+    assert!(
+        !fallback_shows(&mut browser, &page),
+        "the noscript fallback was drawn over a page whose scripts ran",
+    );
+}
+
+/// The other direction, and the reason the rule is worked out per page rather
+/// than written into the user-agent sheet once: a page with its scripts turned
+/// off is exactly the page that wants what `<noscript>` holds.
+#[test]
+fn a_page_whose_scripts_do_not_run_shows_its_fallback() {
+    let mut browser = browser();
+    let page = page(&mut browser, false);
+    assert!(
+        fallback_shows(&mut browser, &page),
+        "the noscript fallback was hidden from a page whose scripts did not run",
+    );
+}
