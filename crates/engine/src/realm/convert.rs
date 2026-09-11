@@ -53,6 +53,29 @@ pub(super) fn exception_text(ctx: &Ctx<'_>, error: rquickjs::Error) -> String {
     detail.trim().to_owned()
 }
 
+/// What a value a page rejected with says about itself.
+///
+/// An `Error` carries a message and a stack, and both are wanted — a rejection
+/// with no `catch` is reported from wherever the runtime noticed it rather than
+/// from where it was thrown, so the stack is the only thing that says where.
+/// Anything else is whatever it prints as: a page is free to reject with a
+/// string, a number, or nothing at all.
+pub(super) fn value_text(ctx: &Ctx<'_>, value: &rquickjs::Value<'_>) -> String {
+    if let Some(exception) = value.clone().into_exception() {
+        let message = exception.message().unwrap_or_default();
+        return match exception.stack() {
+            Some(stack) => format!("{message}\n{stack}").trim().to_owned(),
+            None => message,
+        };
+    }
+    let _ = ctx;
+    value
+        .clone()
+        .into_string()
+        .and_then(|it| it.to_string().ok())
+        .unwrap_or_else(|| format!("{value:?}"))
+}
+
 /// A JavaScript string literal holding `text`.
 pub(super) fn quote(text: &str) -> String {
     let escaped: String = text

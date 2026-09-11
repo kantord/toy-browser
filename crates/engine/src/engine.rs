@@ -99,14 +99,7 @@ impl Engine {
         page: LoadPage<'_>,
     ) -> Result<Outcome<LoadReport>> {
         let init_scripts = self.session(session)?.init_scripts.clone();
-        let realm = Realm::open(
-            page.source,
-            page.base_url,
-            page.run_scripts,
-            &init_scripts,
-            self.resources.clone(),
-            page.relayout,
-        )?;
+        let realm = Realm::open(page, &init_scripts, self.resources.clone())?;
 
         let report = LoadReport {
             scripts: realm.scripts().clone(),

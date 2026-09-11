@@ -40,10 +40,29 @@
     // visible here; nothing computes cascaded style.
     get style() {
       const id = this.__id;
+      // A declaration is not only a bag of properties: it has methods, and the
+      // trap has to hand those back as functions rather than as the empty
+      // string a property nobody set reads as. A page calling
+      // `style.setProperty(...)` and getting `""` back throws — inside the
+      // promise an application boots in, where nobody was listening.
+      const methods = {
+        setProperty: (property, value) =>
+          __dom.styleSet(id, String(property), String(value)),
+        getPropertyValue: (property) => __dom.styleGet(id, String(property)),
+        removeProperty: (property) => {
+          const had = __dom.styleGet(id, String(property));
+          __dom.styleSet(id, String(property), "");
+          return had;
+        },
+        // `!important` is not kept, so nothing can answer anything but empty.
+        getPropertyPriority: () => "",
+        item: () => "",
+      };
       return new Proxy(
         {},
         {
-          get: (_target, property) => __dom.styleGet(id, String(property)),
+          get: (_target, property) =>
+            methods[property] ?? __dom.styleGet(id, String(property)),
           set(_target, property, value) {
             __dom.styleSet(id, String(property), String(value));
             return true;

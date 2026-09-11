@@ -79,6 +79,29 @@
     this.remove();
   };
 
+  // `href` and `src` are not the attributes. A browser answers with the URL
+  // *resolved* against the page, which is why a script can hand one straight to
+  // `fetch` — and why Vite's module-preload polyfill, which does exactly that
+  // with every `<link rel=modulepreload>` it finds, fetched `undefined` here
+  // and took the application down with it before it rendered a row.
+  //
+  // Written back raw, the way the DOM does: setting one sets the attribute.
+  for (const name of ["href", "src"]) {
+    Object.defineProperty(proto, name, {
+      get() {
+        const raw = this.getAttribute(name);
+        if (raw == null || raw === "") return "";
+        // Resolved by the same parser the document resolves its own references
+        // with; whatever will not parse is answered as written.
+        return __dom.parseUrl(raw, undefined)[0] ?? raw;
+      },
+      set(value) {
+        this.setAttribute(name, String(value));
+      },
+      configurable: true,
+    });
+  }
+
   // The node-type constants live on the constructor, and code compares
   // `child.nodeType === Node.TEXT_NODE` far more often than it calls anything.
   const Node = globalThis.Node;

@@ -25,6 +25,7 @@ fn drawn(page: &str, zoom: u16) -> Vec<u8> {
             width: WINDOW,
             height: None,
             zoom,
+            ..Viewport::default()
         },
     );
     browser.navigate(&opened, fixture(page).as_str()).unwrap();

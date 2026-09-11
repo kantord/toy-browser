@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use anyhow::{Context as _, Result};
 use toy_browser::tiny_skia::Pixmap;
-use toy_browser::{Area, Browser, PageId, Resources, Viewport};
+use toy_browser::{Area, Browser, PageId, Resources, Scheme, Viewport};
 use winit::application::ApplicationHandler;
 use winit::event::{MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -36,7 +36,7 @@ const LADDER: [u16; 17] = [
 const NORMAL: usize = 7;
 
 /// Opens a window showing `url`, and does not return until it is closed.
-pub fn open(url: &str, width: u32, height: u32, scripts: bool) -> Result<()> {
+pub fn open(url: &str, width: u32, height: u32, scripts: bool, scheme: Scheme) -> Result<()> {
     let mut browser = Browser::new(Resources::new())?;
     // Before the page exists, because a page runs its scripts as it loads and
     // there is no moment afterwards in which to have changed its mind.
@@ -46,6 +46,7 @@ pub fn open(url: &str, width: u32, height: u32, scripts: bool) -> Result<()> {
         &page,
         Viewport {
             width,
+            scheme,
             ..Viewport::default()
         },
     );
@@ -70,6 +71,7 @@ pub fn open(url: &str, width: u32, height: u32, scripts: bool) -> Result<()> {
         pinched: 0.0,
         held: ModifiersState::empty(),
         rung: NORMAL,
+        scheme,
         scrolled: (0.0, 0.0),
         reaches: None,
     };
@@ -110,6 +112,9 @@ struct Open {
     held: ModifiersState,
     /// Which rung of [`LADDER`] the page is drawn at.
     rung: usize,
+    /// Which colour scheme the page is shown in. A setting rather than
+    /// something read from the desktop, because nothing here asks the desktop.
+    scheme: Scheme,
     /// How far the window has been moved over the page, across and down, in
     /// CSS pixels.
     scrolled: (f32, f32),
@@ -143,14 +148,12 @@ impl ApplicationHandler for Open {
                 // surface sized in the wrong units draws nothing anybody sees.
                 let size = window.inner_size();
                 self.size = (size.width.max(1), size.height.max(1));
-                self.browser.set_viewport(
-                    &self.page,
-                    Viewport {
-                        width: self.size.0,
-                        height: None,
-                        ..Viewport::default()
-                    },
-                );
+                // Asked for rather than rebuilt: `viewport()` is the one place
+                // that says how this window lays a page out, and a literal
+                // written beside it silently drops whatever it grows next — as
+                // it did with the colour scheme.
+                let viewport = self.viewport();
+                self.browser.set_viewport(&self.page, viewport);
                 // Nothing redraws on its own while the loop is waiting, so the
                 // first frame has to be asked for.
                 self.shown = Some(Shown { window, surface });

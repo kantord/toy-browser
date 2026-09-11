@@ -73,12 +73,11 @@ fn class_name_and_class_list_stay_in_step() {
 }
 
 #[test]
-fn class_list_offers_three_methods_and_is_rebuilt_each_time() {
+fn class_list_offers_the_methods_a_token_list_has_and_is_rebuilt_each_time() {
     let (mut engine, session) = page(FORM);
 
-    // The surface as it stands. `toggle`, `replace`, `item`, `length` and
-    // iteration are all absent — a real DOMTokenList has them, and closing that
-    // gap is migration work, not a regression.
+    // The surface as it stands. Iteration is what a real `DOMTokenList` still
+    // has and this does not.
     let shape = js(
         &mut engine,
         &session,
@@ -86,17 +85,21 @@ fn class_list_offers_three_methods_and_is_rebuilt_each_time() {
          return ['contains', 'add', 'remove', 'toggle', 'replace', 'item']
            .map((name) => typeof list[name]);",
     );
-    assert_eq!(
-        shape,
-        json!([
-            "function",
-            "function",
-            "function",
-            "undefined",
-            "undefined",
-            "undefined"
-        ])
+    assert_eq!(shape, json!(vec!["function"; 6]));
+
+    // `toggle` is the one a page reaches for when something is *sometimes*
+    // true, and the forced form is how a page says which without asking first.
+    let toggled = js(
+        &mut engine,
+        &session,
+        "const list = document.getElementById('outer').classList;
+         const off = list.toggle('box');
+         const on = list.toggle('box');
+         list.toggle('wide', true);
+         list.toggle('tall', false);
+         return [off, on, document.getElementById('outer').className];",
     );
+    assert_eq!(toggled, json!([false, true, "wide box"]));
 
     // Each read builds a fresh object, so unlike a browser the list does not
     // compare equal to itself.

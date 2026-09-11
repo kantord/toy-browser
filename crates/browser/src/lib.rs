@@ -44,7 +44,7 @@ pub use scene::{
 };
 pub use toy_browser_engine::{Budget, ElementBox, NodeId, Point, ScriptSurvey};
 pub use toy_browser_fetch::{Resources, Url};
-pub use viewport::Viewport;
+pub use viewport::{Scheme, Viewport};
 
 /// A reference handed to a caller.
 ///

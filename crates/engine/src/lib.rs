@@ -57,6 +57,13 @@ pub struct LoadPage<'a> {
     pub base_url: &'a Url,
     /// Whether to run the page's scripts at all.
     pub run_scripts: bool,
+    /// Which colour scheme the page is being shown in, as
+    /// `prefers-color-scheme` names it.
+    ///
+    /// Arrives with the load for the reason `relayout` does: the page's own
+    /// scripts run as it loads, and one asking `matchMedia` at that moment gets
+    /// whatever was true then. Told again afterwards, when it can change.
+    pub scheme: String,
     /// How to measure this document again, for a script that asks about
     /// geometry before anyone has measured or after it has changed something.
     /// Arrives with the load because the load builds the Realm the scripts run
@@ -69,6 +76,10 @@ pub struct LoadPage<'a> {
 pub struct Environment {
     pub viewport: (u32, u32),
     pub url: String,
+    /// Which colour scheme the page is being shown in, as
+    /// `prefers-color-scheme` names it. The cascade is told separately — this
+    /// is so a script can be told the same thing.
+    pub scheme: String,
     /// Where each element sits and which is in front, from whoever measured.
     pub boxes: Boxes,
     /// What each element's style computed to, from the same measure.

@@ -22,6 +22,44 @@ pub struct Viewport {
     /// cache and the script environment are compared by, and floats do not
     /// compare.
     pub zoom: u16,
+    /// Which of the two colour schemes the page is being shown in.
+    ///
+    /// Here rather than beside the painter because it is a *cascade* input:
+    /// `prefers-color-scheme` decides which rules match, so a page shown dark
+    /// is laid out from different declarations, not tinted afterwards. Being a
+    /// field of the Viewport is also what makes it reach the caches — a page
+    /// already laid out light has to be laid out again to be shown dark.
+    pub scheme: Scheme,
+}
+
+/// The colour scheme a page is shown in, as `prefers-color-scheme` names them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Scheme {
+    #[default]
+    Light,
+    Dark,
+}
+
+impl Scheme {
+    /// The name the media query uses, which is also what a page reads back.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Light => "light",
+            Self::Dark => "dark",
+        }
+    }
+}
+
+impl std::str::FromStr for Scheme {
+    type Err = String;
+
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        match name {
+            "light" => Ok(Self::Light),
+            "dark" => Ok(Self::Dark),
+            other => Err(format!("not a colour scheme: {other}")),
+        }
+    }
 }
 
 impl Viewport {
@@ -41,6 +79,7 @@ impl Default for Viewport {
             width: Self::DEFAULT_WIDTH,
             zoom: Self::NORMAL,
             height: None,
+            scheme: Scheme::Light,
         }
     }
 }

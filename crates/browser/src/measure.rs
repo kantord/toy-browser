@@ -121,6 +121,7 @@ impl Browser {
             &toy_browser_engine::Environment {
                 viewport: (told.viewport.width, told.viewport.height.unwrap_or(0)),
                 url: told.url.clone(),
+                scheme: told.viewport.scheme.as_str().to_owned(),
                 boxes,
                 styles,
             },

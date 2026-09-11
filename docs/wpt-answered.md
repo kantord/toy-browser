@@ -54,6 +54,30 @@ timeout until `Node.append` existed to build its fixtures with; what is left of
 it is real layout disagreement, 49px against 50px and the `stretch` and `calc`
 values blitz does not implement.
 
+## A page could not be shown dark — *added*
+
+`--scheme light|dark` on `render` and `browse`.
+
+It is a **cascade input, not a tint**. `prefers-color-scheme` decides which
+rules match, so a page shown dark is laid out from different declarations
+rather than painted and then darkened. That is why it is a field of `Viewport`
+alongside the width and the zoom: those are the things a page has to be laid
+out again for, and this is one of them.
+
+The part worth guarding is that there are *two* answers to give and they must
+agree. The cascade is told through the viewport; the page's own script asks
+`matchMedia`, and is told through `LoadPage` — before its scripts run, for the
+same reason `location` is. A page whose stylesheet is dark and whose script
+believes it is light renders half of each, and neither half looks broken on its
+own, which is why the test asserts the two agree rather than asserting either
+one.
+
+Found by the window harness and not by anything else: `render --scheme dark`
+was right while `browse --scheme dark` was still white. The window rebuilt its
+viewport inline with `..Viewport::default()` at startup and dropped the scheme —
+a literal written beside the one function that says how a window lays a page out
+silently loses whatever that function grows next.
+
 ## A real page found seven missing globals at once — *fixed*
 
 `hcker.news` is a client-rendered reader: an empty shell, and a bundle that

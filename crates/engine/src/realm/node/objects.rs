@@ -26,13 +26,28 @@ fn write_tokens(dom: &Dom, id: usize, tokens: &[String]) {
 ///
 /// A fresh object each read, as the Prelude's version was — a real
 /// `DOMTokenList` is live and compares equal to itself, and this does not.
+/// `classList`: the `class` attribute as the set of names it is.
+///
+/// Two halves, because they are two jobs and the list has a lot of members:
+/// [`reading`] answers questions about the names, [`writing`] changes them.
 pub(super) fn class_list<'js>(
     ctx: Ctx<'js>,
     dom: &Rc<Dom>,
     id: usize,
 ) -> rquickjs::Result<Object<'js>> {
     let list = Object::new(ctx.clone())?;
+    reading(&ctx, dom, id, &list)?;
+    writing(&ctx, dom, id, &list)?;
+    Ok(list)
+}
 
+/// What the set of names says about itself, changing nothing.
+fn reading<'js>(
+    ctx: &Ctx<'js>,
+    dom: &Rc<Dom>,
+    id: usize,
+    list: &Object<'js>,
+) -> rquickjs::Result<()> {
     let owned = Rc::clone(dom);
     list.set(
         "contains",
@@ -41,6 +56,26 @@ pub(super) fn class_list<'js>(
         })?,
     )?;
 
+    let owned = Rc::clone(dom);
+    list.set(
+        "item",
+        Function::new(ctx.clone(), move |at: usize| {
+            tokens(&owned, id).get(at).cloned()
+        })?,
+    )?;
+
+    list.set("length", tokens(dom, id).len())?;
+    list.set("value", tokens(dom, id).join(" "))?;
+    Ok(())
+}
+
+/// Names arriving and leaving, however many at a time.
+fn writing<'js>(
+    ctx: &Ctx<'js>,
+    dom: &Rc<Dom>,
+    id: usize,
+    list: &Object<'js>,
+) -> rquickjs::Result<()> {
     // `Rest`, not `Vec`: `add("one")` passes a string, and a `Vec` parameter
     // would read that first argument as an array and fail the whole call.
     let owned = Rc::clone(dom);
@@ -69,7 +104,54 @@ pub(super) fn class_list<'js>(
         })?,
     )?;
 
-    Ok(list)
+    deciding(ctx, dom, id, list)
+}
+
+/// The two that decide rather than state: whether a name should be there, and
+/// which name should be there instead.
+///
+/// `toggle` is what a page reaches for whenever something is *sometimes* true,
+/// which on any page with a navigation is every time it moves.
+fn deciding<'js>(
+    ctx: &Ctx<'js>,
+    dom: &Rc<Dom>,
+    id: usize,
+    list: &Object<'js>,
+) -> rquickjs::Result<()> {
+    let owned = Rc::clone(dom);
+    list.set(
+        "toggle",
+        Function::new(
+            ctx.clone(),
+            move |token: String, force: rquickjs::function::Opt<bool>| {
+                let mut present = tokens(&owned, id);
+                let held = present.contains(&token);
+                let wanted = force.0.unwrap_or(!held);
+                match wanted {
+                    true if !held => present.push(token),
+                    false => present.retain(|it| *it != token),
+                    true => {}
+                }
+                write_tokens(&owned, id, &present);
+                wanted
+            },
+        )?,
+    )?;
+
+    let owned = Rc::clone(dom);
+    list.set(
+        "replace",
+        Function::new(ctx.clone(), move |from: String, to: String| {
+            let mut present = tokens(&owned, id);
+            let Some(at) = present.iter().position(|it| *it == from) else {
+                return false;
+            };
+            present[at] = to;
+            write_tokens(&owned, id, &present);
+            true
+        })?,
+    )?;
+    Ok(())
 }
 
 /// `attributes`: an array of `{name, value}` that also answers `getNamedItem`,

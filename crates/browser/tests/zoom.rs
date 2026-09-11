@@ -21,6 +21,7 @@ fn opened(browser: &mut Browser, zoom: u16) -> PageId {
             width: WIDE,
             height: None,
             zoom,
+            ..Viewport::default()
         },
     );
     browser
@@ -140,6 +141,7 @@ fn changing_the_zoom_on_a_page_lays_it_out_again() {
             width: WIDE,
             height: None,
             zoom: 200,
+            ..Viewport::default()
         },
     );
     let zoomed = first_paragraph(&mut browser, &page);
@@ -163,6 +165,7 @@ fn text_rewraps_when_the_zoom_changes() {
             width: WIDE,
             height: None,
             zoom: 100,
+            ..Viewport::default()
         },
     );
     browser
@@ -176,6 +179,7 @@ fn text_rewraps_when_the_zoom_changes() {
             width: WIDE,
             height: None,
             zoom: 200,
+            ..Viewport::default()
         },
     );
     let zoomed = browser.height(&page).unwrap();
@@ -204,6 +208,7 @@ fn written(browser: &mut Browser, zoom: u16) -> Written {
             width: 800,
             height: None,
             zoom,
+            ..Viewport::default()
         },
     );
     browser

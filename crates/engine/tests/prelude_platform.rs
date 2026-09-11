@@ -157,3 +157,41 @@ fn a_page_can_ask_who_it_is_talking_to() {
     );
     assert_eq!(result, json!(["string", true, true, "boolean"]));
 }
+
+/// `href` and `src` are not the attributes. A browser answers with the URL
+/// resolved against the page, which is why a script can hand one straight to
+/// `fetch` — and why Vite's module-preload polyfill, which does exactly that
+/// for every `<link rel=modulepreload>` it finds, fetched `undefined` and took
+/// the application down before it rendered a row.
+#[test]
+fn href_and_src_answer_with_a_resolved_url() {
+    let (mut engine, session) = page(
+        "<a id='a' href='/stories?page=2'>x</a><img id='i' src='pics/cat.png'><a id='b'>y</a>",
+    );
+    let result = js(
+        &mut engine,
+        &session,
+        "return [document.getElementById('a').href,
+                 document.getElementById('i').src,
+                 document.getElementById('b').href];",
+    );
+    assert_eq!(
+        result,
+        json!(["file:///stories?page=2", "file:///fixture/pics/cat.png", ""])
+    );
+}
+
+/// Written back raw, the way the DOM does: setting one sets the attribute.
+#[test]
+fn setting_href_sets_the_attribute() {
+    let (mut engine, session) = page("<a id='a' href='/one'>x</a>");
+    let result = js(
+        &mut engine,
+        &session,
+        "'use strict';
+         const link = document.getElementById('a');
+         link.href = '/two';
+         return [link.getAttribute('href'), link.href];",
+    );
+    assert_eq!(result, json!(["/two", "file:///two"]));
+}

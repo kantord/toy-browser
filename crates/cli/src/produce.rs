@@ -83,6 +83,7 @@ pub fn render(args: RenderArgs) -> Result<()> {
         Viewport {
             width: args.width,
             height: args.height,
+            scheme: args.scheme,
             ..Viewport::default()
         },
     );

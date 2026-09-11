@@ -87,11 +87,27 @@
     standalone: undefined,
     webdriver: false,
     doNotTrack: null,
-    // No service workers: a page that registers one is asking for a background
-    // thread, and there is none. Rejecting says so, where a missing property
-    // throws in the middle of whatever asked.
+    // No service workers: one is a background thread, and there is none.
+    //
+    // Answered with a registration that holds nothing rather than a rejection,
+    // because almost nobody catches this. A page registering a worker is
+    // saying what it would like to happen next time, not asking a question it
+    // waits on — and a rejection nobody catches stops the boot it was written
+    // in the middle of. `ready` never settles, which is the truthful part: the
+    // worker it would hand over is never going to be active.
     serviceWorker: {
-      register: () => Promise.reject(new Error("no service workers here")),
+      controller: null,
+      register: () =>
+        Promise.resolve({
+          scope: "/",
+          active: null,
+          installing: null,
+          waiting: null,
+          update: () => Promise.resolve(),
+          unregister: () => Promise.resolve(true),
+          addEventListener() {},
+          removeEventListener() {},
+        }),
       getRegistration: () => Promise.resolve(undefined),
       getRegistrations: () => Promise.resolve([]),
       ready: new Promise(() => {}),

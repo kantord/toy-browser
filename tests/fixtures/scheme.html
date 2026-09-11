@@ -1,0 +1,12 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+:root { color-scheme: light dark }
+body { background: #fff; color: #111; font: 24px monospace; margin: 0; padding: 20px }
+@media (prefers-color-scheme: dark) { body { background: #111; color: #eee } }
+</style></head><body>
+<div id="which">?</div>
+<script>
+document.getElementById("which").textContent =
+  "matchMedia dark=" + matchMedia("(prefers-color-scheme: dark)").matches +
+  " light=" + matchMedia("(prefers-color-scheme: light)").matches;
+</script>
+</body></html>

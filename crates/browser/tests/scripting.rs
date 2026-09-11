@@ -3,7 +3,7 @@
 mod common;
 
 use common::{browser, fixture};
-use toy_browser::{Browser, PageId, Viewport};
+use toy_browser::{Browser, PageId, Remote, Scheme, Viewport};
 
 fn page(browser: &mut Browser, scripts: bool) -> PageId {
     let page = browser.new_page().unwrap();
@@ -81,4 +81,40 @@ fn a_browser_told_to_run_no_scripts_opens_pages_that_do_not() {
         fallback_shows(&mut browser, &page),
         "a page opened with scripts off still hid its fallback",
     );
+}
+
+/// The cascade and the page's own script are told the same thing.
+///
+/// Two answers to one question is the failure worth guarding: a page whose
+/// stylesheet is dark and whose script believes it is light renders half of
+/// each, and neither half looks broken on its own.
+#[test]
+fn a_page_and_its_script_agree_about_the_colour_scheme() {
+    for (scheme, wanted) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
+        let mut browser = browser();
+        let page = browser.new_page().unwrap();
+        browser.set_viewport(
+            &page,
+            Viewport {
+                width: 400,
+                height: Some(300),
+                scheme,
+                ..Viewport::default()
+            },
+        );
+        browser
+            .navigate(&page, fixture("scheme.html").as_str())
+            .unwrap();
+        let asked = browser
+            .evaluate(
+                &page,
+                "matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'",
+                true,
+            )
+            .unwrap();
+        let Remote::Value(told) = asked else {
+            panic!("asking about the scheme answered nothing");
+        };
+        assert_eq!(told, serde_json::json!(wanted), "the script was told wrong");
+    }
 }

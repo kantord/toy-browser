@@ -29,6 +29,7 @@ fn loaded(source: &str) -> (Engine, SessionId) {
                 base_url: &url,
                 run_scripts: true,
                 relayout: None,
+                scheme: "light".to_owned(),
             },
         )
         .expect("load");
@@ -123,6 +124,7 @@ fn a_load_replaces_the_realm_but_not_the_session() {
                     base_url: &url,
                     run_scripts: true,
                     relayout: None,
+                    scheme: "light".to_owned(),
                 },
             )
             .unwrap();
@@ -148,6 +150,7 @@ fn page_globals_do_not_survive_a_load() {
                     base_url: &url,
                     run_scripts: true,
                     relayout: None,
+                    scheme: "light".to_owned(),
                 },
             )
             .unwrap();

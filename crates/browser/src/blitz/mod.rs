@@ -78,7 +78,10 @@ pub fn lay_out(
                 viewport.width,
                 height,
                 viewport.scale(),
-                ColorScheme::Light,
+                match viewport.scheme {
+                    crate::Scheme::Dark => ColorScheme::Dark,
+                    crate::Scheme::Light => ColorScheme::Light,
+                },
             )),
             base_url: Some(base.to_owned()),
             font_ctx: Some(context()),

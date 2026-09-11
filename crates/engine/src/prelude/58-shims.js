@@ -105,8 +105,12 @@
       const found = text.match(new RegExp(`${kind}-width:\\\\s*(\\\\d+(?:\\\\.\\\\d+)?)px`));
       return found ? Number(found[1]) : null;
     };
-    if (/prefers-color-scheme:\s*light/.test(text)) return true;
-    if (/prefers-color-scheme:\s*dark/.test(text)) return false;
+    // Whichever scheme this page is being shown in, which is the same thing
+    // the cascade was told — a page whose script disagrees with its own
+    // stylesheet about the scheme renders half of each.
+    const scheme = __tb.scheme || "light";
+    if (/prefers-color-scheme:\s*light/.test(text)) return scheme === "light";
+    if (/prefers-color-scheme:\s*dark/.test(text)) return scheme === "dark";
     if (/prefers-reduced-motion:\s*reduce/.test(text)) return true;
     const most = width("max");
     const least = width("min");

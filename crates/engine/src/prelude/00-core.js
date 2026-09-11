@@ -12,4 +12,7 @@ globalThis.__tb = {
   // One wrapper per node id, so `a === b` holds for the same element. Minting
   // and remembering both happen on the Rust side.
   wrap: __dom.wrap,
+  // Which colour scheme the page is shown in. Set from outside once the
+  // browser knows — see `Realm::set_environment` — and read by `matchMedia`.
+  scheme: "light",
 };

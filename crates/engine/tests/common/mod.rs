@@ -27,6 +27,7 @@ pub fn page(body: &str) -> (Engine, SessionId) {
                 base_url: &url,
                 run_scripts: true,
                 relayout: None,
+                scheme: "light".to_owned(),
             },
         )
         .expect("load");

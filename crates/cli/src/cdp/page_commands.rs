@@ -170,6 +170,9 @@ fn set_device_metrics(page: &mut Page, browser: &mut Browser, params: &Value) ->
             width: (across * factor).round() as u32,
             height: Some((down * factor).round() as u32),
             zoom: (factor * 100.0).round() as u16,
+            // Kept, not reset: a client saying how big the window is has not
+            // said anything about which colour scheme it is showing.
+            ..browser.viewport(&page.page)
         },
     );
     Outcome::ok(json!({}))

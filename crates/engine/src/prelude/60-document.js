@@ -86,6 +86,20 @@
   // the script was setting up with it.
   document.referrer = "";
 
+  // A page talking to itself. Delivered on a later turn rather than straight
+  // away, because that is the whole reason a page reaches for this instead of
+  // calling the function: it wants the current stack to unwind first.
+  globals.postMessage = (data, origin) => {
+    globals.setTimeout(() => {
+      const event = tb.makeEvent("message", globals);
+      event.data = data;
+      event.origin = origin === "*" || origin == null ? globals.location.origin : String(origin);
+      event.source = globals;
+      event.ports = [];
+      tb.dispatch(tb.WINDOW, event);
+    }, 0);
+  };
+
   globals.addEventListener = (type, listener, options) =>
     tb.addListener(tb.WINDOW, type, listener, options);
   globals.removeEventListener = (type, listener, options) =>

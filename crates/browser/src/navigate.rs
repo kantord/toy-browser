@@ -139,6 +139,7 @@ impl Browser {
                         viewport,
                     )),
                     run_scripts,
+                    scheme: viewport.scheme.as_str().to_owned(),
                 },
             )
             .map_err(|error| NavigationError::Failed(error.to_string()))?;

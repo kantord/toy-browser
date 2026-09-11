@@ -12,27 +12,23 @@ mod document;
 mod eval;
 mod load;
 mod node;
+mod opening;
+mod telling;
 
 use std::{
     cell::{Cell, RefCell},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     rc::Rc,
 };
 
 use anyhow::{Context as _, Result};
 use rquickjs::{Context, Persistent, Runtime, Value};
 
-use toy_browser_fetch::{Resources, Url};
-
 use crate::{
-    Activated, Budget, Environment, Keyed, Mouse, NodeId, Outcome, Point,
-    dom::Dom,
-    loader::{DocumentResolver, ImportMap, ResourceLoader},
-    scripts::ScriptSurvey,
+    Activated, Budget, Keyed, Mouse, NodeId, Outcome, Point, dom::Dom, scripts::ScriptSurvey,
 };
 
 use bindings::install_globals;
-use convert::quote;
 
 pub use eval::{Argument, Evaluated, Handle};
 pub use node::support::Relayout;
@@ -40,20 +36,6 @@ pub use node::support::Relayout;
 /// The prelude, in the order its files are evaluated. Each is a standalone
 /// script; together they build the environment on one shared `__tb` namespace,
 /// so the order is the one their names give and nothing else.
-const PRELUDE: [(&str, &str); 11] = [
-    ("00-core", include_str!("../prelude/00-core.js")),
-    ("10-node", include_str!("../prelude/10-node.js")),
-    ("20-element", include_str!("../prelude/20-element.js")),
-    ("30-interfaces", include_str!("../prelude/30-interfaces.js")),
-    ("40-events", include_str!("../prelude/40-events.js")),
-    ("50-tasks", include_str!("../prelude/50-tasks.js")),
-    ("55-storage", include_str!("../prelude/55-storage.js")),
-    ("56-address", include_str!("../prelude/56-address.js")),
-    ("57-network", include_str!("../prelude/57-network.js")),
-    ("58-shims", include_str!("../prelude/58-shims.js")),
-    ("60-document", include_str!("../prelude/60-document.js")),
-];
-
 /// What the page has emitted since a caller last looked.
 ///
 /// Drained by each request, so every line belongs to the one that caused it.
@@ -67,6 +49,12 @@ struct Diagnostics {
     console: Vec<String>,
     /// Uncaught errors, one per failing script or lifecycle step.
     errors: Vec<String>,
+    /// What rejected with nobody waiting.
+    ///
+    /// Held rather than reported because the answer changes: a page may catch
+    /// one a tick later, and the runtime says so by reporting it again. Only
+    /// what is still here when a caller asks was really unhandled.
+    rejected: HashSet<String>,
 }
 
 /// One DOM, the QuickJS runtime that mutates it, and the globals bridging them.
@@ -108,63 +96,6 @@ impl Realm {
     ///
     /// `init_scripts` run after the environment is built but before any of the
     /// page's own, which is what makes them able to set the page up.
-    pub fn open(
-        source: &str,
-        base_url: &Url,
-        run_scripts: bool,
-        init_scripts: &[String],
-        resources: Resources,
-        relayout: Option<node::support::Relayout>,
-    ) -> Result<Self> {
-        let doc = crate::dom::parse(source, base_url);
-        let survey = crate::scripts::survey(&doc, base_url, &resources);
-
-        let dom = Rc::new(Dom::new(doc, base_url.clone(), resources.clone()));
-        let report = Rc::new(RefCell::new(Diagnostics::default()));
-        let imports: ImportMap = Rc::new(RefCell::new(HashMap::new()));
-
-        let runtime = Runtime::new().context("creating QuickJS runtime")?;
-        runtime.set_loader(
-            DocumentResolver::new(base_url.clone(), Rc::clone(&imports)),
-            ResourceLoader::new(resources),
-        );
-        let context = Context::full(&runtime).context("creating QuickJS context")?;
-
-        context.with(|ctx| {
-            install_globals(&ctx, &dom, &report)?;
-            // Before the page's own scripts, which is the whole point: one that
-            // measures what it just built runs here, long before anything
-            // outside gets a turn.
-            if let Some(relayout) = relayout.clone()
-                && let Some(shared) = ctx.userdata::<node::Sharing>()
-            {
-                shared.set_relayout(relayout);
-            }
-            for (name, source) in PRELUDE {
-                load::evaluate(&ctx, &report, &format!("<prelude/{name}>"), source);
-            }
-            for (index, script) in init_scripts.iter().enumerate() {
-                load::evaluate(&ctx, &report, &format!("<init-{index}>"), script);
-            }
-            if run_scripts {
-                load::load_import_maps(&ctx, &survey, &imports);
-                load::run_scripts(&ctx, &report, &survey, base_url);
-                load::run_lifecycle(&ctx, &report);
-            }
-            anyhow::Ok(())
-        })?;
-
-        Ok(Self {
-            dom,
-            report,
-            scripts: survey,
-            handles: RefCell::new(HashMap::new()),
-            next_handle: Cell::new(1),
-            context,
-            _runtime: runtime,
-        })
-    }
-
     pub fn scripts(&self) -> &ScriptSurvey {
         &self.scripts
     }
@@ -213,41 +144,6 @@ impl Realm {
             Keyed::No => crate::serialize::document_to_html(doc),
             Keyed::Yes => crate::serialize::document_to_keyed_html(doc),
         })
-    }
-
-    /// Publishes what the page cannot work out for itself.
-    pub fn set_environment(&self, environment: &Environment) {
-        let (width, height) = environment.viewport;
-        // The viewport and the URL are plain globals a page reads directly; the
-        // boxes are not, because every element asks for its own.
-        //
-        // Outer and inner are the same size here: there is no window furniture
-        // around the page, so nothing is taken off. A caller asking the
-        // difference — which is what a reftest runner does before it sizes a
-        // window — gets zero, which is the truth.
-        let script = format!(
-            "globalThis.innerWidth = {width}; globalThis.innerHeight = {height}; \
-             globalThis.outerWidth = {width}; globalThis.outerHeight = {height}; \
-             globalThis.location.href = {};",
-            quote(&environment.url),
-        );
-        self.context.with(|ctx| {
-            if let Some(shared) = ctx.userdata::<node::Sharing>() {
-                shared.set_boxes(environment.boxes.clone());
-                shared.set_styles(environment.styles.clone());
-            }
-            let _ = ctx.eval::<Value, _>(script);
-        });
-    }
-
-    /// Records how this document is to be measured again when a script asks
-    /// for geometry the last measure cannot answer for.
-    pub fn set_relayout(&self, relayout: node::support::Relayout) {
-        self.context.with(|ctx| {
-            if let Some(shared) = ctx.userdata::<node::Sharing>() {
-                shared.set_relayout(relayout);
-            }
-        });
     }
 
     /// Raises one mouse event at `node`, and reports what the element then did
@@ -301,9 +197,15 @@ impl Realm {
     /// Takes the console lines and errors accumulated since the last call.
     pub fn take_diagnostics(&self) -> (Vec<String>, Vec<String>) {
         let mut report = self.report.borrow_mut();
-        (
-            std::mem::take(&mut report.console),
-            std::mem::take(&mut report.errors),
-        )
+        let mut errors = std::mem::take(&mut report.errors);
+        // Last, and only the ones still unclaimed: a rejection is not a failure
+        // until the page has had every chance to catch it.
+        let mut pending: Vec<String> = std::mem::take(&mut report.rejected)
+            .into_iter()
+            .map(|detail| format!("unhandled rejection: {detail}"))
+            .collect();
+        pending.sort();
+        errors.append(&mut pending);
+        (std::mem::take(&mut report.console), errors)
     }
 }

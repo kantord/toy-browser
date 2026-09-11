@@ -15,7 +15,12 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use toy_browser::{Browser, Viewport};
+use toy_browser::{Browser, Scheme, Viewport};
+
+/// A colour scheme named on the command line.
+fn scheme(name: &str) -> Result<Scheme, String> {
+    name.parse()
+}
 use toy_browser_fetch::Resources;
 
 #[derive(Parser)]
@@ -60,6 +65,11 @@ struct BrowseArgs {
     /// Show the markup as parsed, without running the page's scripts.
     #[arg(long)]
     no_scripts: bool,
+
+    /// Which colour scheme the page is shown in, which decides what
+    /// `prefers-color-scheme` matches.
+    #[arg(long, value_parser = scheme, default_value = "light")]
+    scheme: Scheme,
 }
 
 #[derive(clap::Args)]
@@ -123,6 +133,11 @@ pub struct RenderArgs {
     /// Render the markup as parsed, without running the page's scripts.
     #[arg(long)]
     no_scripts: bool,
+
+    /// Which colour scheme the page is shown in, which decides what
+    /// `prefers-color-scheme` matches.
+    #[arg(long, value_parser = scheme, default_value = "light")]
+    scheme: Scheme,
 }
 
 #[derive(clap::Args)]
@@ -164,7 +179,13 @@ fn main() -> Result<()> {
             browser.set_scripts(!args.no_scripts);
             webdriver::serve(args.port, browser)
         }
-        Command::Browse(args) => window::open(&args.url, args.width, args.height, !args.no_scripts),
+        Command::Browse(args) => window::open(
+            &args.url,
+            args.width,
+            args.height,
+            !args.no_scripts,
+            args.scheme,
+        ),
         Command::Layout(args) => produce::layout(args),
         Command::Compare(args) => compare::run(
             &args.dir,

@@ -47,6 +47,7 @@ impl Open {
             width: self.size.0,
             height: None,
             zoom: LADDER[self.rung],
+            scheme: self.scheme,
         }
     }
 
