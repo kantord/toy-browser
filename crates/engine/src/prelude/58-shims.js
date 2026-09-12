@@ -12,25 +12,96 @@
   // era names does not, and should read this comment rather than the output.
   const pad = (number) => String(number).padStart(2, "0");
 
+  const MONTHS = ["January","February","March","April","May","June","July",
+    "August","September","October","November","December"];
+  const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
   class DateTimeFormat {
     constructor(locales, options = {}) {
       this._options = options;
-      this._locale = Array.isArray(locales) ? locales[0] : locales || "en-US";
+      this._locale = String((Array.isArray(locales) ? locales[0] : locales) || "en-US");
+      this._utc = options.timeZone === "UTC" || options.timeZone === "Etc/UTC";
     }
-    format(when) {
-      const date = when instanceof Date ? when : new Date(when ?? Date.now());
-      const { hour, minute, year, month, day } = this._options;
-      const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-      const calendar = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-      if ((hour || minute) && !(year || month || day)) return clock;
-      if (hour || minute) return `${calendar} ${clock}`;
-      return calendar;
-    }
+
+    // The pieces, typed, because a page that builds a key out of a date reads
+    // them rather than the string: `parts.find((p) => p.type === "year")`. One
+    // literal covering the whole date answers every such search with nothing,
+    // and the key comes out empty — which is how a feed filtered by day threw
+    // away every story it had.
     formatToParts(when) {
-      return [{ type: "literal", value: this.format(when) }];
+      const date = when instanceof Date ? when : new Date(when ?? Date.now());
+      const get = (name) => (this._utc ? date[`getUTC${name}`]() : date[`get${name}`]());
+      const { year, month, day, weekday, hour, minute, second } = this._options;
+      // Nothing asked for is the same as asking for a date, which is what the
+      // specification says the default is.
+      const plain = !year && !month && !day && !weekday && !hour && !minute && !second;
+      const parts = [];
+      const pad2 = (value) => String(value).padStart(2, "0");
+      const number = (kind, value) =>
+        kind === "2-digit" ? pad2(value) : String(value);
+
+      if (weekday) {
+        const name = DAYS[get("Day")];
+        parts.push({ type: "weekday", value: weekday === "short" ? name.slice(0, 3) : name });
+        if (year || month || day) parts.push({ type: "literal", value: ", " });
+      }
+      const wantsDate = plain || year || month || day;
+      if (wantsDate) {
+        const y = { type: "year", value: number(year, get("FullYear")) };
+        const monthKind = month || (plain ? "2-digit" : undefined);
+        const m =
+          monthKind === "short" || monthKind === "long"
+            ? { type: "month", value: monthKind === "short" ? MONTHS[get("Month")].slice(0, 3) : MONTHS[get("Month")] }
+            : { type: "month", value: number(monthKind, get("Month") + 1) };
+        const d = { type: "day", value: number(day || (plain ? "2-digit" : undefined), get("Date")) };
+        // Order and separator by locale — en-US puts the month first, the
+        // ISO-ordered locales the year — and only the pieces that were asked
+        // for. The separators are put *between* what survives rather than
+        // written out with the full date: asking for a month and a day and
+        // getting `-Sep-12` back is a key that matches nothing.
+        const american = this._locale.startsWith("en-US");
+        const wanted = (american ? [m, d, y] : [y, m, d]).filter((part) => {
+          if (part.type === "year") return plain || !!year;
+          if (part.type === "month") return plain || !!month;
+          return plain || !!day;
+        });
+        // A named month reads with spaces, a numeric one with the locale's
+        // separator: "September 12", not "September/12".
+        const named = month === "short" || month === "long";
+        const between = named ? " " : american ? "/" : "-";
+        for (let at = 0; at < wanted.length; at += 1) {
+          if (at) parts.push({ type: "literal", value: between });
+          parts.push(wanted[at]);
+        }
+      }
+      if (hour || minute || second) {
+        if (wantsDate || weekday) parts.push({ type: "literal", value: ", " });
+        const clock = [];
+        if (hour) clock.push({ type: "hour", value: number(hour, get("Hours")) });
+        if (minute) clock.push({ type: "minute", value: pad2(get("Minutes")) });
+        if (second) clock.push({ type: "second", value: pad2(get("Seconds")) });
+        for (let at = 0; at < clock.length; at += 1) {
+          if (at) parts.push({ type: "literal", value: ":" });
+          parts.push(clock[at]);
+        }
+      }
+      return parts;
     }
+
+    format(when) {
+      return this.formatToParts(when)
+        .map((part) => part.value)
+        .join("");
+    }
+
     resolvedOptions() {
-      return { locale: this._locale, timeZone: "UTC", calendar: "gregory", numberingSystem: "latn" };
+      return {
+        locale: this._locale,
+        timeZone: this._options.timeZone || "UTC",
+        calendar: "gregory",
+        numberingSystem: "latn",
+        ...this._options,
+      };
     }
   }
 

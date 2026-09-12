@@ -54,75 +54,6 @@ timeout until `Node.append` existed to build its fixtures with; what is left of
 it is real layout disagreement, 49px against 50px and the `stretch` and `calc`
 values blitz does not implement.
 
-## What a real page actually needs, measured against a real browser
-
-`hcker.news` renders nothing but its shell here, and chasing that produced a
-method worth keeping: **use Chromium as an oracle**. Take a global away from it,
-load the page, count what renders. What breaks tells you what matters, and —
-more usefully — what does not.
-
-```
-(control)                    stories= 192  api=4
-no indexedDB                 stories= 192  api=4
-no EventSource               stories= 192  api=4
-no serviceWorker             stories= 192  api=4
-no ResizeObserver            stories= 192  api=4
-no IntersectionObserver      stories=   0  api=0
-no MutationObserver          stories=  20  api=1
-no createDocumentFragment    stories=   0  api=3
-no AbortController           stories=  20  api=2
-```
-
-That table killed a day's worth of plans. A whole IndexedDB was about to be
-vendored in; the oracle says it changes nothing. So do `EventSource`, service
-workers, `ResizeObserver`, `scrollTo`, `getSelection`, `CSS`, `DOMParser`,
-`Range`, `TextEncoder`, `MessageChannel`, `PerformanceObserver`,
-`requestIdleCallback`, `ReadableStream`, `navigator.storage` and
-`visualViewport` — every one of them measured, every one of them irrelevant.
-
-Then the second half of the method, which mattered more: put the *stub* in
-rather than deleting. A `MutationObserver` that exists and never fires: 192
-stories. An `IntersectionObserver` that exists and never fires: 192 stories.
-
-**Every failure in that table is a constructor throwing, not behaviour missing.**
-Which says where the work is: breadth, not depth. A name that is merely absent
-costs a whole application; a name that is present and approximate costs nothing
-anybody has yet been able to measure. Define everything, however thinly, before
-implementing anything thoroughly.
-
-Fixed along the way, each a real bug on its own terms: `AbortController` and
-`AbortSignal`, `document.createDocumentFragment` (backed by a detached element
-whose children are what insertion moves), and a `localStorage` that could not be
-enumerated — the Proxy stood over the methods, `length` among them was
-non-configurable, and a Proxy may not hide one of those, so
-`Object.keys(localStorage)` threw `target property must be present in proxy
-ownKeys`. The methods sit on the prototype now, where the standard puts them.
-
-**And then the decisive one, which ended the search for a missing name.** Strip
-Chromium of *every* global this browser lacks at once — `Notification`,
-`PerformanceObserver`, `caches`, `BroadcastChannel`, `MessageChannel`, the
-streams, `TextEncoder`, `Worker`, `CSS`, `DOMParser`, `Range`, `getSelection`,
-`indexedDB`, `EventSource`, `visualViewport`, `XMLHttpRequest`, `FormData`,
-`Blob`, `File`, `FileReader` — and it still renders 198 stories and makes all
-four API calls.
-
-So the difference is not something absent. It is something *answered
-differently*, which is a much narrower place to look: the behaviour of what is
-already here rather than the presence of what is not.
-
-Everything cheap has been ruled out with a test rather than an opinion. Events
-bubble to a delegated listener on `document`. Dynamic `import()` resolves. A
-`load` listener registered after an `await` still hears it. `readyState`
-sequences correctly. And `fetch` reads the real API on demand — 27KB of timeline
-JSON — so the plumbing under the application is sound.
-
-What is still unexplained is this page in particular. Our `fetch` reads the real
-API — 27KB of timeline JSON on demand — the application boots and sets
-`__hckr_booted`, nine of its ten listener markers are installed, no script
-errors and no unhandled rejections are reported, and it never asks for its
-stories. The next instrument is not another guess: it is the sequence of DOM
-calls, ours against Chromium's, diffed at the point they diverge.
-
 ## A page could not be shown dark — *added*
 
 `--scheme light|dark` on `render` and `browse`.
@@ -146,52 +77,6 @@ was right while `browse --scheme dark` was still white. The window rebuilt its
 viewport inline with `..Viewport::default()` at startup and dropped the scheme —
 a literal written beside the one function that says how a window lays a page out
 silently loses whatever that function grows next.
-
-## A real page found seven missing globals at once — *fixed*
-
-`hcker.news` is a client-rendered reader: an empty shell, and a bundle that
-fetches its stories. It rendered nothing but its own "JavaScript is turned off"
-banner — which was itself the `<noscript>` bug below, so the browser was
-advertising the very failure it was causing.
-
-Behind that, seven things a page reaches for that were not there. They are worth
-listing together because the failure mode is the same each time and it is not
-graceful: **a script reading a missing global stops at that line**, and takes
-with it everything it was about to set up.
-
-| missing | what died |
-|---|---|
-| `navigator` | three of the page's four scripts, on their first line |
-| `fetch` | the bundle; nothing could load |
-| `Intl` | the bundle again — QuickJS ships without ECMA-402 |
-| `location.pathname`, `search`, `hash`, … | the router; `location` had only `href` and `protocol` |
-| `URL`, `URLSearchParams`, `history`, `matchMedia` | absent outright |
-| `document.referrer` | the script that boots the app, on `.includes` of undefined |
-| settable `title`, `hidden`, `checked`, `type` | the hovercard setup |
-
-That last row is the one worth remembering. Those properties had getters and no
-setters, and **a bundle is a module, so assignment throws** rather than failing
-quietly the way it does in a classic script. A probe written as an ordinary
-`<script>` reported all of them as fine; the same probe with `'use strict'`
-named all twenty-four. A browser that only ever tests non-strict code cannot see
-this class of bug at all.
-
-Two things stayed true to the layering. **`fetch` reads through the same cache**
-the document and every subresource came through — a page fetching a file it
-already has gets the bytes it already has, and the same answer the `<img>`
-beside it would get. And **URLs are taken apart by the crate that resolves every
-other reference the document makes**, rather than by a regular expression in the
-prelude: a router and an `<a href>` that disagree about what a path is send the
-page somewhere it did not mean to go.
-
-`location` is also right *while the page's own scripts run* now, rather than
-only after the browser says so afterwards — a router reads it at exactly that
-moment, and used to be told the page was at `about:blank`.
-
-The feed still does not fill. `IntersectionObserver` is an alias for
-`MutationObserver` and never reports an intersection, so a list that asks for
-its first page when a sentinel scrolls into view never asks. Unverified, and the
-next thing to look at.
 
 ## Every "please enable JavaScript" banner was drawn — *fixed*
 
@@ -313,3 +198,9 @@ That is `rquickjs::Error` printed — the thrown value was sitting in the contex
 untouched. Four of the five above were found in minutes once the message
 carried the exception and its stack, and hours before it did. A swallowed error
 is worse than a loud one by however long it takes to find.
+
+## One real page, at length
+
+Everything above came from the test suite. `docs/a-real-page.md` is the same
+kind of record for a single site that would not render — a longer and messier
+story, and the one that found the task queue had no clock.

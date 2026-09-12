@@ -76,13 +76,21 @@ impl Dom {
     /// Blocking, because the cache is. Nothing is gained by making the wait
     /// asynchronous when there is no thread for it to happen on — the promise
     /// the page is handed is already settled.
-    pub fn read(&self, url: &str) -> Result<(String, String), String> {
+    pub fn read(&self, url: &str) -> Result<(String, String, u16), String> {
         let target = self
             .base_url
             .join(url)
             .map_err(|_| format!("not a url: {url}"))?;
         match self.resources.get(&target) {
-            Ok(resource) => Ok((target.to_string(), resource.text().into_owned())),
+            Ok(resource) => Ok((target.to_string(), resource.text().into_owned(), 200)),
+            // Not found is an *answer*, not a failure to ask. A page reads it
+            // as `response.ok === false` and carries on; turning it into a
+            // network error instead rejects a promise nobody expected to
+            // reject, and a page that treats that as "the network is gone"
+            // stops doing everything else as well.
+            Err(toy_browser_fetch::FetchError::NotFound(_)) => {
+                Ok((target.to_string(), String::new(), 404))
+            }
             Err(error) => Err(error.to_string()),
         }
     }

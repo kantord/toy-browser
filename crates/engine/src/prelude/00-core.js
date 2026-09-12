@@ -15,4 +15,7 @@ globalThis.__tb = {
   // Which colour scheme the page is shown in. Set from outside once the
   // browser knows — see `Realm::set_environment` — and read by `matchMedia`.
   scheme: "light",
+  // The content fragment each <template> has handed out, by node id: a page
+  // asking twice must get the same one, as a browser gives.
+  templates: new Map(),
 };

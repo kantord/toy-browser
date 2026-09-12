@@ -41,7 +41,7 @@ pub struct Sharing {
     /// wrappers are pinned. What travels through them lives in `events`.
     pub(super) listeners: RefCell<HashMap<String, Vec<super::events::Registered>>>,
     /// Timers and animation frames waiting for the lifecycle to drain them.
-    pub(super) tasks: super::tasks::Queue,
+    pub(crate) tasks: super::tasks::Queue,
     /// Where layout put each element and what it computed to, and how to have
     /// that worked out again when the document has moved on.
     pub(super) measure: Measure,

@@ -90,17 +90,60 @@
   // Backed by a detached element, because the layout tree has no fragment of
   // its own. What makes it a fragment is the flag below and the two moves that
   // honour it: insert one and its children go in, it does not.
-  const FRAGMENT = "__tbFragment";
+  // An attribute rather than a property, because `cloneNode` copies attributes
+  // and not properties — and a cloned fragment that has forgotten it is one
+  // gets inserted whole, holder and all.
+  const FRAGMENT = "data-tb-fragment";
+  const isFragment = (node) =>
+    node && typeof node.hasAttribute === "function" && node.hasAttribute(FRAGMENT);
+
   globalThis.document.createDocumentFragment = function createDocumentFragment() {
     const holder = globalThis.document.createElement("div");
-    holder[FRAGMENT] = true;
+    holder.setAttribute(FRAGMENT, "");
     return holder;
   };
+
+  // A `<template>`'s children belong to its content fragment and not to the
+  // document — which is why they are never drawn, and why a page clones them
+  // instead of moving them. Every row on a template-rendered page comes through
+  // here: `template.content.cloneNode(true)`.
+  //
+  // Moved on first ask rather than at parse time, because the parser hands them
+  // over as ordinary children and nothing else needs them moved until a page
+  // reaches for `content`.
+  //
+  // `content` means two different things depending on the element, and only
+  // one of them is a fragment: on `<meta>` it is the attribute, read *and*
+  // written — `meta.content = "#fff"` is how every page on the web sets its
+  // theme colour. Answering the fragment for both broke that.
+  Object.defineProperty(proto, "content", {
+    get() {
+      if (String(this.tagName).toUpperCase() !== "TEMPLATE") {
+        return this.getAttribute("content");
+      }
+      const held = globalThis.__tb.templates;
+      let holder = held.get(this.__nodeId);
+      if (!holder) {
+        holder = globalThis.document.createDocumentFragment();
+        for (const child of Array.from(this.childNodes)) holder.appendChild(child);
+        held.set(this.__nodeId, holder);
+      }
+      return holder;
+    },
+    set(value) {
+      // A template's content is not assignable; anything else's is the
+      // attribute.
+      if (String(this.tagName).toUpperCase() !== "TEMPLATE") {
+        this.setAttribute("content", String(value));
+      }
+    },
+    configurable: true,
+  });
 
   for (const name of ["appendChild", "insertBefore"]) {
     const under = proto[name];
     proto[name] = function (node, anchor) {
-      if (!node || !node[FRAGMENT]) return under.call(this, node, anchor);
+      if (!isFragment(node)) return under.call(this, node, anchor);
       // Taken as a list first: moving a child out of the holder changes the
       // holder's own child list underneath the walk.
       for (const child of Array.from(node.childNodes)) {

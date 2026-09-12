@@ -68,9 +68,11 @@ dom_api! {
     // What `fetch` is built on. A pair rather than a Result, because a
     // rejection is a thing the page catches and an error here is not.
     "parseUrl" => |d, href: String, base: Option<String>| d.parse_url(&href, base),
+    // url, body, status, failure — a status of its own because "not found" is
+    // an answer and only a failure is a failure.
     "read" => |d, url: String| match d.read(&url) {
-        Ok((url, body)) => vec![url, body, String::new()],
-        Err(reason) => vec![String::new(), String::new(), reason],
+        Ok((url, body, status)) => vec![url, body, status.to_string(), String::new()],
+        Err(reason) => vec![String::new(), String::new(), "0".to_owned(), reason],
     },
 }
 

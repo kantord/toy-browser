@@ -162,14 +162,14 @@ fn a_timer_waits_for_the_tasks_to_be_drained() {
 }
 
 #[test]
-fn timers_fire_by_delay_then_by_when_they_were_scheduled() {
+fn timers_fire_when_they_are_due_and_not_before() {
     let (mut engine, session) = page(TREE);
 
     js(
         &mut engine,
         &session,
         "globalThis.order = [];
-         setTimeout(() => order.push('late'), 50);
+         setTimeout(() => order.push('late'), 30000);
          setTimeout(() => order.push('first'), 0);
          setTimeout(() => order.push('second'), 0);",
     );
@@ -177,10 +177,19 @@ fn timers_fire_by_delay_then_by_when_they_were_scheduled() {
         .run_tasks(&session, Budget::default())
         .expect("drain tasks");
 
-    // Ordering is respected, but no time passes: all three run in one batch.
+    // Time passes, so a timer set for thirty seconds away does not run in the
+    // millisecond it took to drain the other two. Firing it early is not a
+    // harmless approximation: the deadline a page puts on a request is a timer,
+    // and running it at once cancels a request that had already succeeded.
     assert_eq!(
         js(&mut engine, &session, "return globalThis.order;"),
-        json!(["first", "second", "late"])
+        json!(["first", "second"])
+    );
+
+    // Still waiting, rather than dropped.
+    assert_eq!(
+        js(&mut engine, &session, "return globalThis.order.length;"),
+        json!(2)
     );
 }
 

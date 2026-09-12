@@ -1,8 +1,21 @@
 //! Queued work: timers and animation frames.
 //!
 //! Nothing runs on its own. Work piles up until the lifecycle drains it, which
-//! is what makes a load reproducible — and why an interval can only fire once,
-//! since a single load produces a single frame.
+//! is what makes a load reproducible.
+//!
+//! But time does pass. A timer is due at a moment, not merely after the ones
+//! ahead of it, and running one early is not a harmless approximation: the
+//! pattern every page uses to give a request a deadline is
+//!
+//! ```js
+//! const timer = setTimeout(() => controller.abort(), 35000);
+//! const response = await fetch(url, { signal: controller.signal });
+//! ```
+//!
+//! and a queue with no clock fires that abort immediately — cancelling a
+//! request that had already succeeded, and leaving the page to report a
+//! failure that never happened. That is exactly what hcker.news did here: the
+//! stories arrived, 26KB of them, and were thrown away by their own timeout.
 
 use std::cell::{Cell, RefCell};
 
@@ -16,7 +29,8 @@ use super::Sharing;
 /// One piece of queued work, and what to call it with.
 struct Task {
     handle: u64,
-    delay: f64,
+    /// When this may run, as milliseconds on the same clock `now` reads.
+    due: f64,
     callback: rquickjs::Persistent<Function<'static>>,
     args: Vec<rquickjs::Persistent<Value<'static>>>,
 }
@@ -56,7 +70,7 @@ fn schedule<'js>(
     let handle = shared.tasks.handle();
     let task = Task {
         handle,
-        delay,
+        due: now() + delay.max(0.0),
         callback: rquickjs::Persistent::save(ctx, callback),
         args: args
             .into_iter()
@@ -114,20 +128,67 @@ pub(super) fn drain(ctx: &Ctx<'_>) -> rquickjs::Result<bool> {
         return Ok(false);
     }
 
-    // By delay, then by the order they were scheduled. No time actually passes,
-    // so this ordering is the whole of a timer's meaning here.
+    // Due first, then by the order they were scheduled, which is what decides
+    // between two timers due at the same moment.
     timers.sort_by(|a, b| {
-        a.delay
-            .total_cmp(&b.delay)
+        a.due
+            .total_cmp(&b.due)
             .then_with(|| a.handle.cmp(&b.handle))
     });
-    for timer in timers {
+
+    // Only what is actually due. A timer set for later goes back on the queue:
+    // it may come due while the rest of this round runs, and if it never does,
+    // it never runs — which is the whole point. See this module's own note.
+    let moment = now();
+    let (due, waiting): (Vec<Task>, Vec<Task>) =
+        timers.into_iter().partition(|it| it.due <= moment);
+    let ran = !due.is_empty() || !frames.is_empty();
+    if !waiting.is_empty() {
+        let shared = ctx
+            .userdata::<Sharing>()
+            .ok_or_else(|| rquickjs::Error::new_from_js("Realm", "a document to belong to"))?;
+        shared.tasks.timers.borrow_mut().extend(waiting);
+    }
+
+    for timer in due {
         run(ctx, timer, None)?;
     }
+    // An animation frame is always for the next frame, and this is it.
     for frame in frames {
         run(ctx, frame, Some(0.0))?;
     }
-    Ok(true)
+    Ok(ran)
+}
+
+/// Milliseconds on a clock that only goes forwards.
+///
+/// The same clock a timer's deadline is measured against, and nothing else
+/// depends on where it starts — only on the difference between two readings.
+fn now() -> f64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|since| since.as_secs_f64() * 1000.0)
+        .unwrap_or(0.0)
+}
+
+/// How long until the earliest timer that has not come due, in milliseconds,
+/// or nothing when there is none.
+///
+/// What the difference between an empty queue and a waiting one costs: a page
+/// that schedules its render for fifty milliseconds' time has queued work, and
+/// a drain that stops because nothing is due *this instant* throws it away. The
+/// page then never renders, and says nothing about why.
+impl Queue {
+    pub(crate) fn waiting_for(&self) -> Option<f64> {
+        let soonest = self
+            .timers
+            .borrow()
+            .iter()
+            .map(|it| it.due)
+            .fold(f64::INFINITY, f64::min);
+        soonest.is_finite().then(|| (soonest - now()).max(0.0))
+    }
 }
 
 pub(super) fn install<'js>(ctx: &Ctx<'js>, api: &Object<'js>) -> rquickjs::Result<()> {

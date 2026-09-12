@@ -87,7 +87,15 @@
     URL: { get: () => globals.location.href, configurable: true },
     documentURI: { get: () => globals.location.href, configurable: true },
     baseURI: { get: () => globals.location.href, configurable: true },
-    defaultView: { get: () => globals, configurable: true },
+    // `defaultView` is deliberately absent, and that is a trade rather than an
+    // oversight. Defining it makes code reach the window through the node it
+    // was handed — `node.ownerDocument.defaultView.HTMLInputElement` — and
+    // narrow by `instanceof`. Every per-tag interface here is the same class,
+    // so every one of those checks says yes, and a heading starts being
+    // treated as a form control. Playwright's own visibility check does
+    // exactly this, and reported every `<h1>` hidden the moment this existed.
+    //
+    // It goes back in when the interfaces are real classes and not aliases.
     characterSet: { get: () => "UTF-8", configurable: true },
     charset: { get: () => "UTF-8", configurable: true },
     contentType: { get: () => "text/html", configurable: true },

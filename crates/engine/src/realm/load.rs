@@ -23,6 +23,13 @@ use crate::{
 /// A callback that reschedules itself would otherwise never let the load end.
 const MAX_TASK_ROUNDS: usize = 64;
 
+/// How long a load will wait for a timer that is not due yet.
+///
+/// Long enough for the short delays a page schedules its own work with, and far
+/// short of the deadlines it puts on a request — a page that gives a fetch
+/// thirty-five seconds is saying *give up after*, not *wait for*.
+const PATIENCE: std::time::Duration = std::time::Duration::from_millis(250);
+
 /// Runs the scripts in document order, skipping the ones a module-capable
 /// engine would never execute.
 pub(super) fn run_scripts(
@@ -100,8 +107,21 @@ pub(super) fn drain_tasks(ctx: &Ctx<'_>, report: &Rc<RefCell<Diagnostics>>, roun
         // animation frame — which is what a test runner does — never got the
         // frame.
         let woke = drain_microtasks(ctx);
-        if !more && !woke {
-            return;
+        if more || woke {
+            continue;
+        }
+        // Nothing is due — but something may still be waiting. A page that
+        // schedules its own render a few milliseconds out has queued work, and
+        // stopping here throws it away: the page never renders and never says
+        // why. So wait for it, up to a point.
+        match ctx
+            .userdata::<super::node::Sharing>()
+            .and_then(|it| it.tasks.waiting_for())
+        {
+            Some(until) if until <= PATIENCE.as_millis() as f64 => {
+                std::thread::sleep(std::time::Duration::from_millis(until.ceil() as u64 + 1));
+            }
+            _ => return,
         }
     }
 

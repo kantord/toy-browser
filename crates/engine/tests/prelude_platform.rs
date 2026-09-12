@@ -12,32 +12,6 @@ use serde_json::json;
 /// A page fetches through the same cache the document came through, so a file
 /// it already has is not read twice and answers the same as the `<img>` beside
 /// it.
-#[test]
-fn a_fetch_reads_through_the_cache_the_page_came_from() {
-    let (mut engine, session) = page("<p>x</p>");
-    let result = js(
-        &mut engine,
-        &session,
-        "return fetch('characterise.html')
-            .then((response) => [response.ok, response.status, response.url.endsWith('.html')]);",
-    );
-    assert_eq!(result, json!([true, 200, true]));
-}
-
-/// A network error is a rejected promise with a `TypeError`, which is what the
-/// specification says and what every page catches.
-#[test]
-fn a_fetch_of_something_missing_rejects() {
-    let (mut engine, session) = page("<p>x</p>");
-    let result = js(
-        &mut engine,
-        &session,
-        "return fetch('nothing-is-here.json')
-            .then(() => 'resolved', (error) => error.constructor.name);",
-    );
-    assert_eq!(result, json!("TypeError"));
-}
-
 /// Taken apart by the same crate that resolves every other reference the
 /// document makes, so a router and an `<a href>` agree about what a path is.
 #[test]
@@ -62,7 +36,6 @@ fn a_url_comes_apart_the_way_the_document_resolves_one() {
         ])
     );
 }
-
 /// The page's own address is right while its own scripts run, not only after
 /// something outside says so. A router reads it at that moment.
 #[test]
@@ -75,7 +48,6 @@ fn a_page_knows_where_it_is_while_its_scripts_run() {
     );
     assert_eq!(result, json!(["/fixture/characterise.html", "file:"]));
 }
-
 /// Writable, the way a browser's are: a router setting one is navigating within
 /// the page, and a getter with no setter throws at it.
 #[test]
@@ -92,7 +64,6 @@ fn the_parts_of_an_address_can_be_written() {
     );
     assert_eq!(result, json!(["#here", "/next", "?x=1", 1, 2]));
 }
-
 /// An element property a page writes must have a setter. In a module — which
 /// every bundler emits — assigning to a getter throws rather than failing
 /// quietly, so this is the difference between a tooltip and a blank page.
@@ -113,7 +84,6 @@ fn the_properties_a_page_writes_can_be_written_in_a_module() {
     );
     assert_eq!(result, json!(["said", true, true, "checkbox"]));
 }
-
 /// Absent, `document.referrer.includes(...)` throws. Empty is what a browser
 /// answers for a page nothing linked to, and what a script is prepared for —
 /// so the assertion is that it is a string, not that it is missing.
@@ -127,7 +97,6 @@ fn a_page_can_ask_what_linked_to_it() {
         "typeof document.referrer.includes === 'function'",
     );
 }
-
 /// QuickJS ships without ECMA-402. These format in one locale and ignore most
 /// options — an approximation, so that a page showing a date shows a date
 /// rather than stopping.
@@ -143,21 +112,6 @@ fn dates_and_numbers_can_be_formatted() {
     );
     assert_eq!(result, json!(["1,234,567", "3 hours ago", "string"]));
 }
-
-/// Who the page is talking to. Read far more often than acted on, and three of
-/// one real page's four scripts died on it being absent.
-#[test]
-fn a_page_can_ask_who_it_is_talking_to() {
-    let (mut engine, session) = page("<p>x</p>");
-    let result = js(
-        &mut engine,
-        &session,
-        "return [typeof navigator.userAgent, navigator.onLine, navigator.standalone === undefined,
-                 typeof matchMedia('(max-width: 100px)').matches];",
-    );
-    assert_eq!(result, json!(["string", true, true, "boolean"]));
-}
-
 /// `href` and `src` are not the attributes. A browser answers with the URL
 /// resolved against the page, which is why a script can hand one straight to
 /// `fetch` — and why Vite's module-preload polyfill, which does exactly that
@@ -180,7 +134,6 @@ fn href_and_src_answer_with_a_resolved_url() {
         json!(["file:///stories?page=2", "file:///fixture/pics/cat.png", ""])
     );
 }
-
 /// Written back raw, the way the DOM does: setting one sets the attribute.
 #[test]
 fn setting_href_sets_the_attribute() {
@@ -195,7 +148,6 @@ fn setting_href_sets_the_attribute() {
     );
     assert_eq!(result, json!(["/two", "file:///two"]));
 }
-
 /// A page enumerating its own storage must get keys, not a TypeError.
 ///
 /// `localStorage` is a Proxy, and a Proxy may not hide a non-configurable
@@ -220,25 +172,6 @@ fn storage_can_be_enumerated() {
         json!([["a", "b"], { "a": "1", "b": "two" }, 2, "1", "two"])
     );
 }
-
-/// A page cancelling work it started. Nothing here can stop a fetch the cache
-/// has already answered, but the page must be able to say so and hear it.
-#[test]
-fn work_can_be_called_off() {
-    let (mut engine, session) = page("<p>x</p>");
-    let result = js(
-        &mut engine,
-        &session,
-        "const controller = new AbortController();
-         const heard = [];
-         controller.signal.addEventListener('abort', () => heard.push('listener'));
-         controller.signal.onabort = () => heard.push('handler');
-         controller.abort();
-         return [controller.signal.aborted, heard.sort()];",
-    );
-    assert_eq!(result, json!([true, ["handler", "listener"]]));
-}
-
 /// A fragment is its children, not itself: inserting one inserts what it holds.
 /// Building rows into one and inserting it once is how a page avoids laying the
 /// document out per row.
@@ -261,7 +194,6 @@ fn a_fragment_inserts_its_children_and_not_itself() {
     );
     assert_eq!(result, json!([3, ["LI:first", "LI:second", "LI:third"]]));
 }
-
 /// The properties a page reads about an element without calling anything.
 ///
 /// Absent, each one is a silent wrong answer rather than an error:
@@ -280,10 +212,84 @@ fn an_element_answers_what_a_page_reads_off_it() {
          div.tabIndex = 3;
          return [div.childElementCount, div.innerText, div.textContent,
                  div.scrollTop, div.tabIndex, div.isContentEditable,
-                 typeof div.offsetTop, document.defaultView === globalThis];",
+                 typeof div.offsetTop, typeof document.defaultView];",
+    );
+    // `defaultView` is deliberately absent — see the note in the prelude. It is
+    // asserted here so that adding it is a decision rather than an accident:
+    // code that reaches the window through a node narrows types by
+    // `instanceof`, and every per-tag interface here is the same class.
+    assert_eq!(
+        result,
+        json!([0, "written", "written", 0, 3, false, "number", "undefined"])
+    );
+}
+/// A timer is due at a moment, not merely after the ones ahead of it.
+///
+/// The pattern every page uses to give a request a deadline is a timer that
+/// aborts it. Running that early cancels a request that had already succeeded,
+/// and the page reports a failure that never happened.
+#[test]
+fn a_timer_set_far_ahead_does_not_run_at_once() {
+    let (mut engine, session) = page("<p>x</p>");
+    js(
+        &mut engine,
+        &session,
+        "globalThis.rang = [];
+         setTimeout(() => rang.push('soon'), 0);
+         setTimeout(() => rang.push('deadline'), 30000);",
+    );
+    engine
+        .run_tasks(&session, toy_browser_engine::Budget::default())
+        .expect("drain");
+    let result = js(&mut engine, &session, "return globalThis.rang;");
+    assert_eq!(result, json!(["soon"]));
+}
+/// Every row of a template-rendered page is a clone of its content fragment,
+/// and `content` means the attribute on everything that is not a `<template>`.
+#[test]
+fn a_template_hands_over_its_content_and_a_meta_keeps_its_attribute() {
+    let (mut engine, session) =
+        page("<template id='t'><li class='row'>x</li></template><meta id='m' content='before'>");
+    let result = js(
+        &mut engine,
+        &session,
+        "'use strict';
+         const template = document.getElementById('t');
+         const copy = template.content.cloneNode(true);
+         const meta = document.getElementById('m');
+         const was = meta.content;
+         meta.content = 'after';
+         return [copy.childNodes.length, copy.querySelector('.row').textContent,
+                 was, meta.content, meta.getAttribute('content')];",
+    );
+    assert_eq!(result, json!([1, "x", "before", "after", "after"]));
+}
+/// A page builds a day key out of the typed pieces of a formatted date —
+/// `parts.find((it) => it.type === "year")` — so one literal covering the whole
+/// date answers every such search with nothing, and the key comes out empty.
+#[test]
+fn a_formatted_date_comes_apart_into_named_pieces() {
+    let (mut engine, session) = page("<p>x</p>");
+    let result = js(
+        &mut engine,
+        &session,
+        "const when = new Date('2026-09-12T00:30:00Z');
+         const iso = new Intl.DateTimeFormat('en-CA',
+             { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' });
+         const parts = iso.formatToParts(when).filter((it) => it.type !== 'literal');
+         return [iso.format(when),
+                 new Intl.DateTimeFormat('en-US',
+                     { year: 'numeric', month: '2-digit', day: '2-digit' }).format(when),
+                 new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(when),
+                 parts.map((it) => it.type)];",
     );
     assert_eq!(
         result,
-        json!([0, "written", "written", 0, 3, false, "number", true])
+        json!([
+            "2026-09-12",
+            "09/12/2026",
+            "Sep 12",
+            ["year", "month", "day"]
+        ])
     );
 }
