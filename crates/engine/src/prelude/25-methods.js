@@ -82,9 +82,121 @@
   // Parsed by the document rather than here: the markup goes into a holder,
   // and what comes out of it is moved into place. `innerHTML` is what knows
   // how to parse, so this borrows it rather than inventing a second answer.
+  // A document fragment: a holder whose children are what gets inserted, not
+  // the holder itself. Building a list of rows into one and inserting it once
+  // is how a page avoids laying the page out per row, and it is what every
+  // template-cloning renderer reaches for.
+  //
+  // Backed by a detached element, because the layout tree has no fragment of
+  // its own. What makes it a fragment is the flag below and the two moves that
+  // honour it: insert one and its children go in, it does not.
+  const FRAGMENT = "__tbFragment";
+  globalThis.document.createDocumentFragment = function createDocumentFragment() {
+    const holder = globalThis.document.createElement("div");
+    holder[FRAGMENT] = true;
+    return holder;
+  };
+
+  for (const name of ["appendChild", "insertBefore"]) {
+    const under = proto[name];
+    proto[name] = function (node, anchor) {
+      if (!node || !node[FRAGMENT]) return under.call(this, node, anchor);
+      // Taken as a list first: moving a child out of the holder changes the
+      // holder's own child list underneath the walk.
+      for (const child of Array.from(node.childNodes)) {
+        under.call(this, child, anchor);
+      }
+      return node;
+    };
+  }
+
   proto.insertAdjacentHTML = function insertAdjacentHTML(where, markup) {
     const holder = globalThis.document.createElement("div");
     holder.innerHTML = String(markup);
     for (const node of Array.from(holder.childNodes)) place(this, where, node);
   };
+
+  // Properties a page reads constantly and that cost nothing to answer. Each
+  // one absent is a silent wrong answer rather than an error: `undefined === 0`
+  // is simply false, so `if (list.childElementCount === 0) load()` never loads
+  // and never says why.
+  // Read and written both. A page assigns `innerText` to put text in, and
+  // `scrollTop` to move a list back to the top — and a property with a getter
+  // and no setter does not ignore that in a module, it throws.
+  for (const name of ["innerText", "outerText"]) {
+    Object.defineProperty(proto, name, {
+      // Layout-aware text is what a browser answers here; this is the text. The
+      // difference shows on hidden elements and at block boundaries, and a page
+      // reading one in order to show it is right either way.
+      get() {
+        return this.textContent;
+      },
+      set(value) {
+        this.textContent = String(value);
+      },
+      configurable: true,
+    });
+  }
+
+  // Nothing here scrolls, so the position is always the top — but a page that
+  // puts it back there must be allowed to say so.
+  for (const name of ["scrollTop", "scrollLeft"]) {
+    Object.defineProperty(proto, name, {
+      get: () => 0,
+      set() {},
+      configurable: true,
+    });
+  }
+
+  const reading = {
+    childElementCount() {
+      return this.children.length;
+    },
+    // No border is measured per side: a page reads these to offset a position,
+    // and zero is the honest offset.
+    clientTop: () => 0,
+    clientLeft: () => 0,
+    offsetTop() {
+      return this.getBoundingClientRect().top;
+    },
+    offsetLeft() {
+      return this.getBoundingClientRect().left;
+    },
+    offsetParent() {
+      return globalThis.document.body;
+    },
+    baseURI() {
+      return globalThis.location.href;
+    },
+    isContentEditable: () => false,
+  };
+  for (const [name, read] of Object.entries(reading)) {
+    Object.defineProperty(proto, name, { get: read, configurable: true });
+  }
+
+  // The same, but written as well: a page sets these, and a getter with no
+  // setter throws in a module rather than failing quietly.
+  for (const [name, fallback] of Object.entries({
+    tabIndex: -1,
+    dir: "",
+    lang: "",
+    accessKey: "",
+    contentEditable: "inherit",
+    draggable: false,
+    spellcheck: true,
+    translate: true,
+  })) {
+    Object.defineProperty(proto, name, {
+      get() {
+        const raw = this.getAttribute(name.toLowerCase());
+        if (raw == null) return fallback;
+        if (typeof fallback === "number") return Number(raw);
+        return typeof fallback === "boolean" ? raw !== "false" : raw;
+      },
+      set(value) {
+        this.setAttribute(name.toLowerCase(), String(value));
+      },
+      configurable: true,
+    });
+  }
 })();

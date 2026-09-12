@@ -111,12 +111,50 @@
   }
 
   globalThis.ResizeObserver = ElementObserver;
+
+  // This one reports, because a page waits on it before doing anything.
+  //
+  // An infinite list asks to be told when its sentinel comes into view, and
+  // loads its first page when it is. Told nothing, it loads nothing — not a
+  // slower feed, no feed and not one request made. A silent observer is worse
+  // than a missing one: at least a missing one throws.
+  //
+  // What it reports is that everything is in view, which is the truth here. A
+  // page is rendered whole — there is no window cutting it off, so an element
+  // with a box is on screen by definition. A browser looking through a window
+  // would have to compare against the band it shows; this one has no band.
+  //
+  // Reported on a later turn rather than from inside `observe`, because that is
+  // where a page expects it: one that starts loading during its own setup call
+  // re-enters whatever was setting it up.
   globalThis.IntersectionObserver = class IntersectionObserver extends ElementObserver {
     constructor(callback, options = {}) {
       super(callback);
       this.root = options.root ?? null;
       this.rootMargin = options.rootMargin ?? "0px";
       this.thresholds = [options.threshold ?? 0].flat();
+    }
+
+    observe(target) {
+      super.observe(target);
+      globalThis.setTimeout(() => {
+        if (!this._watched.has(target)) return;
+        const box = target.getBoundingClientRect();
+        this._callback(
+          [
+            {
+              target,
+              isIntersecting: true,
+              intersectionRatio: 1,
+              time: 0,
+              boundingClientRect: box,
+              intersectionRect: box,
+              rootBounds: null,
+            },
+          ],
+          this,
+        );
+      }, 0);
     }
   };
 

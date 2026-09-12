@@ -28,29 +28,40 @@
       // the order to the implementation, so any consistent one is an answer.
       key: (index) => [...held.keys()][index] ?? null,
     };
-    Object.defineProperty(api, "length", { get: () => held.size });
+    Object.defineProperty(api, "length", { get: () => held.size, configurable: true });
 
     // A Storage is also a plain object: `storage.token` reads the key `token`,
     // and assigning to it writes one. A Proxy is the honest way to say that,
     // since the set of keys is whatever a page has put there.
-    return new Proxy(api, {
-      get: (target, name) =>
-        name in target || typeof name === "symbol" ? target[name] : api.getItem(name),
-      set: (target, name, value) => {
-        if (name in target) return false;
+    //
+    // The proxy stands over an *empty* object with the methods on its
+    // prototype, which is also where the standard puts them. Standing it over
+    // the methods themselves makes the proxy invalid: a proxy may not hide a
+    // non-configurable property of its target, `length` is one, and it is not a
+    // stored key — so `Object.keys(localStorage)` threw `target property must
+    // be present in proxy ownKeys` rather than answering. A page that
+    // enumerates its own storage got a TypeError from the attempt.
+    const target = Object.create(api);
+    return new Proxy(target, {
+      get: (_target, name) =>
+        name in api || typeof name === "symbol" ? api[name] : api.getItem(name),
+      set: (_target, name, value) => {
+        if (name in api) return false;
         api.setItem(name, value);
         return true;
       },
-      has: (target, name) => name in target || held.has(String(name)),
+      has: (_target, name) => name in api || held.has(String(name)),
       deleteProperty: (target, name) => {
         held.delete(String(name));
         return true;
       },
       ownKeys: () => [...held.keys()],
-      getOwnPropertyDescriptor: (target, name) =>
+      // Only the stored keys are own properties; everything else lives on the
+      // prototype, which is what makes the list above legal.
+      getOwnPropertyDescriptor: (_target, name) =>
         held.has(String(name))
           ? { value: held.get(String(name)), writable: true, enumerable: true, configurable: true }
-          : Object.getOwnPropertyDescriptor(target, name),
+          : undefined,
     });
   };
 

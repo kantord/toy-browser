@@ -54,6 +54,75 @@ timeout until `Node.append` existed to build its fixtures with; what is left of
 it is real layout disagreement, 49px against 50px and the `stretch` and `calc`
 values blitz does not implement.
 
+## What a real page actually needs, measured against a real browser
+
+`hcker.news` renders nothing but its shell here, and chasing that produced a
+method worth keeping: **use Chromium as an oracle**. Take a global away from it,
+load the page, count what renders. What breaks tells you what matters, and —
+more usefully — what does not.
+
+```
+(control)                    stories= 192  api=4
+no indexedDB                 stories= 192  api=4
+no EventSource               stories= 192  api=4
+no serviceWorker             stories= 192  api=4
+no ResizeObserver            stories= 192  api=4
+no IntersectionObserver      stories=   0  api=0
+no MutationObserver          stories=  20  api=1
+no createDocumentFragment    stories=   0  api=3
+no AbortController           stories=  20  api=2
+```
+
+That table killed a day's worth of plans. A whole IndexedDB was about to be
+vendored in; the oracle says it changes nothing. So do `EventSource`, service
+workers, `ResizeObserver`, `scrollTo`, `getSelection`, `CSS`, `DOMParser`,
+`Range`, `TextEncoder`, `MessageChannel`, `PerformanceObserver`,
+`requestIdleCallback`, `ReadableStream`, `navigator.storage` and
+`visualViewport` — every one of them measured, every one of them irrelevant.
+
+Then the second half of the method, which mattered more: put the *stub* in
+rather than deleting. A `MutationObserver` that exists and never fires: 192
+stories. An `IntersectionObserver` that exists and never fires: 192 stories.
+
+**Every failure in that table is a constructor throwing, not behaviour missing.**
+Which says where the work is: breadth, not depth. A name that is merely absent
+costs a whole application; a name that is present and approximate costs nothing
+anybody has yet been able to measure. Define everything, however thinly, before
+implementing anything thoroughly.
+
+Fixed along the way, each a real bug on its own terms: `AbortController` and
+`AbortSignal`, `document.createDocumentFragment` (backed by a detached element
+whose children are what insertion moves), and a `localStorage` that could not be
+enumerated — the Proxy stood over the methods, `length` among them was
+non-configurable, and a Proxy may not hide one of those, so
+`Object.keys(localStorage)` threw `target property must be present in proxy
+ownKeys`. The methods sit on the prototype now, where the standard puts them.
+
+**And then the decisive one, which ended the search for a missing name.** Strip
+Chromium of *every* global this browser lacks at once — `Notification`,
+`PerformanceObserver`, `caches`, `BroadcastChannel`, `MessageChannel`, the
+streams, `TextEncoder`, `Worker`, `CSS`, `DOMParser`, `Range`, `getSelection`,
+`indexedDB`, `EventSource`, `visualViewport`, `XMLHttpRequest`, `FormData`,
+`Blob`, `File`, `FileReader` — and it still renders 198 stories and makes all
+four API calls.
+
+So the difference is not something absent. It is something *answered
+differently*, which is a much narrower place to look: the behaviour of what is
+already here rather than the presence of what is not.
+
+Everything cheap has been ruled out with a test rather than an opinion. Events
+bubble to a delegated listener on `document`. Dynamic `import()` resolves. A
+`load` listener registered after an `await` still hears it. `readyState`
+sequences correctly. And `fetch` reads the real API on demand — 27KB of timeline
+JSON — so the plumbing under the application is sound.
+
+What is still unexplained is this page in particular. Our `fetch` reads the real
+API — 27KB of timeline JSON on demand — the application boots and sets
+`__hckr_booted`, nine of its ten listener markers are installed, no script
+errors and no unhandled rejections are reported, and it never asks for its
+stories. The next instrument is not another guess: it is the sequence of DOM
+calls, ours against Chromium's, diffed at the point they diverge.
+
 ## A page could not be shown dark — *added*
 
 `--scheme light|dark` on `render` and `browse`.

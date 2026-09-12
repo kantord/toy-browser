@@ -80,6 +80,29 @@
   globals.pageYOffset = 0;
   globals.devicePixelRatio = 1;
 
+  // What the document says about itself. All cheap, all read constantly, and
+  // `defaultView` in particular is how a library reaches the window from a node
+  // it was handed: `element.ownerDocument.defaultView`.
+  Object.defineProperties(document, {
+    URL: { get: () => globals.location.href, configurable: true },
+    documentURI: { get: () => globals.location.href, configurable: true },
+    baseURI: { get: () => globals.location.href, configurable: true },
+    defaultView: { get: () => globals, configurable: true },
+    characterSet: { get: () => "UTF-8", configurable: true },
+    charset: { get: () => "UTF-8", configurable: true },
+    contentType: { get: () => "text/html", configurable: true },
+    doctype: { get: () => null, configurable: true },
+    scrollingElement: { get: () => document.documentElement, configurable: true },
+    // Live lists in a browser; a fresh answer each time here, which is the same
+    // thing for a page that reads one and walks it.
+    forms: { get: () => document.querySelectorAll("form"), configurable: true },
+    images: { get: () => document.querySelectorAll("img"), configurable: true },
+    links: { get: () => document.querySelectorAll("a[href], area[href]"), configurable: true },
+    scripts: { get: () => document.querySelectorAll("script"), configurable: true },
+    // Stylesheets are parsed outside the engine, so there is nothing to list.
+    styleSheets: { get: () => [], configurable: true },
+  });
+
   // This page is being looked at. Nothing here is ever in a background tab or
   // behind another window — there is one page and it is the one being rendered
   // — so the honest answer is the same every time.

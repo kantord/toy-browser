@@ -142,6 +142,57 @@
     subtle: undefined,
   };
 
+  // Cancelling work a page has started. Nothing here can actually stop a fetch
+  // — the cache answers before the signal could be read — so what this does is
+  // let the page say it, and let anything waiting on `aborted` or the `abort`
+  // event hear it. Chromium without this renders a fifth of hcker.news.
+  class AbortSignal {
+    constructor() {
+      this.aborted = false;
+      this.reason = undefined;
+      this.onabort = null;
+      this._listeners = [];
+    }
+    addEventListener(type, listener) {
+      if (type === "abort") this._listeners.push(listener);
+    }
+    removeEventListener(type, listener) {
+      if (type === "abort") this._listeners = this._listeners.filter((it) => it !== listener);
+    }
+    dispatchEvent() {
+      return true;
+    }
+    throwIfAborted() {
+      if (this.aborted) throw this.reason;
+    }
+    static abort(reason) {
+      const signal = new AbortSignal();
+      signal.aborted = true;
+      signal.reason = reason ?? new Error("aborted");
+      return signal;
+    }
+    static timeout() {
+      return new AbortSignal();
+    }
+  }
+
+  class AbortController {
+    constructor() {
+      this.signal = new AbortSignal();
+    }
+    abort(reason) {
+      if (this.signal.aborted) return;
+      this.signal.aborted = true;
+      this.signal.reason = reason ?? new Error("aborted");
+      const event = { type: "abort", target: this.signal };
+      if (typeof this.signal.onabort === "function") this.signal.onabort(event);
+      for (const listener of this.signal._listeners.slice()) listener(event);
+    }
+  }
+
+  globalThis.AbortSignal = AbortSignal;
+  globalThis.AbortController = AbortController;
+
   // A deep copy, which is what a page uses it for. Structured clone can carry
   // things JSON cannot — a Map, a Date, a cycle — and this cannot; what it can
   // do is stop the call throwing.

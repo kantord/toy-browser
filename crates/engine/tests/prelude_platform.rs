@@ -195,3 +195,95 @@ fn setting_href_sets_the_attribute() {
     );
     assert_eq!(result, json!(["/two", "file:///two"]));
 }
+
+/// A page enumerating its own storage must get keys, not a TypeError.
+///
+/// `localStorage` is a Proxy, and a Proxy may not hide a non-configurable
+/// property of its target. `length` was one, and it is not a stored key — so
+/// `Object.keys(localStorage)` threw rather than answering. The methods live on
+/// the prototype now, which is where the standard puts them and what leaves the
+/// own properties to be exactly the stored keys.
+#[test]
+fn storage_can_be_enumerated() {
+    let (mut engine, session) = page("<p>x</p>");
+    let result = js(
+        &mut engine,
+        &session,
+        "'use strict';
+         localStorage.setItem('a', 1);
+         localStorage.b = 'two';
+         return [Object.keys(localStorage), { ...localStorage }, localStorage.length,
+                 localStorage.getItem('a'), localStorage.b];",
+    );
+    assert_eq!(
+        result,
+        json!([["a", "b"], { "a": "1", "b": "two" }, 2, "1", "two"])
+    );
+}
+
+/// A page cancelling work it started. Nothing here can stop a fetch the cache
+/// has already answered, but the page must be able to say so and hear it.
+#[test]
+fn work_can_be_called_off() {
+    let (mut engine, session) = page("<p>x</p>");
+    let result = js(
+        &mut engine,
+        &session,
+        "const controller = new AbortController();
+         const heard = [];
+         controller.signal.addEventListener('abort', () => heard.push('listener'));
+         controller.signal.onabort = () => heard.push('handler');
+         controller.abort();
+         return [controller.signal.aborted, heard.sort()];",
+    );
+    assert_eq!(result, json!([true, ["handler", "listener"]]));
+}
+
+/// A fragment is its children, not itself: inserting one inserts what it holds.
+/// Building rows into one and inserting it once is how a page avoids laying the
+/// document out per row.
+#[test]
+fn a_fragment_inserts_its_children_and_not_itself() {
+    let (mut engine, session) = page("<ul id='list'><li>first</li></ul>");
+    let result = js(
+        &mut engine,
+        &session,
+        "const fragment = document.createDocumentFragment();
+         for (const text of ['second', 'third']) {
+             const item = document.createElement('li');
+             item.textContent = text;
+             fragment.appendChild(item);
+         }
+         const list = document.getElementById('list');
+         list.appendChild(fragment);
+         return [list.children.length,
+                 Array.from(list.children).map((it) => it.tagName + ':' + it.textContent)];",
+    );
+    assert_eq!(result, json!([3, ["LI:first", "LI:second", "LI:third"]]));
+}
+
+/// The properties a page reads about an element without calling anything.
+///
+/// Absent, each one is a silent wrong answer rather than an error:
+/// `undefined === 0` is simply false, so `if (list.childElementCount === 0)
+/// load()` never loads and never says why.
+#[test]
+fn an_element_answers_what_a_page_reads_off_it() {
+    let (mut engine, session) = page("<div id='d'><span>a</span><span>b</span></div>");
+    let result = js(
+        &mut engine,
+        &session,
+        "'use strict';
+         const div = document.getElementById('d');
+         div.innerText = 'written';
+         div.scrollTop = 40;
+         div.tabIndex = 3;
+         return [div.childElementCount, div.innerText, div.textContent,
+                 div.scrollTop, div.tabIndex, div.isContentEditable,
+                 typeof div.offsetTop, document.defaultView === globalThis];",
+    );
+    assert_eq!(
+        result,
+        json!([0, "written", "written", 0, 3, false, "number", true])
+    );
+}
