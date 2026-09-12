@@ -220,6 +220,13 @@
   // The same, but written as well: a page sets these, and a getter with no
   // setter throws in a module rather than failing quietly.
   for (const [name, fallback] of Object.entries({
+    // Reflected on nearly every element that has one — `<meta>`, `<a>`,
+    // `<form>`, every form control — and written as a property far more often
+    // than as an attribute. Without it `meta.name = "theme-color"` sets a plain
+    // JS property, the attribute stays absent, and the page's own
+    // `querySelector("meta[name=theme-color]")` does not find the element it
+    // just added. It then adds another, on every render, forever.
+    name: "",
     tabIndex: -1,
     dir: "",
     lang: "",

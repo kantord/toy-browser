@@ -134,6 +134,16 @@ pub struct RenderArgs {
     #[arg(long)]
     no_scripts: bool,
 
+    /// A script to run in the page before any of its own, given as a file.
+    ///
+    /// What a debugger is, without a debugger: wrap what a page reaches for,
+    /// write down what it asked and in what order. `tests/trace/` uses this.
+    ///
+    /// Repeatable, and run in the order given — one script can set the terms
+    /// the next one works in.
+    #[arg(long, value_name = "FILE")]
+    init_script: Vec<PathBuf>,
+
     /// Which colour scheme the page is shown in, which decides what
     /// `prefers-color-scheme` matches.
     #[arg(long, value_parser = scheme, default_value = "light")]

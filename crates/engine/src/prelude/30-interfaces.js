@@ -41,7 +41,41 @@
   // an instance. Test runners open with exactly that, and a missing name is a
   // thrown reference rather than a false answer.
   class Document {}
-  Document.prototype.fonts = { ready: Promise.resolve(), status: "loaded" };
+  // Every font this browser will ever have is already there — they are loaded
+  // from disk before the page is — so the set is finished, `ready` is settled,
+  // and nothing will ever be dispatched. It still has to be an *event target*:
+  // a page that measures text waits for the fonts before trusting a
+  // measurement, and it says so with
+  //
+  // ```js
+  // document.fonts?.ready.then(again);
+  // document.fonts?.addEventListener("loadingdone", again);
+  // ```
+  //
+  // The `?.` protects a browser with no `document.fonts` at all. It does not
+  // protect one that has the object and not the method: that line throws a
+  // TypeError built by the engine, invisible to any error tracing, on the first
+  // row a page tries to measure — which is how hcker.news came to draw none of
+  // its eighty stories while holding all of them.
+  Document.prototype.fonts = {
+    ready: Promise.resolve(),
+    status: "loaded",
+    size: 0,
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent: () => true,
+    // Whatever was asked about, this browser has it: the faces are fixed.
+    check: () => true,
+    load: (font, text) => Promise.resolve([]),
+    add() {},
+    delete: () => false,
+    clear() {},
+    forEach() {},
+    entries: () => [][Symbol.iterator](),
+    keys: () => [][Symbol.iterator](),
+    values: () => [][Symbol.iterator](),
+    [Symbol.iterator]: () => [][Symbol.iterator](),
+  };
   globalThis.Document = Document;
   globalThis.HTMLDocument = Document;
 

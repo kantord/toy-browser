@@ -1,5 +1,7 @@
 /target
-/out
+# Anywhere, not only at the root: a `render` run from inside tests/ writes its
+# pictures beside itself.
+out/
 node_modules/
 test-results/
 playwright-report/

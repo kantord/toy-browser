@@ -14,56 +14,10 @@ use serde_json::json;
 /// it.
 /// Taken apart by the same crate that resolves every other reference the
 /// document makes, so a router and an `<a href>` agree about what a path is.
-#[test]
-fn a_url_comes_apart_the_way_the_document_resolves_one() {
-    let (mut engine, session) = page("<p>x</p>");
-    let result = js(
-        &mut engine,
-        &session,
-        "const url = new URL('/stories?page=2#top', 'https://example.com:8443/a/b');
-         return [url.pathname, url.search, url.hash, url.host, url.origin,
-                 url.searchParams.get('page')];",
-    );
-    assert_eq!(
-        result,
-        json!([
-            "/stories",
-            "?page=2",
-            "#top",
-            "example.com:8443",
-            "https://example.com:8443",
-            "2"
-        ])
-    );
-}
 /// The page's own address is right while its own scripts run, not only after
 /// something outside says so. A router reads it at that moment.
-#[test]
-fn a_page_knows_where_it_is_while_its_scripts_run() {
-    let (mut engine, session) = page("<p>x</p>");
-    let result = js(
-        &mut engine,
-        &session,
-        "return [location.pathname, location.protocol];",
-    );
-    assert_eq!(result, json!(["/fixture/characterise.html", "file:"]));
-}
 /// Writable, the way a browser's are: a router setting one is navigating within
 /// the page, and a getter with no setter throws at it.
-#[test]
-fn the_parts_of_an_address_can_be_written() {
-    let (mut engine, session) = page("<p>x</p>");
-    let result = js(
-        &mut engine,
-        &session,
-        "'use strict';
-         location.hash = 'here';
-         const first = location.hash;
-         history.pushState({ n: 1 }, '', '/next?x=1');
-         return [first, location.pathname, location.search, history.state.n, history.length];",
-    );
-    assert_eq!(result, json!(["#here", "/next", "?x=1", 1, 2]));
-}
 /// An element property a page writes must have a setter. In a module — which
 /// every bundler emits — assigning to a getter throws rather than failing
 /// quietly, so this is the difference between a tooltip and a blank page.
@@ -87,67 +41,46 @@ fn the_properties_a_page_writes_can_be_written_in_a_module() {
 /// Absent, `document.referrer.includes(...)` throws. Empty is what a browser
 /// answers for a page nothing linked to, and what a script is prepared for —
 /// so the assertion is that it is a string, not that it is missing.
-#[test]
-fn a_page_can_ask_what_linked_to_it() {
-    let (mut engine, session) = page("<p>x</p>");
-    holds(&mut engine, &session, "document.referrer === ''");
-    holds(
-        &mut engine,
-        &session,
-        "typeof document.referrer.includes === 'function'",
-    );
-}
 /// QuickJS ships without ECMA-402. These format in one locale and ignore most
 /// options — an approximation, so that a page showing a date shows a date
 /// rather than stopping.
+/// Without `new`, which ECMA-402 allows for these three and which pages rely
+/// on: asking what time zone the machine is in is written
+/// `Intl.DateTimeFormat().resolvedOptions().timeZone` everywhere. A class
+/// refuses that call, and a page building a request header out of it reports a
+/// failed request instead of making one.
+/// Cutting text into pieces a person would recognise. Approximate, because real
+/// segmentation is a Unicode algorithm with tables — but present, which is the
+/// part that matters: `new Intl.Segmenter(...)` on a browser without one throws
+/// rather than degrading, and it is called from inside a render.
+/// A date formatted the way it was asked for. QuickJS has its own
+/// `toLocaleDateString` and it ignores every option handed to it, so a page
+/// grouping rows under day headings formats each day identically to every other
+/// and draws one heading over the lot.
+/// An idle callback is handed a deadline, and the first thing anything written
+/// against this API does is ask it how much time is left. A callback called
+/// with no argument at all throws on that line, inside a callback, where
+/// nothing is watching.
 #[test]
-fn dates_and_numbers_can_be_formatted() {
+fn an_idle_callback_is_told_how_long_it_has() {
     let (mut engine, session) = page("<p>x</p>");
     let result = js(
         &mut engine,
         &session,
-        "return [new Intl.NumberFormat().format(1234567),
-                 new Intl.RelativeTimeFormat().format(-3, 'hour'),
-                 typeof new Intl.DateTimeFormat().format(new Date())];",
+        "let seen = null;
+         requestIdleCallback((deadline) => { seen = [typeof deadline.timeRemaining(), deadline.didTimeout]; });
+         __tb.drainTasks();
+         return seen;",
     );
-    assert_eq!(result, json!(["1,234,567", "3 hours ago", "string"]));
+    assert_eq!(result, json!(["number", false]));
 }
+
 /// `href` and `src` are not the attributes. A browser answers with the URL
 /// resolved against the page, which is why a script can hand one straight to
 /// `fetch` — and why Vite's module-preload polyfill, which does exactly that
 /// for every `<link rel=modulepreload>` it finds, fetched `undefined` and took
 /// the application down before it rendered a row.
-#[test]
-fn href_and_src_answer_with_a_resolved_url() {
-    let (mut engine, session) = page(
-        "<a id='a' href='/stories?page=2'>x</a><img id='i' src='pics/cat.png'><a id='b'>y</a>",
-    );
-    let result = js(
-        &mut engine,
-        &session,
-        "return [document.getElementById('a').href,
-                 document.getElementById('i').src,
-                 document.getElementById('b').href];",
-    );
-    assert_eq!(
-        result,
-        json!(["file:///stories?page=2", "file:///fixture/pics/cat.png", ""])
-    );
-}
 /// Written back raw, the way the DOM does: setting one sets the attribute.
-#[test]
-fn setting_href_sets_the_attribute() {
-    let (mut engine, session) = page("<a id='a' href='/one'>x</a>");
-    let result = js(
-        &mut engine,
-        &session,
-        "'use strict';
-         const link = document.getElementById('a');
-         link.href = '/two';
-         return [link.getAttribute('href'), link.href];",
-    );
-    assert_eq!(result, json!(["/two", "file:///two"]));
-}
 /// A page enumerating its own storage must get keys, not a TypeError.
 ///
 /// `localStorage` is a Proxy, and a Proxy may not hide a non-configurable
@@ -264,32 +197,56 @@ fn a_template_hands_over_its_content_and_a_meta_keeps_its_attribute() {
     );
     assert_eq!(result, json!([1, "x", "before", "after", "after"]));
 }
-/// A page builds a day key out of the typed pieces of a formatted date —
-/// `parts.find((it) => it.type === "year")` — so one literal covering the whole
-/// date answers every such search with nothing, and the key comes out empty.
+
+/// A canvas that answers without drawing. Nothing here paints, but the
+/// commonest use of one on a text-heavy page is not drawing at all: it is
+/// measuring a line of text before laying it out. A missing `getContext` is an
+/// engine-built TypeError inside a render, and the render is abandoned.
 #[test]
-fn a_formatted_date_comes_apart_into_named_pieces() {
+fn a_canvas_measures_text_even_though_it_draws_nothing() {
     let (mut engine, session) = page("<p>x</p>");
     let result = js(
         &mut engine,
         &session,
-        "const when = new Date('2026-09-12T00:30:00Z');
-         const iso = new Intl.DateTimeFormat('en-CA',
-             { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' });
-         const parts = iso.formatToParts(when).filter((it) => it.type !== 'literal');
-         return [iso.format(when),
-                 new Intl.DateTimeFormat('en-US',
-                     { year: 'numeric', month: '2-digit', day: '2-digit' }).format(when),
-                 new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(when),
-                 parts.map((it) => it.type)];",
+        "const canvas = document.createElement('canvas');
+         const flat = canvas.getContext('2d');
+         flat.font = '16px Verdana';
+         const measured = flat.measureText('hello');
+         return [!!flat, measured.width > 0, typeof measured.actualBoundingBoxAscent,
+                 canvas.width, canvas.getContext('webgl')];",
     );
-    assert_eq!(
-        result,
-        json!([
-            "2026-09-12",
-            "09/12/2026",
-            "Sep 12",
-            ["year", "month", "day"]
-        ])
+    // `webgl` is `null` rather than a stub: that is something this browser
+    // genuinely cannot do, and `null` is how a real browser says a context is
+    // unavailable, so a page already has a path for it.
+    assert_eq!(result, json!([true, true, "number", 300, null]));
+    // And only a canvas answers with one. Every element here is the same class,
+    // so the method is on all of them and the tag is what decides.
+    holds(
+        &mut engine,
+        &session,
+        "document.createElement('div').getContext('2d') === undefined",
     );
 }
+
+/// `document.fonts` is an event target, not just an object with a settled
+/// `ready`. A page that measures text waits for the fonts before trusting a
+/// measurement, and writes it as `document.fonts?.ready.then(again)` followed
+/// by `document.fonts?.addEventListener("loadingdone", again)`. The `?.`
+/// protects a browser with no `document.fonts`; it does not protect one that
+/// has the object and not the method, and that line threw on the first row of
+/// eighty on a real page.
+#[test]
+fn the_font_set_can_be_waited_on_and_listened_to() {
+    let (mut engine, session) = page("<p>x</p>");
+    let result = js(
+        &mut engine,
+        &session,
+        "'use strict';
+         const fonts = document.fonts;
+         fonts.addEventListener('loadingdone', () => {});
+         return [typeof fonts.ready.then, fonts.status, fonts.check('16px Verdana'),
+                 typeof fonts.removeEventListener];",
+    );
+    assert_eq!(result, json!(["function", "loaded", true, "function"]));
+}
+

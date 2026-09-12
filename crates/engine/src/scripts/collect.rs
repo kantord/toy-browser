@@ -240,6 +240,10 @@ fn resolve(specifier: &str, base_url: &Url, resources: &Resources) -> Fetch {
     };
 
     match resources.get(&url) {
+        // A status saying no is not source code. A server answering 403 with a
+        // page explaining itself would otherwise be handed to the engine as a
+        // script, which fails as a syntax error somewhere in prose.
+        Ok(resource) if !resource.ok() => Fetch::NotFound { url },
         Ok(resource) => Fetch::Loaded {
             source: resource.text().into_owned(),
             url,

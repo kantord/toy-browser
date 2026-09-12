@@ -115,7 +115,7 @@ fn run(ctx: &Ctx<'_>, task: Task, frame_time: Option<f64>) -> rquickjs::Result<(
 }
 
 /// Drains one round of queued work. Answers whether there was any.
-pub(super) fn drain(ctx: &Ctx<'_>) -> rquickjs::Result<bool> {
+pub(crate) fn drain(ctx: &Ctx<'_>) -> rquickjs::Result<bool> {
     let (mut timers, frames) = {
         let shared = ctx
             .userdata::<Sharing>()

@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use toy_browser::{Browser, Loaded, Resources, Url, Viewport};
+use toy_browser::{Browser, Loaded, PageId, Resources, Url, Viewport};
 
 use crate::{LayoutArgs, RenderArgs};
 
@@ -74,9 +74,10 @@ fn painted(
     Ok(())
 }
 
-pub fn render(args: RenderArgs) -> Result<()> {
-    let resources = Resources::new();
-    let mut browser = Browser::new(resources.clone())?;
+/// A browser and a page set up the way the arguments asked for, before
+/// anything is loaded into it.
+fn prepared(args: &RenderArgs, resources: Resources) -> Result<(Browser, PageId)> {
+    let mut browser = Browser::new(resources)?;
     let page = browser.new_page()?;
     browser.set_viewport(
         &page,
@@ -88,6 +89,19 @@ pub fn render(args: RenderArgs) -> Result<()> {
         },
     );
     browser.set_run_scripts(&page, !args.no_scripts);
+    // Before the page's own scripts, which is the point of it: a tracer has to
+    // be in place before there is anything to trace.
+    for path in &args.init_script {
+        let source = std::fs::read_to_string(path)
+            .with_context(|| format!("reading {}", path.display()))?;
+        browser.add_init_script(&page, source)?;
+    }
+    Ok((browser, page))
+}
+
+pub fn render(args: RenderArgs) -> Result<()> {
+    let resources = Resources::new();
+    let (mut browser, page) = prepared(&args, resources.clone())?;
 
     for input in &args.inputs {
         let url = input_url(input)?;

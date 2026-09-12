@@ -47,6 +47,16 @@ impl std::error::Error for FetchError {}
 pub struct Resource {
     pub url: Url,
     pub bytes: Vec<u8>,
+    /// What the server answered with, or 200 for the schemes that have no
+    /// status to give.
+    ///
+    /// A status is part of the answer rather than a way of having none: a
+    /// server that says 403 has said something, with a body explaining it, and
+    /// a page that asks is entitled to read both. Refusing to hand it over
+    /// turns every deliberate refusal into a network failure — which is what
+    /// hcker.news saw, and why it reported "check your connection" about a
+    /// request that had arrived and been answered.
+    pub status: u16,
     /// What the file said about itself when it was read, for the schemes where
     /// asking again is cheap. `None` for anything not read off a disk.
     stamp: Option<Stamp>,
@@ -64,6 +74,12 @@ impl Resource {
     /// is text; nothing yet needs the raw form.
     pub fn text(&self) -> std::borrow::Cow<'_, str> {
         String::from_utf8_lossy(&self.bytes)
+    }
+
+    /// Whether this is the thing that was asked for, rather than a server
+    /// saying why it is not. What a caller that wanted *content* must check.
+    pub fn ok(&self) -> bool {
+        (200..300).contains(&self.status)
     }
 }
 
@@ -104,9 +120,10 @@ impl Resources {
         Ok(resource)
     }
 
-    /// Whether `url` can be read, without keeping the bytes if it can.
+    /// Whether `url` can be read, without keeping the bytes if it can. A
+    /// status saying no counts as no.
     pub fn exists(&self, url: &Url) -> bool {
-        self.get(url).is_ok()
+        self.get(url).is_ok_and(|resource| resource.ok())
     }
 
     /// Seeds the cache directly, so a caller can serve a document it produced
@@ -114,7 +131,13 @@ impl Resources {
     pub fn insert(&self, url: Url, bytes: Vec<u8>) {
         if let Ok(mut cached) = self.cached.write() {
             let stamp = stamp_of(&url);
-            cached.insert(url.clone(), Arc::new(Resource { url, bytes, stamp }));
+            let made = Resource {
+                url,
+                bytes,
+                status: 200,
+                stamp,
+            };
+            cached.insert(made.url.clone(), Arc::new(made));
         }
     }
 
@@ -144,6 +167,7 @@ impl Resources {
                 Ok(Resource {
                     url: url.clone(),
                     bytes,
+                    status: 200,
                     stamp: stamp_of(url),
                 })
             }
@@ -152,6 +176,7 @@ impl Resources {
                 Ok(Resource {
                     url: fetched.url,
                     bytes: fetched.bytes,
+                    status: fetched.status,
                     stamp: None,
                 })
             }

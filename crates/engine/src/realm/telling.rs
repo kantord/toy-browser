@@ -17,7 +17,7 @@ use rquickjs::Value;
 use super::{Diagnostics, Realm, convert::quote, load, node};
 use crate::Environment;
 
-const PRELUDE: [(&str, &str); 12] = [
+const PRELUDE: [(&str, &str); 15] = [
     ("00-core", include_str!("../prelude/00-core.js")),
     ("10-node", include_str!("../prelude/10-node.js")),
     ("20-element", include_str!("../prelude/20-element.js")),
@@ -28,7 +28,10 @@ const PRELUDE: [(&str, &str); 12] = [
     ("55-storage", include_str!("../prelude/55-storage.js")),
     ("56-address", include_str!("../prelude/56-address.js")),
     ("57-network", include_str!("../prelude/57-network.js")),
+    ("58-intl", include_str!("../prelude/58-intl.js")),
+    ("58-language", include_str!("../prelude/58-language.js")),
     ("58-shims", include_str!("../prelude/58-shims.js")),
+    ("59-canvas", include_str!("../prelude/59-canvas.js")),
     ("60-document", include_str!("../prelude/60-document.js")),
 ];
 

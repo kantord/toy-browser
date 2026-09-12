@@ -158,6 +158,18 @@ window url="https://en.wikipedia.org/wiki/Lion" *POINTS:
         -e WINDOW_ARGS \
         toy-browser-window {{ url }} {{ POINTS }}
 
+# Run one page in both browsers and say where they stop agreeing. The sharpest
+# tool here for "it runs and renders nothing". See docs/diverging.md.
+# TRACE_STACKS=1 adds, to every line, the page's own functions that were on the
+# stack — which is what tells two branches of one `if` apart. TRACE_VALUES=1
+# adds the size of every list the page walks, for when the two make the same
+# calls and one of them draws nothing. Pass them through, since `just` does not:
+#
+#   TRACE_STACKS=1 just diverge https://example.com/
+diverge url="https://hcker.news/":
+    cd {{ justfile_directory() }}/tests/playwright && \
+        TRACE_STACKS=${TRACE_STACKS:-} TRACE_VALUES=${TRACE_VALUES:-} node diverge.mjs {{ url }}
+
 # --- the gate a session has to pass ---
 
 # Clippy, then the code-style checks over what has changed.

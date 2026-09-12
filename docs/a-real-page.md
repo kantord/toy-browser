@@ -198,7 +198,77 @@ page somewhere it did not mean to go.
 only after the browser says so afterwards — a router reads it at exactly that
 moment, and used to be told the page was at `about:blank`.
 
-The feed still does not fill. `IntersectionObserver` is an alias for
-`MutationObserver` and never reports an intersection, so a list that asks for
-its first page when a sentinel scrolls into view never asks. Unverified, and the
-next thing to look at.
+## What the second round found
+
+The `IntersectionObserver` guess above was wrong, and the oracle said so in one
+run: a Chromium whose observer never fires still renders every row. Only
+*deleting* the constructor breaks anything. A silent stub is fine; a missing
+constructor is not, because `new` on one throws. That measurement — take one
+thing away from a real browser and count what still renders — became the method
+for everything after it, and `docs/diverging.md` is how to run it.
+
+Six more gaps, each found as two traces parting company:
+
+| What was wrong | What it cost |
+| --- | --- |
+| `Intl.DateTimeFormat` was a class, so it refused to be called without `new` | `Intl.DateTimeFormat().resolvedOptions().timeZone` is how a page asks what time zone it is in — here inside the function that built the headers for **every** API call, which therefore made none |
+| a status the server chose came back as an error with no body | a 403 with an explanation in it read as a dead network |
+| `Date.prototype.toLocaleDateString` ignored its options | every day in the feed formatted identically to every other; giving Chromium this `Intl` cost it 60 of its 81 rows |
+| no `Intl.Segmenter` | a constructor that throws, in the middle of rendering a story |
+| `meta.name = …` set a property, not the attribute | the page could not find the `<meta>` it had just added, so it added another, on every render, forever |
+| `fetch` resolved at once | the response handler ran **in front of** the render it was waiting for, filling in a document that did not exist yet |
+| `requestIdleCallback` was an alias for `setTimeout` | the callback is handed a deadline and asks it how long it has; with no argument that throws, inside a callback, where nothing is watching |
+
+The last two are the same shape and the more interesting one. A cache that can
+answer immediately is not a faster browser, it is a different one: an
+application asks for its data *while it is still building the page that will
+hold it*, and an answer that arrives first is an answer that arrives into
+nothing. `fetch` now answers in a task, like a browser's.
+
+## The last three, and the tool that found them
+
+Past that point the traces agreed on every document call, in order, right up to
+the two `appendChild`s that finish the feed's wrapper — and then Chromium
+rendered stories and this browser did not. Nothing threw. Nothing emptied a
+list. The difference was in a value, and a value is invisible to a trace of
+calls.
+
+So the tracer learned to record values: how big every list the page walks was,
+and where it walked it. That answered it in one run. Chromium walked a list of
+eighty at the top of the feed render; this browser walked no list of eighty
+anywhere. From there each step was one measurement:
+
+| What was wrong | What it cost |
+| --- | --- |
+| no `canvas.getContext` at all | the feed's layout measures a story title through a canvas; the missing method is an engine-built TypeError, which no error tracing can see, and the render was abandoned holding the data |
+| `element.dataset` was a copy of the `data-` attributes | `row.dataset.storyId = id` wrote to nothing, so the page's own `querySelectorAll("[data-story-id]")` found none of the rows it had built |
+| no `Intl.PluralRules`, `ListFormat`, `DisplayNames`, `Locale` | a story row saying "142 comments" asks a `PluralRules` how to spell the word |
+| `document.fonts` existed but was not an event target | this one drew the line |
+
+That last one is worth stating plainly, because it is the whole lesson of this
+document in one line of somebody else's code:
+
+```js
+document.fonts?.ready.then(again);
+document.fonts?.addEventListener("loadingdone", again);
+```
+
+A page that measures text waits for the fonts before trusting a measurement,
+and writes it exactly like that. The `?.` protects a browser that has no
+`document.fonts`. It does not protect one that has the object and not the
+method — and this browser had a `document.fonts` with a settled `ready` and
+nothing else, because that was enough to make a feature check pass. So the
+second line threw, on the first row of eighty, inside a function nobody was
+watching, and the page reported that it could not load a feed it had already
+fetched, parsed and filtered.
+
+**A stub that is complete enough to be detected and not complete enough to be
+used is worse than no stub at all.** The absent thing is handled; the half
+thing is not.
+
+## Where it stands
+
+The feed renders: eighty stories, with titles, domains, points, authors, ages
+and comment counts, grouped under their day. It is slow — every story title is
+measured and line-broken through the canvas shim, which takes minutes rather
+than seconds — and that is the next thing to look at.

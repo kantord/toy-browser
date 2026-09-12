@@ -104,12 +104,36 @@ impl Realm {
         self.handles.borrow_mut().remove(&handle.0);
     }
 
-    /// Runs the job queue until a promise resolves, leaving other values alone.
+    /// Runs the page's queued work until a promise resolves, leaving other
+    /// values alone.
+    ///
+    /// Microtasks are not enough. Anything a page waits on arrives in a *task*
+    /// — a `fetch` answers in one, as a browser's does — so draining only the
+    /// job queue hands back a promise that is still pending, and a caller that
+    /// asked for a value gets the promise instead.
+    ///
+    /// Bounded, because a promise that is waiting on something this browser
+    /// will never do must not become a hang.
     fn settle<'js>(&self, value: Value<'js>) -> Value<'js> {
+        const ROUNDS: usize = 1000;
         let Some(promise) = value.clone().into_promise() else {
             return value;
         };
-        promise.finish::<Value>().unwrap_or(value)
+        for _ in 0..ROUNDS {
+            match promise.clone().finish::<Value>() {
+                Ok(settled) => return settled,
+                // Still pending: give the page a chance to do the work that
+                // settles it.
+                Err(rquickjs::Error::WouldBlock) => {}
+                Err(_) => return value,
+            }
+            match super::node::tasks::drain(&value.ctx().clone()) {
+                Ok(true) => {}
+                // Nothing left to run, so nothing is going to settle it.
+                _ => return value,
+            }
+        }
+        value
     }
 
     /// Turns a JavaScript value into either a JSON copy or a retained handle.

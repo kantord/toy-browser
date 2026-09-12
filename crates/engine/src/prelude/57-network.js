@@ -151,6 +151,16 @@
     }
   }
 
+  // What each says it is when asked, which is what `Object.prototype.toString`
+  // reads and so what a page's own type check reads too. Without it every one
+  // of them is an anonymous `[object Object]`.
+  for (const [made, name] of [[Headers, "Headers"], [Request, "Request"], [Response, "Response"]]) {
+    Object.defineProperty(made.prototype, Symbol.toStringTag, {
+      value: name,
+      configurable: true,
+    });
+  }
+
   globalThis.Headers = Headers;
   globalThis.Request = Request;
   globalThis.Response = Response;
@@ -161,18 +171,41 @@
   // method, a body and a header set are taken and ignored — a page may say
   // them, and asking for something this cannot do answers as though it had
   // been asked plainly rather than refusing.
-  globalThis.fetch = (input, init = {}) => {
-    const request = input instanceof Request ? input : new Request(input, init);
-    if (request.signal && request.signal.aborted) {
-      return Promise.reject(new DOMException("aborted", "AbortError"));
-    }
-    const [resolved, body, status, failed] = __dom.read(request.url);
-    // Only a failure to ask is a network error. A status the page did not want
-    // — a 404 — comes back as a Response it can read, which is what the
-    // specification says and what a page's own error handling is written for.
-    if (failed) return Promise.reject(new TypeError(failed));
-    return Promise.resolve(new Response(body, { url: resolved, status: Number(status) }));
-  };
+  // Answered in a later task, never in this one.
+  //
+  // The cache can answer at once, and for a long time this did: the promise
+  // handed back was already settled. That is not a shortcut, it is a different
+  // page. An application asks for its data while it is still building the page
+  // that will hold it, and the answer arriving *first* puts the response
+  // handler in front of the render it was waiting for — so it fills in a
+  // document that does not exist yet, finds nothing, and reports that it could
+  // not load. hcker.news fetched eighty stories, drew none of them, and said
+  // "couldn't load this feed" about data it was already holding.
+  //
+  // A task rather than a microtask because that is the difference that matters:
+  // microtasks run before the page gets to do anything else, and everything a
+  // page does between asking and being answered — a timer, an animation frame,
+  // its own DOMContentLoaded work — is a task.
+  globalThis.fetch = (input, init = {}) =>
+    new Promise((settle, fail) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      setTimeout(() => {
+        if (request.signal && request.signal.aborted) {
+          fail(new DOMException("aborted", "AbortError"));
+          return;
+        }
+        const [resolved, body, status, failed] = __dom.read(request.url);
+        // Only a failure to ask is a network error. A status the page did not
+        // want — a 404 — comes back as a Response it can read, which is what
+        // the specification says and what a page's own error handling is
+        // written for.
+        if (failed) {
+          fail(new TypeError(failed));
+          return;
+        }
+        settle(new Response(body, { url: resolved, status: Number(status) }));
+      }, 0);
+    });
 
   // What a service worker registration looks like from the page, holding no
   // worker: nothing is installing, nothing is waiting, nothing is active.

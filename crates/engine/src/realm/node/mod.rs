@@ -22,7 +22,7 @@ mod install;
 mod objects;
 mod style;
 pub(super) mod support;
-mod tasks;
+pub(crate) mod tasks;
 
 use binder::dom_members;
 pub(super) use events::{

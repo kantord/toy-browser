@@ -82,12 +82,19 @@ impl Dom {
             .join(url)
             .map_err(|_| format!("not a url: {url}"))?;
         match self.resources.get(&target) {
-            Ok(resource) => Ok((target.to_string(), resource.text().into_owned(), 200)),
-            // Not found is an *answer*, not a failure to ask. A page reads it
-            // as `response.ok === false` and carries on; turning it into a
-            // network error instead rejects a promise nobody expected to
-            // reject, and a page that treats that as "the network is gone"
-            // stops doing everything else as well.
+            // Whatever the server said, including that it will not say. A
+            // status is an *answer*, not a failure to ask: a page reads it as
+            // `response.ok === false` and carries on, often on the body that
+            // came with it. Turning one into a network error instead rejects a
+            // promise nobody expected to reject, and a page that treats that as
+            // "the network is gone" stops doing everything else as well.
+            Ok(resource) => Ok((
+                target.to_string(),
+                resource.text().into_owned(),
+                resource.status,
+            )),
+            // Nothing answered at all — no server, no file, no scheme anyone
+            // here can read. That is the one case `fetch` rejects on.
             Err(toy_browser_fetch::FetchError::NotFound(_)) => {
                 Ok((target.to_string(), String::new(), 404))
             }

@@ -23,6 +23,7 @@ const USER_AGENT: &str = concat!("toy-browser/", env!("CARGO_PKG_VERSION"));
 pub(crate) struct Fetched {
     pub(crate) url: Url,
     pub(crate) bytes: Vec<u8>,
+    pub(crate) status: u16,
 }
 
 pub(crate) fn get(url: &Url) -> Result<Fetched, FetchError> {
@@ -32,6 +33,7 @@ pub(crate) fn get(url: &Url) -> Result<Fetched, FetchError> {
         .call()
         .map_err(|error| transport_error(url, &error))?;
 
+    let status = response.status().as_u16();
     let landed =
         Url::parse(response.get_uri().to_string().as_str()).unwrap_or_else(|_| url.clone());
     let bytes = response
@@ -44,26 +46,25 @@ pub(crate) fn get(url: &Url) -> Result<Fetched, FetchError> {
             reason: error.to_string(),
         })?;
 
-    Ok(Fetched { url: landed, bytes })
+    Ok(Fetched {
+        url: landed,
+        bytes,
+        status,
+    })
 }
 
 /// A ceiling on one response, so a stream that never ends cannot take the
 /// process with it. Generous next to any document worth rendering.
 const MAX_BODY: u64 = 32 * 1024 * 1024;
 
-/// A status the server chose is a different thing from a connection that never
-/// worked, and a caller wanting to report either needs to tell them apart.
+/// A connection that never worked. A status the server chose is not one of
+/// these: it comes back as a response, with whatever body the server sent to
+/// explain itself, and whoever asked decides what it means. Only a request that
+/// produced no answer at all is an error here.
 fn transport_error(url: &Url, error: &ureq::Error) -> FetchError {
-    match error {
-        ureq::Error::StatusCode(404 | 410) => FetchError::NotFound(url.clone()),
-        ureq::Error::StatusCode(status) => FetchError::Unreadable {
-            url: url.clone(),
-            reason: format!("server said {status}"),
-        },
-        other => FetchError::Unreadable {
-            url: url.clone(),
-            reason: other.to_string(),
-        },
+    FetchError::Unreadable {
+        url: url.clone(),
+        reason: error.to_string(),
     }
 }
 
@@ -72,6 +73,10 @@ fn agent() -> &'static ureq::Agent {
     AGENT.get_or_init(|| {
         ureq::Agent::config_builder()
             .timeout_global(Some(TIMEOUT))
+            // A status is an answer. Without this, ureq turns every 403 and
+            // every 500 into an error with no body, and a page that wanted to
+            // read the server's explanation cannot.
+            .http_status_as_error(false)
             // A page keeps its stylesheet and its pictures on the host it came
             // from, and they are read at the same time. Without a pool each one
             // pays for its own handshake.

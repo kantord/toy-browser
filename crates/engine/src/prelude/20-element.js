@@ -78,3 +78,61 @@
   // own, so an unlisted element is a plain HTMLElement.
   __dom.registerInterface("", HTMLElement.prototype);
 })();
+
+// `dataset`, live rather than a copy.
+//
+// The engine can hand over the `data-` attributes as an object, and for reading
+// that is the whole of it — but a page writes these at least as often as it
+// reads them, and `row.dataset.storyId = id` against a copy is a write that
+// goes nowhere. The attribute stays absent, and the page's own
+// `querySelectorAll("[data-story-id]")` finds none of the rows it has just
+// built.
+//
+// A Proxy rather than a getter per name, because the names are not known: a
+// page invents them.
+(() => {
+  // On `Element`, which shadows the engine's own read-only `dataset` further
+  // up the chain rather than replacing it — that one cannot be redefined.
+  const proto = globalThis.Element.prototype;
+
+  /// `storyId` is the attribute `data-story-id`, which is the whole mapping.
+  const attribute = (key) =>
+    "data-" + String(key).replace(/[A-Z]/g, (upper) => "-" + upper.toLowerCase());
+  const property = (name) =>
+    name.slice(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+
+  Object.defineProperty(proto, "dataset", {
+    get() {
+      const node = this;
+      const named = () =>
+        node.getAttributeNames().filter((name) => name.startsWith("data-"));
+      return new Proxy(
+        {},
+        {
+          get: (_, key) =>
+            typeof key === "symbol" ? undefined : node.getAttribute(attribute(key)) ?? undefined,
+          set(_, key, value) {
+            node.setAttribute(attribute(key), String(value));
+            return true;
+          },
+          has: (_, key) => typeof key !== "symbol" && node.hasAttribute(attribute(key)),
+          deleteProperty(_, key) {
+            node.removeAttribute(attribute(key));
+            return true;
+          },
+          ownKeys: () => named().map(property),
+          getOwnPropertyDescriptor: (_, key) =>
+            typeof key !== "symbol" && node.hasAttribute(attribute(key))
+              ? {
+                  value: node.getAttribute(attribute(key)),
+                  writable: true,
+                  enumerable: true,
+                  configurable: true,
+                }
+              : undefined,
+        },
+      );
+    },
+    configurable: true,
+  });
+})();

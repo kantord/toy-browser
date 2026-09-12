@@ -20,6 +20,48 @@ fn a_fetch_reads_through_the_cache_the_page_came_from() {
     );
     assert_eq!(result, json!([true, 200, true]));
 }
+/// In a later task, never in this one. An application asks for its data while
+/// it is still building the page that will hold it, and an answer that arrives
+/// *first* puts the response handler in front of the render it was waiting for:
+/// it fills in a document that does not exist yet, finds nothing, and reports
+/// that it could not load. A task rather than a microtask, because everything a
+/// page does between asking and being answered is a task.
+#[test]
+fn a_fetch_is_answered_after_the_work_already_queued() {
+    let (mut engine, session) = page("<p>x</p>");
+    let result = js(
+        &mut engine,
+        &session,
+        "const order = [];
+         fetch('characterise.html').then(() => order.push('answered'));
+         Promise.resolve().then(() => order.push('microtask'));
+         setTimeout(() => order.push('task'), 0);
+         order.push('now');
+         // Two rounds, because the answer lands in the same round as the task
+         // above it and is read one round later.
+         return new Promise((settle) =>
+             setTimeout(() => setTimeout(() => settle(order), 0), 0));",
+    );
+    assert_eq!(result, json!(["now", "microtask", "task", "answered"]));
+}
+
+/// What each says it is when asked, which is what a page's own type check
+/// reads. Without it they are all an anonymous `[object Object]`.
+#[test]
+fn a_request_and_its_parts_say_what_they_are() {
+    let (mut engine, session) = page("<p>x</p>");
+    let result = js(
+        &mut engine,
+        &session,
+        "return [String(new Headers()), String(new Request('x')),
+                 String(new Response(''))];",
+    );
+    assert_eq!(
+        result,
+        json!(["[object Headers]", "[object Request]", "[object Response]"])
+    );
+}
+
 /// `fetch` exists at all, which is the first thing a bundle checks.
 #[test]
 fn a_page_finds_the_names_a_request_is_built_from() {
