@@ -191,6 +191,32 @@ input fails saying so.
 
 ---
 
+## 10. A text field cannot be typed into
+
+Not a rendering gap in the usual sense, and the first half of it is one. A page
+with `<input value="hello">` **renders as an empty box** — `paint/words.rs`
+reads `inline_layout_data` and a field's text lives in `text_input_data`, so it
+is never drawn. Every comparison of a page with a form is wrong before anything
+else is considered. A `<textarea>` is not drawn at all.
+
+The second half is that nothing can be typed. The window handles no
+`KeyboardInput` and no `Ime`; `KeyboardEvent` and `InputEvent` are aliases of
+`Event`, so `key` and `data` are always `null`; there is no `selectionStart`,
+`select`, `setSelectionRange` or `form.elements`; and `input.value = x` sets the
+attribute, which is not what the property does.
+
+What is already here is most of the parts: the engine has focus and the
+`Activated` seam, blitz has a complete parley editor seeded from the `value`
+attribute, and parley answers every question about where a caret is.
+
+The one design question is who owns the caret, given that `compose` re-parses
+the document from serialised HTML several times a second. `docs/text-input.md`
+measures all of the above, argues for the engine owning the string and the
+selection while layout measures them — the trade `getBoundingClientRect`
+already made — and cuts it into five stages.
+
+---
+
 ## Order worth taking them in
 
 Two orders, because they disagree, and it is worth being honest that they do.
