@@ -154,6 +154,15 @@ corpus *ARGS:
     cd tests/playwright && pnpm exec playwright test corpus {{ ARGS }}
 
 
+# Every probe against real Chromium, worst first. The instrument the paint work
+# is aimed with — see `tests/probes/README.md`.
+#
+# Both browsers are launched once for the whole sweep, because launching
+# Chromium is most of the cost and twenty-eight launches is four minutes of it.
+probes:
+    cargo build
+    cd {{ justfile_directory() }}/tests/playwright && node probes.mjs
+
 # Compare a page against real Chromium, then open the report.
 compare url="https://news.ycombinator.com/":
     cd tests/playwright && COMPARE_URL={{ url }} pnpm exec playwright test compare

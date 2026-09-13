@@ -30,8 +30,7 @@ pub struct Dom {
     /// Bumped by every mutation, so anything computed from an earlier state can
     /// tell whether it is still good.
     revision: Cell<u64>,
-    /// What has focus, if anything. Not a mutation: focus moves without the
-    /// markup changing, so it leaves the revision alone and costs no measure.
+    /// What has focus, if anything.
     focused: Cell<Option<usize>>,
     /// What every field that has been typed into now holds. Not in the
     /// document, because a field's value is a property and the markup only ever
@@ -59,16 +58,38 @@ impl Dom {
 
     /// Moves focus, or takes it away. Nothing checks that the node can hold
     /// focus: whoever calls this has already decided that.
+    ///
+    /// Counts as a mutation, and used not to. The reason it did not was that
+    /// focus moved without the markup changing, so nothing about the page
+    /// looked different and a re-measure would have been wasted — which was
+    /// true for exactly as long as nothing drew a focus ring. `:focus` is an
+    /// ordinary selector: it can change a colour, a border, or the padding that
+    /// decides where everything after it sits. A page whose composition was
+    /// kept across a focus change showed the field it had been clicked into
+    /// looking exactly like one nobody had touched.
     pub fn focus(&self, node: Option<usize>) {
-        self.focused.set(node);
+        self.moved(node);
     }
 
     /// Gives up focus, but only if this node is the one holding it — blurring
     /// something that never had it is not a way to unfocus something else.
     pub fn blur(&self, node: usize) {
         if self.focused.get() == Some(node) {
-            self.focused.set(None);
+            self.moved(None);
         }
+    }
+
+    /// Records where focus now is, and says the page has changed if it moved.
+    ///
+    /// Only if it moved: a press lands on the already-focused field far more
+    /// often than not, and laying the page out again to discover that nothing
+    /// is different is the whole cost with none of the benefit.
+    fn moved(&self, node: Option<usize>) {
+        if self.focused.get() == node {
+            return;
+        }
+        self.focused.set(node);
+        self.touched();
     }
 
     /// How many times this DOM has changed.

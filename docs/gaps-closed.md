@@ -122,3 +122,44 @@ Upstream, the real fix stays what it was: parley offers
 in `stylo_to_parley.rs`, so no per-face answer is reachable from out here at all.
 
 ---
+
+---
+
+## 1. Outlines were never painted — *and the probes could not see it*
+
+`edges.rs` drew borders and nothing drew outlines. `style.get_outline()` had
+carried the width, style, colour and offset all along.
+
+The interesting part is not the fix. It is that **`tests/probes/` had no probe
+for it**, so the instrument that exists to answer *which feature is worst today*
+reported the paint engine as nearly perfect — every probe under 0.002, and the
+worst of them disagreements about layout rather than paint. A missing feature
+with no probe is a feature that measures as done.
+
+Written as `outline.html`, it went straight to third worst and was one of only
+two paint failures in the list. `border-styles.html`, written at the same time
+for the approximation `edges.rs` documented, was the other.
+
+**Both now agree with Chromium exactly** — corpus cases `026-outline` and
+`027-border-styles`, whose expectation files are empty.
+
+Three things came out of it worth keeping.
+
+**Outlines are a pass, not a mark on the box.** CSS 2.1 Appendix E paints them
+in the last step of a stacking context. That is not pedantry: an outline sits
+*outside* its own box, so painting it with the box lets the next sibling's
+background cover exactly the part that makes it visible. `phases.rs` carries it
+as a fifth pass.
+
+**Dashed, dotted and double needed no new kind of mark.** They had been drawn
+solid on the grounds that a texture needed one. It does not — a dash is a
+rectangle, a square dot is a rectangle, and a double line is two of them. What
+they needed was the *pattern*: anchored at both ends and the gap solved to fit,
+rather than tiled from one end, because a corner with a gap in it is where a
+dashed frame stops looking like a frame.
+
+**And it finished something else.** A focused field draws no ring unless three
+separate things are true: outlines paint, the cascade knows what has focus, and
+`:focus` matches. blitz's own user-agent sheet has asked for `input:focus {
+outline: 2px solid #4D90FE }` the whole time. Telling the laid-out document
+where focus is — one call — lit it up.

@@ -32,27 +32,19 @@ Both orders are at the end of this file.
 
 ---
 
-## 1. Outlines are never painted
+## 1a. Border corners are square, not mitred
 
-**Borders are done.** `crates/browser/src/blitz/paint/edges.rs` draws four
-fills per box, between the border box and the padding box, from the widths
-taffy resolved and the styles and colours the cascade computed. Three corpus
-cases went from disagreeing about paint to agreeing exactly.
+What is left of gap 1, which has otherwise closed — see `docs/gaps-closed.md`.
 
-Two things about it are approximations rather than omissions, and both are
-recorded in that file:
+A real browser cuts the join between two border sides diagonally. Here the top
+and bottom run the full width and the sides fill what is left between them. For
+one colour — which is almost every border — the result is identical; for two it
+is wrong in two triangles the size of the border width.
 
-- **Corners are square, not mitred.** A real browser cuts the join between two
-  sides diagonally. That shows only where adjacent sides are different colours,
-  and is wrong in two triangles the size of the border width.
-- **`dashed`, `dotted` and `double` are drawn solid.** They need a mark a Scene
-  does not have. Drawing them solid puts the line where the page asked for it in
-  the colour it asked for and gets only the texture wrong; leaving them out
-  would move the box instead.
+Needs a mark a Scene has not got: every Mark is an axis-aligned rectangle, and
+a mitre is a triangle.
 
-**Outlines are still missing.** Same shape of work, drawn outside the border box
-and not affecting layout. `style.get_outline()` carries width, style, colour and
-offset.
+---
 
 ## 2. A replaced element has no intrinsic size — *blitz's to fix*
 

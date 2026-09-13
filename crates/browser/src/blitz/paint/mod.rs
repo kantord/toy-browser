@@ -34,10 +34,12 @@ use toy_browser_engine::ids;
 mod around;
 mod backdrop;
 pub(super) mod boxes;
+mod dashes;
 mod edges;
 mod effects;
 mod fields;
 mod markers;
+mod outlines;
 mod pass;
 mod phases;
 mod pictures;
@@ -191,6 +193,7 @@ fn subtree(unit: &Composed, id: NodeId, at: (f32, f32), pass: &mut Pass<'_>) -> 
     own.extend(rows::painted(unit, node, id, pass));
     let mut mine = Phases {
         blocks: own,
+        outlines: outlines::of(node, x, y),
         ..Phases::default()
     };
     let mut inside = Phases {

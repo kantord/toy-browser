@@ -19,13 +19,16 @@
 //! between them. For one colour — which is almost every border — the result is
 //! identical; for two it is wrong in two triangles the size of the border
 //! width.
+//!
+//! `dashed`, `dotted` and `double` are `dashes.rs`, which turns one side into
+//! several rectangles. They used to be drawn solid.
 
 use blitz_dom::Node;
 use style::values::computed::BorderStyle;
 
 use toy_browser_rasterizer::{Area, Corners, Ink, Mark};
 
-use super::channels;
+use super::{channels, dashes};
 use toy_browser_engine::ids;
 
 /// Every side of this element's border that paints something.
@@ -58,18 +61,26 @@ pub(super) fn of(node: &Node, x: f32, y: f32) -> Vec<Mark> {
         .into_iter()
         .filter(|side| side.thickness > 0.0 && side.area.width > 0.0 && side.area.height > 0.0)
         .filter(|side| paints(side.kind(border)))
-        .map(|side| {
+        .flat_map(|side| {
             let [red, green, blue, alpha] =
                 *style.resolve_color(side.colour(border)).raw_components();
-            Mark::Fill {
-                // Square: a rounded border is drawn as a ring, not four
-                // rounded strips, and that needs a mark this Scene has not got.
-                corners: Corners::NONE,
-                shadow: None,
-                area: side.area,
-                ink: Ink::Flat(channels(red, green, blue, alpha)),
-                from: Some(ids::raw(node.id)),
-            }
+            let ink = Ink::Flat(channels(red, green, blue, alpha));
+            // One rectangle for a solid side, several for one with a texture —
+            // a dash, a dot and half of a double line are all rectangles, so
+            // nothing here needs a mark a Scene has not got. See `dashes.rs`.
+            dashes::of(side.area, side.thickness, side.along(), side.kind(border))
+                .into_iter()
+                .map(move |area| Mark::Fill {
+                    // Square: a rounded border is drawn as a ring, not four
+                    // rounded strips, and that needs a mark this Scene has not
+                    // got.
+                    corners: Corners::NONE,
+                    shadow: None,
+                    area,
+                    ink: ink.clone(),
+                    from: Some(ids::raw(node.id)),
+                })
+                .collect::<Vec<_>>()
         })
         .collect()
 }
@@ -96,6 +107,14 @@ impl Side {
             Edge::Bottom => border.border_bottom_style,
             Edge::Left => border.border_left_style,
             Edge::Right => border.border_right_style,
+        }
+    }
+
+    /// Which way this strip runs, which is the axis a texture is laid along.
+    fn along(&self) -> dashes::Along {
+        match self.edge {
+            Edge::Top | Edge::Bottom => dashes::Along::Across,
+            Edge::Left | Edge::Right => dashes::Along::Down,
         }
     }
 
@@ -238,11 +257,11 @@ fn around(x: f32, y: f32, width: f32, height: f32, edges: Edges) -> [Side; 4] {
 
 /// Whether a side of this style puts ink down at all.
 ///
-/// Everything that is not `none` or `hidden` is drawn as though it were solid.
-/// `dashed`, `dotted` and `double` need a mark a Scene does not have yet, and
-/// drawing them solid is wrong in the right place — the line is where the page
-/// asked for it, in the colour it asked for, and only its texture is missing.
-/// Leaving them out would move the box instead.
+/// Only `none` and `hidden` do not. What the rest look like is `dashes.rs`;
+/// the ones it has no texture for — `groove`, `ridge`, `inset`, `outset` — are
+/// drawn solid, which is wrong in the right place: the line is where the page
+/// asked for it, in the colour it asked for, and only the shading that suggests
+/// a bevel is missing.
 fn paints(kind: BorderStyle) -> bool {
     !matches!(kind, BorderStyle::None | BorderStyle::Hidden)
 }

@@ -57,7 +57,7 @@ pub(crate) fn typed(document: &mut BaseDocument, typed: &Typed) -> Option<NodeId
         })
     });
     write(document, wrong);
-    let focused = focused(document, typed)?;
+    let focused = focused(document, typed, |node| field(node).is_some())?;
     let (from, to) = caret(document, typed, focused)?;
     document.with_text_input(focused, |mut editor| editor.select_byte_range(from, to));
     Some(focused)
@@ -82,20 +82,44 @@ fn caret(document: &BaseDocument, typed: &Typed, focused: NodeId) -> Option<(usi
     }
 }
 
-/// Which node in *this* document has the focus the engine reports.
+/// Which node in *this* document the engine's focus is on.
 ///
 /// Two documents, two numberings: the engine's DOM and the one laid out here
 /// are not the same tree, and the marker class is the only thing that joins
 /// them. See `docs/layers.md`.
-fn focused(document: &BaseDocument, typed: &Typed) -> Option<NodeId> {
+///
+/// `only` narrows it — the caret wants a field and nothing else, while telling
+/// the cascade what has focus wants whatever it is.
+fn focused(
+    document: &BaseDocument,
+    typed: &Typed,
+    only: impl Fn(&blitz_dom::Node) -> bool,
+) -> Option<NodeId> {
     let wanted = typed.focused?;
     let mut found = None;
     document.visit(|id, node| {
-        if found.is_none() && keyed(node) == Some(wanted) && field(node).is_some() {
+        if found.is_none() && keyed(node) == Some(wanted) && only(node) {
             found = Some(id);
         }
     });
     found
+}
+
+/// Tells the cascade what has focus, so that `:focus` matches it.
+///
+/// Focus lives in the engine and this document is a re-parse that never heard
+/// about it, so without this every `:focus` rule on every page is dead — and
+/// the one that matters most is in blitz's own user-agent sheet, which puts an
+/// outline on a focused field. A control somebody has clicked into then looks
+/// exactly like one they have not.
+///
+/// Answers whether anything changed, because matching the cascade again is only
+/// worth it if it did.
+pub(crate) fn focus(document: &mut BaseDocument, typed: &Typed) -> bool {
+    match focused(document, typed, |_| true) {
+        Some(node) => document.set_focus_to(node),
+        None => false,
+    }
 }
 
 /// Every field whose editor holds something other than what `wanted` says, and

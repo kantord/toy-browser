@@ -163,3 +163,37 @@ fn carets(scene: &Scene) -> usize {
     }
     into(&scene.marks)
 }
+
+/// Three separate things have to be true before a focused field shows a ring:
+/// outlines have to paint at all, the laid-out document has to know what has
+/// focus, and `:focus` has to match. blitz's own user-agent sheet has asked for
+/// `input:focus { outline: 2px solid #4D90FE }` the whole time.
+#[test]
+fn a_focused_field_is_ringed() {
+    let mut browser = browser();
+    let page = browser.new_page().unwrap();
+    browser
+        .navigate(&page, fixture("fields.html").as_str())
+        .unwrap();
+    let bare = rings(&browser.scene_for(&page).unwrap());
+    browser
+        .evaluate(&page, "document.querySelector('input').focus()", true)
+        .unwrap();
+    let focused = rings(&browser.scene_for(&page).unwrap());
+    assert_eq!(bare, 0, "nothing is focused, so nothing is ringed");
+    assert_eq!(focused, 4, "four strips, one per side");
+}
+
+/// How many fills are painted in the outline pass, which is the last one — so
+/// they are the final marks in the Scene, after everything else.
+fn rings(scene: &Scene) -> usize {
+    const RING: [u8; 3] = [0x4D, 0x90, 0xFE];
+    scene
+        .marks
+        .iter()
+        .filter(|mark| {
+            matches!(mark, Mark::Fill { ink: toy_browser::Ink::Flat(paint), .. }
+                if [paint.red, paint.green, paint.blue] == RING)
+        })
+        .count()
+}

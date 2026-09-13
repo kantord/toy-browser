@@ -33,6 +33,12 @@ pub(super) struct Phases {
     pub(super) inlines: Vec<Mark>,
     /// Anything `position` took out of the ordinary flow, whole.
     pub(super) positioned: Vec<Mark>,
+    /// Outlines, which Appendix E puts in the last step of all.
+    ///
+    /// A pass of its own rather than drawn with the box, because an outline
+    /// sits *outside* its own box: painted with the box, the next sibling's
+    /// background would cover exactly the part that makes it visible.
+    pub(super) outlines: Vec<Mark>,
 }
 
 impl Phases {
@@ -43,6 +49,7 @@ impl Phases {
         self.floats.extend(other.floats);
         self.inlines.extend(other.inlines);
         self.positioned.extend(other.positioned);
+        self.outlines.extend(other.outlines);
     }
 
     /// Everything, in the order it is painted.
@@ -52,6 +59,7 @@ impl Phases {
         marks.extend(self.floats);
         marks.extend(self.inlines);
         marks.extend(self.positioned);
+        marks.extend(self.outlines);
         marks
     }
 
@@ -72,6 +80,7 @@ impl Phases {
             floats: round(self.floats),
             inlines: round(self.inlines),
             positioned: round(self.positioned),
+            outlines: round(self.outlines),
         }
     }
 

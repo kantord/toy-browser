@@ -52,8 +52,8 @@ pub use resvg::tiny_skia;
 pub use toy_browser_engine::{Budget, ElementBox, NodeId, Point, ScriptSurvey};
 pub use toy_browser_fetch::{Resources, Url};
 pub use toy_browser_rasterizer::{
-    Area, Mark, Rendered, Scene, draw as draw_scene, family, normal_form, pixels as scene_pixels,
-    render as render_scene,
+    Area, Ink, Mark, Rendered, Scene, draw as draw_scene, family, normal_form,
+    pixels as scene_pixels, render as render_scene,
 };
 pub use viewport::{Scheme, Viewport};
 

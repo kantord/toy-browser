@@ -292,6 +292,9 @@ impl LaidOut {
         if typed.values.is_empty() && typed.focused.is_none() {
             return;
         }
+        // Focus first: it changes what the cascade matches, and the caret is
+        // drawn in whatever the cascade then made of the field.
+        fields::focus(&mut self.document, typed);
         self.caret = fields::typed(&mut self.document, typed);
         self.document.resolve(0.0);
     }
