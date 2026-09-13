@@ -176,6 +176,10 @@ shots:
 
 # Open a real window on a screen in a container, click where told, photograph
 # it. `just window https://example.com/ 100,200 300,400`
+#
+# A step written `m100,200` is only moved to. One written `t:hello` is typed,
+# and `k:BackSpace` presses a named key — which is how to ask whether a field
+# that was clicked into can then be typed into.
 window url="https://en.wikipedia.org/wiki/Lion" *POINTS:
     podman build -t toy-browser-window {{ justfile_directory() }}/tests/window
     podman run --rm \

@@ -165,8 +165,14 @@ fn style_reads_and_writes_inline_properties_only() {
     );
 }
 
+/// A field's `value` is a property and the attribute is what it *started*
+/// with. They part company the moment anything writes one, which is how a form
+/// knows it has been edited — see `crates/engine/src/dom/fields.rs`.
+///
+/// This test used to assert the opposite, because the two really did move
+/// together until fields grew a value of their own.
 #[test]
-fn writing_value_writes_the_attribute_behind_it() {
+fn writing_value_leaves_the_attribute_behind_it_alone() {
     let (mut engine, session) = page(FORM);
 
     let result = js(
@@ -174,11 +180,9 @@ fn writing_value_writes_the_attribute_behind_it() {
         &session,
         "const field = document.getElementById('field');
          field.value = 'edited';
-         return [field.value, field.getAttribute('value')];",
+         return [field.value, field.getAttribute('value'), field.defaultValue];",
     );
-    // A real browser separates the value property from the attribute after a
-    // user edit. Here there is one place to keep it, so they move together.
-    assert_eq!(result, json!(["edited", "edited"]));
+    assert_eq!(result, json!(["edited", "typed", "typed"]));
 }
 
 #[test]
@@ -212,8 +216,5 @@ fn a_dataset_written_to_is_the_attributes() {
                  !!document.querySelector('[data-story-id]'),
                  Object.keys(row.dataset), gone, 'storyId' in row.dataset];",
     );
-    assert_eq!(
-        result,
-        json!(["7", "7", true, ["storyId"], false, true])
-    );
+    assert_eq!(result, json!(["7", "7", true, ["storyId"], false, true]));
 }

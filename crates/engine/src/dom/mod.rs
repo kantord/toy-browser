@@ -4,6 +4,7 @@
 //! side has to hold a Rust reference. The object model — `document`, elements,
 //! `classList`, `style`, events — is built on top of these in `prelude/`.
 
+mod fields;
 mod markup;
 mod names;
 mod parse;
@@ -16,6 +17,7 @@ use blitz_dom::BaseDocument;
 use crate::ids;
 use toy_browser_fetch::{Resources, Url};
 
+pub use fields::{Fields, Step};
 pub use markup::parse;
 pub(crate) use names::{attribute_name, html_name};
 pub use parse::document as parse_document;
@@ -31,6 +33,10 @@ pub struct Dom {
     /// What has focus, if anything. Not a mutation: focus moves without the
     /// markup changing, so it leaves the revision alone and costs no measure.
     focused: Cell<Option<usize>>,
+    /// What every field that has been typed into now holds. Not in the
+    /// document, because a field's value is a property and the markup only ever
+    /// says what it started as — see `fields.rs`.
+    fields: RefCell<Fields>,
 }
 
 impl Dom {
@@ -41,6 +47,7 @@ impl Dom {
             resources,
             revision: Cell::new(1),
             focused: Cell::new(None),
+            fields: RefCell::default(),
         }
     }
 

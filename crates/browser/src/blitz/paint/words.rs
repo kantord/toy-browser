@@ -20,8 +20,8 @@ use blitz_dom::{Node, NodeId};
 
 use super::placed::Placed;
 use crate::blitz::LaidOut;
-use toy_browser_rasterizer::{Digest, Mark, Paint, Scene};
 use toy_browser_engine::ids;
+use toy_browser_rasterizer::{Digest, Mark, Paint, Scene};
 
 /// Every run of text an element lays out, positioned glyph by glyph.
 pub(super) fn of(
@@ -112,7 +112,7 @@ fn mark(page: &LaidOut, placed: &Placed<'_>, source: &str, scene: &mut Scene) ->
         glyphs: chosen(placed, y),
         baseline: y + placed.baseline() - super::around::raised(page, owner),
         size: placed.size(),
-        paint: colour(page, owner),
+        paint: colour_of(page, owner),
         face: face(&placed.run, scene),
         from: Some(ids::raw(owner)),
     })
@@ -263,7 +263,7 @@ fn spelled(placed: &Placed<'_>, source: &str) -> Option<Laid> {
 /// Asked of the element rather than carried on the run: blitz's brush holds the
 /// node it came from and nothing else, which is the more useful half — it is
 /// what lets a mark in the picture be traced back to the document.
-fn colour(page: &LaidOut, owner: NodeId) -> Paint {
+pub(super) fn colour_of(page: &LaidOut, owner: NodeId) -> Paint {
     let Some(style) = page.document.get_node(owner).and_then(Node::primary_styles) else {
         return Paint {
             red: 0,

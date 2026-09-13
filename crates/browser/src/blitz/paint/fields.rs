@@ -51,13 +51,9 @@ pub(super) fn of(
     if to.width <= 0.0 || to.height <= 0.0 {
         return Vec::new();
     }
-    let marks = super::words::written(
-        page,
-        layout,
-        field.editor.raw_text(),
-        scrolled(field, to),
-        pass,
-    );
+    let at = scrolled(field, to);
+    let mut marks = super::words::written(page, layout, field.editor.raw_text(), at, pass);
+    marks.extend(caret(page, node, field, at));
     if marks.is_empty() {
         return Vec::new();
     }
@@ -66,6 +62,43 @@ pub(super) fn of(
         marks,
         from: Some(ids::raw(node.id)),
     }]
+}
+
+/// How wide a caret is drawn, in CSS pixels. Every browser draws one hairline
+/// wide and none of them scales it with the text.
+const HAIRLINE: f32 = 1.0;
+
+/// The caret, in the one field that has it.
+///
+/// Not a property of the document — focus lives in the engine — so it arrives
+/// on the laid-out page as the one node that has it. parley knows where in the
+/// text it goes, which is the whole reason it is asked rather than worked out:
+/// a caret between two proportional letters is at a position only the shaping
+/// knows.
+fn caret(
+    page: &LaidOut,
+    node: &Node,
+    field: &blitz_dom::node::TextInputData,
+    at: (f32, f32),
+) -> Option<Mark> {
+    if page.caret != Some(node.id) {
+        return None;
+    }
+    let there = field.editor.cursor_geometry(HAIRLINE)?;
+    let scale = field.editor.try_layout().map_or(1.0, |laid| laid.scale());
+    let scaled = |value: f64| value as f32 / scale;
+    Some(Mark::Fill {
+        area: Area {
+            x: at.0 + scaled(there.x0),
+            y: at.1 + scaled(there.y0),
+            width: (scaled(there.x1 - there.x0)).max(HAIRLINE),
+            height: scaled(there.y1 - there.y0),
+        },
+        ink: toy_browser_rasterizer::Ink::Flat(super::words::colour_of(page, node.id)),
+        corners: toy_browser_rasterizer::Corners::NONE,
+        shadow: None,
+        from: Some(ids::raw(node.id)),
+    })
 }
 
 /// Where the text starts, once the field has been scrolled within itself.

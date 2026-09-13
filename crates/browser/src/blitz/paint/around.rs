@@ -13,8 +13,8 @@
 use blitz_dom::{Node, NodeId};
 
 use crate::blitz::LaidOut;
-use toy_browser_rasterizer::{Area, Corners, Ink, Mark};
 use toy_browser_engine::ids;
+use toy_browser_rasterizer::{Area, Corners, Ink, Mark};
 
 use super::placed::Placed;
 

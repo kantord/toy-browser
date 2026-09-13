@@ -65,14 +65,6 @@ impl Open {
         let _ = self.browser.pointer_up(&about, at);
         self.settled();
     }
-
-    /// Which page the window is showing: the one in the frame if there is one,
-    /// and the window's own otherwise.
-    fn about(&mut self) -> toy_browser::PageId {
-        self.browser
-            .frame(&self.page)
-            .unwrap_or_else(|| self.page.clone())
-    }
 }
 
 /// What a window built without accessibility does when told to read the page:

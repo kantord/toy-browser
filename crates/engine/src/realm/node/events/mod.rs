@@ -9,10 +9,13 @@
 //! string: a node id, or the name of a global target.
 
 mod activation;
+mod editing;
+mod keys;
 mod listeners;
 
 use rquickjs::{Ctx, Function, IntoJs, Object, Value, function::This};
 
+pub(in crate::realm) use keys::raise_key;
 pub(in crate::realm::node) use listeners::Registered;
 pub(in crate::realm) use listeners::{add_listener, capture_of, remove_listener};
 use listeners::{anyone_listening, attribute_for, has_inline, registered_for};

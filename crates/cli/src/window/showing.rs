@@ -9,7 +9,7 @@
 use std::num::NonZeroU32;
 
 use anyhow::Result;
-use toy_browser::{Area, Point, Viewport};
+use toy_browser::{Area, PageId, Point, Viewport};
 
 use super::{LADDER, Open, blit};
 
@@ -71,6 +71,18 @@ impl Open {
     pub(super) fn windowful(&self) -> (f32, f32) {
         let scale = self.viewport().scale();
         (self.size.0 as f32 / scale, self.size.1 as f32 / scale)
+    }
+
+    /// Which page the window is showing: the one in the frame if there is one,
+    /// and the window's own otherwise.
+    ///
+    /// Here rather than beside either of the two things that ask — the
+    /// accessibility tree and the keyboard — because it is neither's: it is the
+    /// window saying which of the pages it holds is the one being used.
+    pub(super) fn about(&mut self) -> PageId {
+        self.browser
+            .frame(&self.page)
+            .unwrap_or_else(|| self.page.clone())
     }
 
     pub(super) fn changed(&mut self) {

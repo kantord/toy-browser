@@ -17,7 +17,6 @@ asked about itself, and rendered. The answers:
 | `input.value = "typed"` | sets the **attribute** | sets the property only |
 | the render | an empty box | `typed` |
 | `<textarea>` | not drawn, `.value` is `""` | the text, `"some text"` |
-| `document.activeElement` | `""` before anything is focused | `<body>` |
 | `new KeyboardEvent("keydown", {key:"a"}).key` | `null` | `"a"` |
 | `new InputEvent("input", {data:"a"}).data` | `null` | `"a"` |
 | `input.selectionStart` | `null` | `0` |
@@ -33,9 +32,18 @@ So: **a text field is drawn, is clickable, and is otherwise scenery.**
 
 Rather more than the table suggests, and in the right places.
 
-**The engine already has focus.** `Dom::focus`/`blur`/`focused` exist,
-`element.focus()` works, and `Activated` is already the seam for "the element
-did something only the browser can carry out" — today that is a navigation.
+**The engine already has focus, and more of it than first measured.**
+`Dom::focus`/`blur`/`focused` exist, `element.focus()` works,
+`document.activeElement` already falls back to `<body>`, and a press already
+moves focus to the nearest thing under it that can hold it
+(`events/activation.rs`) — so clicking a field focuses it today. `Activated` is
+the seam for "the element did something only the browser can carry out", which
+today is a navigation.
+
+What focus does *not* do is reach layout. The composed document is re-parsed
+from serialised HTML, which says nothing about what is focused, so `:focus`
+never matches and blitz's own `input:focus { outline: … }` never fires. Focus is
+therefore real and invisible.
 
 **blitz already has a whole text editor.** `TextInputData` holds a parley
 `PlainEditor`; `BaseDocument::with_text_input(node, |driver| …)` hands out a
@@ -121,53 +129,57 @@ textarea stayed an inline box with nothing to draw the border on. One rule in
 parley layout built here rather than read off the editor — which is the same
 machinery stage 3 needs anyway, and is folded into it.
 
-### 2. Make the DOM tell the truth about fields — *one session*
+### 2. Make the DOM tell the truth about fields — **done**
 
-In the engine, and all of it unit-testable with no window:
+`dom/fields.rs` holds each field's value and selection; `prelude/35-fields.js`
+presents them as `value`, `defaultValue`, `selectionStart`/`End`,
+`setSelectionRange`, `select` and `setRangeText`, shadowing the plain attribute
+reflection that every other element keeps. `KeyboardEvent` and `InputEvent`
+became real classes with real fields.
 
-- `value` as a real property, distinct from `defaultValue` and the attribute,
-  for `input` and `textarea` (whose value is its text content).
-- `selectionStart` / `selectionEnd` / `selectionDirection`, `select()`,
-  `setSelectionRange()`, `setRangeText()`.
-- `activeElement` defaulting to `<body>`; `focus`/`blur`/`focusin`/`focusout`.
-- `KeyboardEvent` with `key`, `code`, `location`, `repeat`, the modifiers and
-  `getModifierState`; `InputEvent` with `data`, `inputType`, `isComposing`;
-  `CompositionEvent`.
-- `HTMLFormElement`: `elements`, `reset()`, `requestSubmit()`.
+Two things went differently from the plan.
 
-The serialisation must carry the current value out to layout — for `<input>` by
-writing the *property* as the `value` attribute in `Keyed::Yes`, which is a
-lie about the DOM told deliberately and in one place, the way the `__tb-key-`
-classes already are.
+**The serialisation did not have to lie.** The plan had `Keyed::Yes` writing the
+value property out as the attribute. It turned out the browser can simply *ask*
+— `Engine::fields` — and that carries the selection as well, which an attribute
+could not. So the caret travels the same way, and `innerHTML` still reports what
+the markup says.
 
-**Done when:** the probe table above answers correctly, in `cargo test`.
+**Two characterisation tests had to be rewritten**, and both said why they would
+have to be: one recorded that `value` and its attribute "move together" because
+there was one place to keep them, the other that `KeyboardEvent === Event`
+because "nothing here dispatches them". Both reasons expired in this change.
 
-### 3. Editing, as a Transition — *one to two sessions*
+Still outstanding: the `focus`/`blur` events, `:focus` matching (focus does not
+reach layout, so blitz's own `input:focus { outline }` never fires — and
+outlines are `GAPS.md` gap 1), `CompositionEvent`, and `HTMLFormElement`.
 
-A new engine primitive beside `raise_mouse`: `raise_key(node, Key)`, raising
-`keydown` → `beforeinput` → the edit → `input` → `keyup`, with `change` on blur
-and `submit` on Enter inside a form. `Activated` grows `Submit(..)` next to
-`Navigate(..)`, because a submission is a navigation the browser carries out
-after the dispatch unwinds — exactly the existing shape.
+### 3. Editing, as a Transition — **done, and cheaper than planned**
 
-Which *edit* a key performs is the part that needs measurement: Home, End, and
-the arrow keys across a proportional run are parley's answer, not a byte count.
-So `Browser` gains a `moved_caret(page, node, how) -> (usize, usize)` that
-composes, asks the editor, and hands the offsets back. One more environment
-fact in the same direction as the boxes.
+`Engine::raise_key` raises `keydown` → `beforeinput` → the edit → `input` →
+`keyup`, and `events/editing.rs` decides what each key means.
 
-Clicking into a field, and dragging to select, are the same question asked from
-a Point.
+**The measurement turned out not to be needed.** The plan assumed Home, End and
+the arrow keys were parley's answer rather than a byte count. They are not:
+moving a caret one character, to the start of a line, or to the line above is a
+question about a *string*, and only two things genuinely need a text layout —
+where a click landed inside the text, and Up or Down through lines that wrapped
+rather than lines that were typed. Both are still outstanding, and everything
+else is `dom/fields.rs`, which has no fonts in it at all.
 
-**Done when:** a browser-level test types into a field, selects a word, deletes
-it and reads the value back — no window involved.
+So there is no `moved_caret` and no new environment fact. What crosses instead
+is `Engine::fields`: the value and the selection, applied to the laid-out
+document's own editor, which then answers where the caret goes.
 
-### 4. The window, and the OS — *one to two sessions*
+Also outstanding: `change` on blur, and Enter submitting a form — the second
+deliberately, since this browser does not fake a submit (`docs/adr/0010`).
 
-This is the part called "integrates properly".
+### 4. The window, and the OS — *partly done*
 
-- **Keys.** `WindowEvent::KeyboardInput` → winit's `logical_key`/`physical_key`
-  mapped to DOM `key`/`code`. Repeat comes free.
+This is the part called "integrates properly". **Keys are done** —
+`window/typing.rs` maps winit's `logical_key`/`physical_key` to DOM `key`/`code`
+— so a person can click a field in `just browse` and type into it. The rest is
+not:
 - **Input methods.** `set_ime_allowed(true)`, `WindowEvent::Ime`
   (`Preedit`/`Commit`) into `CompositionEvent`, and `set_ime_cursor_area` from
   the caret rect stage 3 already computes. Without that last call the candidate
@@ -182,7 +194,8 @@ This is the part called "integrates properly".
 - **Tab** moves focus. The I-beam is already done — `agent.rs` has had
   `input, textarea { cursor: text }` since the cursors went in.
 
-**Done when:** `just window` types a string into a field and photographs it.
+**Done for the keys:** `just window <url> 60,44 t:typed k:BackSpace` clicks into
+a field, types, deletes a character, and photographs each step.
 
 ### 5. A screen reader can use it — *half a session*
 

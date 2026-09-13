@@ -53,14 +53,77 @@
     }
   }
 
+  // A key event a page constructs. The fields are real because pages read
+  // them: a shortcut handler is `if (e.key === "k" && e.metaKey)`, and an
+  // `Event` that answers `undefined` to both makes every one of them dead.
+  class KeyboardEvent extends Event {
+    constructor(type, init = {}) {
+      super(type, init);
+      this.key = init.key ?? "";
+      this.code = init.code ?? "";
+      this.location = init.location ?? 0;
+      this.repeat = !!init.repeat;
+      this.isComposing = !!init.isComposing;
+      this.ctrlKey = !!init.ctrlKey;
+      this.shiftKey = !!init.shiftKey;
+      this.altKey = !!init.altKey;
+      this.metaKey = !!init.metaKey;
+      // Long dead, and still read: jQuery and everything built on it branch on
+      // `which`. Answered from `key` so it is at least right for a letter.
+      this.charCode = 0;
+      this.keyCode = tb.keyCodeOf(this.key);
+      this.which = this.keyCode;
+    }
+    getModifierState(name) {
+      return tb.modifierState(this, name);
+    }
+  }
+
+  // What the page is told the field did, after it did it.
+  class InputEvent extends Event {
+    constructor(type, init = {}) {
+      super(type, init);
+      this.data = init.data ?? null;
+      this.inputType = init.inputType ?? "";
+      this.isComposing = !!init.isComposing;
+    }
+  }
+
   globalThis.Event = Event;
   globalThis.CustomEvent = CustomEvent;
   globalThis.UIEvent = Event;
   globalThis.MouseEvent = Event;
-  globalThis.KeyboardEvent = Event;
+  globalThis.KeyboardEvent = KeyboardEvent;
   globalThis.FocusEvent = Event;
-  globalThis.InputEvent = Event;
+  globalThis.InputEvent = InputEvent;
   globalThis.PointerEvent = Event;
+
+  // Which modifier a name asks about. The DOM names more of these than any
+  // keyboard has; the four that exist are answered and the rest are false,
+  // which is what a machine without a Hyper key would say anyway.
+  tb.modifierState = (event, name) =>
+    ({
+      Control: event.ctrlKey,
+      Shift: event.shiftKey,
+      Alt: event.altKey,
+      Meta: event.metaKey,
+      AltGraph: event.altKey,
+      OS: event.metaKey,
+    })[name] ?? false;
+
+  // The legacy `keyCode`, for the pages that still branch on it. Enough of the
+  // table to cover what anybody actually tests for, and 0 for the rest — which
+  // is honest, where a wrong number would be believed.
+  const KEY_CODES = {
+    Backspace: 8, Tab: 9, Enter: 13, Shift: 16, Control: 17, Alt: 18,
+    Escape: 27, " ": 32, PageUp: 33, PageDown: 34, End: 35, Home: 36,
+    ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Delete: 46,
+  };
+  tb.keyCodeOf = (key) => {
+    if (KEY_CODES[key] !== undefined) return KEY_CODES[key];
+    if (key.length === 1) return key.toUpperCase().charCodeAt(0);
+    return 0;
+  };
 
   // The events the browser itself raises. These carry a target from the start,
   // and say whether they travel: most lifecycle events do not, which is why
@@ -108,6 +171,46 @@
     event.metaKey = false;
     event.shiftKey = false;
     event.relatedTarget = null;
+    return event;
+  };
+
+  // The bits `Key::held` packs the four modifiers into. Named here because
+  // this is the only place that unpacks them.
+  const CTRL = 1, SHIFT = 2, ALT = 4, META = 8;
+
+  // A key event the browser itself raised. Built here rather than in Rust for
+  // the reason the mouse one is: every field an event carries is written in one
+  // place, and Rust supplies only what it knows.
+  tb.makeKeyEvent = (type, key, code, held, repeat) => {
+    const event = tb.makeEvent(type, null, true);
+    event.cancelable = true;
+    event.key = key;
+    event.code = code;
+    event.location = 0;
+    event.repeat = repeat;
+    event.isComposing = false;
+    event.ctrlKey = !!(held & CTRL);
+    event.shiftKey = !!(held & SHIFT);
+    event.altKey = !!(held & ALT);
+    event.metaKey = !!(held & META);
+    event.charCode = 0;
+    event.keyCode = tb.keyCodeOf(key);
+    event.which = event.keyCode;
+    event.getModifierState = function (name) {
+      return tb.modifierState(this, name);
+    };
+    return event;
+  };
+
+  // `beforeinput` can be refused; `input` reports what already happened, so it
+  // cannot. That is the only difference between them and it is why one call
+  // builds both.
+  tb.makeInputEvent = (type, inputType, data) => {
+    const event = tb.makeEvent(type, null, true);
+    event.cancelable = type === "beforeinput";
+    event.inputType = inputType;
+    event.data = data ?? null;
+    event.isComposing = false;
     return event;
   };
 

@@ -14,6 +14,7 @@ pub mod blitz;
 mod dom;
 mod frames;
 mod hovering;
+mod keyboard;
 mod navigate;
 mod pointer;
 
@@ -44,6 +45,7 @@ pub use accesskit;
 pub use blitz::{LaidOut, lay_out};
 pub use cursor_icon::CursorIcon;
 pub use hovering::Hovering;
+pub use keyboard::Held;
 pub use navigate::{Loaded, NavigationError};
 pub use reading::Reading;
 pub use resvg::tiny_skia;

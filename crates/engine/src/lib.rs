@@ -14,6 +14,7 @@
 mod dom;
 mod engine;
 pub mod ids;
+mod input;
 mod loader;
 mod realm;
 mod scripts;
@@ -25,6 +26,7 @@ use toy_browser_fetch::Url;
 
 pub use dom::parse_document;
 pub use engine::Engine;
+pub use input::{Activated, Key, Mouse, Point, Typed};
 pub use realm::{Argument, Evaluated, Handle, Relayout};
 pub use scripts::{EntryKind, EntryPoint, Fetch, Payload, ScriptSurvey, Timing};
 pub use serialize::{KEY_CLASS_PREFIX, key_of};
@@ -128,44 +130,6 @@ impl ElementBox {
             && point.x < self.x + self.width
             && point.y < self.y + self.height
     }
-}
-
-/// A mouse event about to be raised: which kind, where, and what the buttons
-/// were doing at the time.
-///
-/// The engine has no Pointer of its own. Whoever is driving remembers where the
-/// mouse is and decides which events one press produces; this is one of them.
-#[derive(Clone, Copy)]
-pub struct Mouse<'a> {
-    pub kind: &'a str,
-    pub at: Point,
-    /// The bitmask the DOM calls `buttons`: 1 while the primary button is held.
-    pub buttons: u8,
-    /// What the DOM calls `detail` — the click count, 1 for a plain click and
-    /// 0 for an event that is not a click at all.
-    pub detail: u32,
-}
-
-/// What a click asked the browser to do, once the page had its say.
-///
-/// Focus moving and a checkbox flipping are changes to the document, and the
-/// engine makes them itself. A navigation is not one — so it comes back as a
-/// request and happens after the dispatch has unwound, which is also when a
-/// real browser does it.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum Activated {
-    #[default]
-    Nothing,
-    /// A link was followed. The URL is as the markup spelled it; resolving it
-    /// against the page is the caller's business.
-    Navigate(String),
-}
-
-/// A position in the page, in CSS pixels. What a click happens at.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Point {
-    pub x: f32,
-    pub y: f32,
 }
 
 /// Where every element sits, and which is in front of which.

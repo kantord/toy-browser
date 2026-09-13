@@ -92,8 +92,8 @@ fn prepared(args: &RenderArgs, resources: Resources) -> Result<(Browser, PageId)
     // Before the page's own scripts, which is the point of it: a tracer has to
     // be in place before there is anything to trace.
     for path in &args.init_script {
-        let source = std::fs::read_to_string(path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let source =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         browser.add_init_script(&page, source)?;
     }
     Ok((browser, page))

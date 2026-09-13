@@ -10,8 +10,8 @@ use anyhow::{Result, anyhow};
 use toy_browser_fetch::Resources;
 
 use crate::{
-    Activated, Argument, Budget, Environment, Evaluated, Handle, Keyed, LoadPage, LoadReport, Mode,
-    Mouse, NodeId, Outcome, Point, SessionId, realm::Realm,
+    Activated, Argument, Budget, Environment, Evaluated, Handle, Key, Keyed, LoadPage, LoadReport,
+    Mode, Mouse, NodeId, Outcome, Point, SessionId, Typed, realm::Realm,
 };
 
 /// A place a page can be loaded, and the unit of isolation between callers.
@@ -188,6 +188,17 @@ impl Engine {
         Ok(self.realm(session)?.revision())
     }
 
+    /// What every field that has been typed into now holds, and where the
+    /// caret is in it. Runs no JavaScript.
+    ///
+    /// The renderer's business, not a page's: a field's value is a property, so
+    /// it is not in the HTML this Realm serialises and whoever draws the page
+    /// has no other way to learn it. Empty for a page nobody has typed into,
+    /// which is almost all of them.
+    pub fn fields(&mut self, session: &SessionId) -> Result<Typed> {
+        Ok(self.realm(session)?.fields())
+    }
+
     /// Every element matching `selector`, in document order. Runs no
     /// JavaScript: this is the DOM's own selector engine.
     pub fn query(&mut self, session: &SessionId, selector: &str) -> Result<Vec<NodeId>> {
@@ -202,6 +213,19 @@ impl Engine {
     /// real click is not refused either.
     pub fn hit_test(&mut self, session: &SessionId, point: Point) -> Result<Option<NodeId>> {
         Ok(self.realm(session)?.hit_test(point))
+    }
+
+    /// Raises one key event wherever the focus is, and does what the key means
+    /// if nobody stopped it.
+    ///
+    /// No node argument, because a key is not aimed: it goes where the focus is,
+    /// and the focus is the Realm's own. Answers whether the document changed,
+    /// so a caller with a window can decide it has something new to draw without
+    /// comparing revisions.
+    pub fn raise_key(&mut self, session: &SessionId, key: Key<'_>) -> Result<Outcome<bool>> {
+        let realm = self.realm(session)?;
+        let edited = realm.raise_key(key)?;
+        Ok(realm.outcome(edited))
     }
 
     /// Raises one mouse event at `node`, and reports what the page said while

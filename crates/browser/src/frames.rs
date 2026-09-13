@@ -123,7 +123,10 @@ impl Browser {
             .map(|url| url.to_string())
             .unwrap_or_else(|| "about:blank".to_owned());
         let scripting = self.scripting(page);
-        let measuring = crate::blitz::lay_out(&html, &scripting, viewport, &base, &self.resources)?;
+        let typed = self.engine.fields(&session)?;
+        let mut measuring =
+            crate::blitz::lay_out(&html, &scripting, viewport, &base, &self.resources)?;
+        measuring.typed(&typed);
         let frames = measuring.webviews();
         if frames.is_empty() {
             return Ok(crate::blitz::Composed {
@@ -134,7 +137,8 @@ impl Browser {
 
         let (inside, told) = self.inhabit(page, &frames, viewport)?;
         let sheets: Vec<String> = scripting.into_iter().chain([told]).collect();
-        let laid_out = crate::blitz::lay_out(&html, &sheets, viewport, &base, &self.resources)?;
+        let mut laid_out = crate::blitz::lay_out(&html, &sheets, viewport, &base, &self.resources)?;
+        laid_out.typed(&typed);
         Ok(crate::blitz::Composed {
             mounted: self.framed(page, &laid_out, inside),
             laid_out,

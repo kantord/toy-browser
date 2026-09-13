@@ -103,3 +103,63 @@ fn a_password_is_never_in_the_picture() {
     );
     assert!(says(&scene, "••••••"), "{:?}", words(&scene));
 }
+
+/// The whole point of the exercise: a key pressed reaches the picture.
+#[test]
+fn what_is_typed_is_what_is_drawn() {
+    let mut browser = browser();
+    let page = browser.new_page().unwrap();
+    browser
+        .navigate(&page, fixture("fields.html").as_str())
+        .unwrap();
+    browser
+        .evaluate(&page, "document.querySelector('input').focus()", true)
+        .unwrap();
+    browser.type_text(&page, " typed").unwrap();
+
+    let scene = browser.scene_for(&page).unwrap();
+    assert!(says(&scene, "hello world typed"), "{:?}", words(&scene));
+}
+
+/// And the caret is drawn where the typing left it.
+#[test]
+fn the_focused_field_has_a_caret_and_the_others_do_not() {
+    let mut browser = browser();
+    let page = browser.new_page().unwrap();
+    browser
+        .navigate(&page, fixture("fields.html").as_str())
+        .unwrap();
+    let bare = carets(&browser_scene(&mut browser, &page));
+    browser
+        .evaluate(&page, "document.querySelector('input').focus()", true)
+        .unwrap();
+    browser.type_text(&page, "!").unwrap();
+    let focused = carets(&browser_scene(&mut browser, &page));
+    assert_eq!(bare, 0, "nothing is focused, so nothing has a caret");
+    assert_eq!(focused, 1, "exactly one field has the caret");
+}
+
+fn browser_scene(browser: &mut toy_browser::Browser, page: &toy_browser::PageId) -> Scene {
+    browser.scene_for(page).unwrap()
+}
+
+/// How many hairline fills sit inside a field's clip — which is what a caret
+/// is, and the only thing drawn that shape.
+fn carets(scene: &Scene) -> usize {
+    fn into(marks: &[Mark]) -> usize {
+        marks
+            .iter()
+            .map(|mark| match mark {
+                Mark::Clip { marks, .. } => into(marks)
+                    + marks
+                        .iter()
+                        .filter(
+                            |inner| matches!(inner, Mark::Fill { area, .. } if area.width <= 1.5),
+                        )
+                        .count(),
+                _ => 0,
+            })
+            .sum()
+    }
+    into(&scene.marks)
+}

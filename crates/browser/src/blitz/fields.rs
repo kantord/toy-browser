@@ -1,58 +1,116 @@
 //! Telling a form field what it is supposed to be holding.
 //!
-//! blitz builds an editor for every `<input>` and `<textarea>` while it lays the
-//! page out, and seeds it from the `value` **attribute**. That is right for a
-//! text input and wrong twice over.
+//! Two things arrive here from two different places, and both have to, because
+//! blitz seeds every field's editor from the `value` **attribute** and that is
+//! right for exactly one case.
 //!
-//! A `<textarea>` has no `value` attribute: its value is the text written
-//! between its tags, so seeding from the attribute leaves every one of them
-//! empty.
+//! **From the markup.** A `<textarea>` has no `value` attribute — its value is
+//! the text written between its tags — so seeding from the attribute leaves
+//! every one of them empty. And a password is not drawn as what it says.
 //!
-//! And a password is not drawn as what it says. A field that renders its value
-//! is a field that shows a password to whoever is behind you, and — because a
-//! Scene carries the words it draws — writes it into every SVG, every snapshot
-//! and every comparison report this browser produces. Masking here rather than
-//! at the paint is deliberate: the mask has to be what was laid out, so that the
-//! field is as wide as what it shows, and so that nothing downstream is ever
-//! holding the real thing.
+//! **From the engine.** A field's value is a property, so the moment somebody
+//! types into one the markup stops describing it. What they typed, and where
+//! the caret now is, come across as [`Typed`] rather than in the serialised
+//! document, because there is nowhere in the markup to put them.
 //!
-//! Done after the page is laid out because the editor does not exist until then
-//! — it is built during layout — and followed by laying it out again, but only
-//! if something here actually changed, which on the overwhelming majority of
-//! pages is nothing.
+//! Masking is here rather than at the paint, and that placement is the point: a
+//! Scene *names the words it draws*, so a password painted as itself is written
+//! into every SVG, every snapshot and every comparison report this browser
+//! produces. Replacing it in the laid-out document means nothing downstream is
+//! ever holding the real thing — and means the field is as wide as what it
+//! shows.
+//!
+//! Everything here runs after the page is laid out, because the editors do not
+//! exist until then, and is followed by laying it out again — but only when
+//! something actually moved, which on a page with no fields is never.
 
 use blitz_dom::{BaseDocument, NodeId, local_name};
+
+use toy_browser_engine::Typed;
 
 /// What a password is shown as, one per character. The same bullet every
 /// browser uses.
 const BULLET: char = '•';
 
-/// Puts the real value into every field's editor, and takes it back out of the
-/// ones that must not show it.
+/// Puts what the markup says into every field's editor, and takes it back out
+/// of the ones that must not show it.
 ///
 /// Answers whether anything moved, because laying the page out again is only
 /// worth it if it did.
 pub(super) fn seeded(document: &mut BaseDocument) -> bool {
-    let mut moved = false;
-    for (id, wanted) in shown(document) {
-        document.with_text_input(id, |mut editor| {
-            editor.select_all();
-            editor.insert_or_replace_selection(&wanted);
-        });
-        moved = true;
-    }
-    moved
+    let wrong: Vec<(NodeId, String)> = gathered(document, written);
+    write(document, wrong)
 }
 
-/// Every field whose editor holds something other than what it should, and what
-/// it should hold.
+/// Puts what has been *typed* into every field that has been, and puts the
+/// caret where the person using it left it.
 ///
-/// Gathered first because writing to a field needs the whole document, and the
-/// walk that finds them is holding it.
-fn shown(document: &BaseDocument) -> Vec<(NodeId, String)> {
+/// Answers with the field the caret is in, which is the one thing a painter
+/// needs that is not in the document: a caret belongs to whatever has focus,
+/// and only one thing does.
+pub(crate) fn typed(document: &mut BaseDocument, typed: &Typed) -> Option<NodeId> {
+    let wrong = gathered(document, |node| {
+        let (value, ..) = typed.values.get(&keyed(node)?)?;
+        Some(match password(node) {
+            true => masked(value),
+            false => value.clone(),
+        })
+    });
+    write(document, wrong);
+    let focused = focused(document, typed)?;
+    let (from, to) = caret(document, typed, focused)?;
+    document.with_text_input(focused, |mut editor| editor.select_byte_range(from, to));
+    Some(focused)
+}
+
+/// Where the caret is in the focused field, as byte offsets into what the
+/// editor is holding.
+///
+/// A field that has focus and has never been typed into still has a caret — it
+/// is the thing that appears the moment you click into one. There is no entry
+/// for it, so the answer is the end of the text, which is where the engine also
+/// starts a field the first time anything edits it. The two agreeing is what
+/// stops the caret being drawn in one place and typed into in another.
+fn caret(document: &BaseDocument, typed: &Typed, focused: NodeId) -> Option<(usize, usize)> {
+    let node = document.get_node(focused)?;
+    match keyed(node).and_then(|id| typed.values.get(&id)) {
+        Some((_, from, to)) => Some((*from, *to)),
+        None => {
+            let end = field(node)?.editor.raw_text().len();
+            Some((end, end))
+        }
+    }
+}
+
+/// Which node in *this* document has the focus the engine reports.
+///
+/// Two documents, two numberings: the engine's DOM and the one laid out here
+/// are not the same tree, and the marker class is the only thing that joins
+/// them. See `docs/layers.md`.
+fn focused(document: &BaseDocument, typed: &Typed) -> Option<NodeId> {
+    let wanted = typed.focused?;
+    let mut found = None;
+    document.visit(|id, node| {
+        if found.is_none() && keyed(node) == Some(wanted) && field(node).is_some() {
+            found = Some(id);
+        }
+    });
+    found
+}
+
+/// Every field whose editor holds something other than what `wanted` says, and
+/// what it should hold instead.
+///
+/// Gathered before anything is written because writing to a field needs the
+/// whole document, and the walk that finds them is holding it.
+fn gathered(
+    document: &BaseDocument,
+    wanted: impl Fn(&blitz_dom::Node) -> Option<String>,
+) -> Vec<(NodeId, String)> {
     let mut wrong = Vec::new();
     document.visit(|id, node| {
-        if let Some((field, wanted)) = holding(node)
+        if let Some(field) = field(node)
+            && let Some(wanted) = wanted(node)
             && field.editor.raw_text() != wanted
         {
             wrong.push((id, wanted));
@@ -61,20 +119,46 @@ fn shown(document: &BaseDocument) -> Vec<(NodeId, String)> {
     wrong
 }
 
-/// A field whose editor this module has an opinion about, and what that opinion
-/// is. Anything else — a plain text input, a number, a search box — holds what
-/// blitz already put in it.
-fn holding(node: &blitz_dom::Node) -> Option<(&blitz_dom::node::TextInputData, String)> {
+/// Writes each field's new text, and says whether there was any.
+fn write(document: &mut BaseDocument, wrong: Vec<(NodeId, String)>) -> bool {
+    let moved = !wrong.is_empty();
+    for (id, wanted) in wrong {
+        document.with_text_input(id, |mut editor| {
+            editor.select_all();
+            editor.insert_or_replace_selection(&wanted);
+        });
+    }
+    moved
+}
+
+fn field(node: &blitz_dom::Node) -> Option<&blitz_dom::node::TextInputData> {
+    node.element_data()?.text_input_data()
+}
+
+/// The engine's id for this element, read off the marker class it carries.
+fn keyed(node: &blitz_dom::Node) -> Option<usize> {
+    super::keyed(node)
+}
+
+fn password(node: &blitz_dom::Node) -> bool {
+    node.element_data()
+        .and_then(|element| element.attr(local_name!("type")))
+        == Some("password")
+}
+
+/// What the markup says this field holds, where that is not the `value`
+/// attribute blitz already read.
+fn written(node: &blitz_dom::Node) -> Option<String> {
     let element = node.element_data()?;
-    let field = element.text_input_data()?;
-    let wanted = match &*element.name.local {
-        "textarea" => node.text_content(),
-        _ => match element.attr(local_name!("type")) {
-            Some("password") => masked(element.attr(local_name!("value")).unwrap_or_default()),
-            _ => return None,
+    match &*element.name.local {
+        "textarea" => Some(node.text_content()),
+        _ => match password(node) {
+            true => Some(masked(
+                element.attr(local_name!("value")).unwrap_or_default(),
+            )),
+            false => None,
         },
-    };
-    Some((field, wanted))
+    }
 }
 
 /// One bullet per character, not per byte: a password in any alphabet shows as

@@ -56,6 +56,30 @@ shot 000-opened
 step=0
 for point in "$@"; do
     step=$((step + 1))
+    # `t:hello there` types instead of pointing. The one thing a mouse cannot
+    # ask: whether a field that was clicked into can then be typed into.
+    case "$point" in
+        t:*)
+            # Focused first, and typed with XTEST rather than into the window.
+            # `xdotool type --window` sends synthetic events, and winit reads
+            # the keyboard through XInput2, which ignores them — so the
+            # characters arrive at the X server and never at the browser.
+            xdotool windowfocus --sync "$id" 2>/dev/null || true
+            xdotool type --delay 40 -- "${point#t:}"
+            sleep 2
+            shot "$(printf '%03d' "$step")-typed"
+            continue
+            ;;
+        k:*)
+            # `k:BackSpace` or `k:ctrl+a` — a named key rather than a character,
+            # spelled the way xdotool spells one.
+            xdotool windowfocus --sync "$id" 2>/dev/null || true
+            xdotool key --delay 40 -- "${point#k:}"
+            sleep 2
+            shot "$(printf '%03d' "$step")-key-${point#k:}"
+            continue
+            ;;
+    esac
     move_only=""
     case "$point" in m*) move_only=yes; point="${point#m}" ;; esac
     x="${point%,*}"

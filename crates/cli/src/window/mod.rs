@@ -254,6 +254,10 @@ impl ApplicationHandler<speaking::Woken> for Open {
                 self.stirred = true;
             }
             WindowEvent::ModifiersChanged(held) => self.held = held.state(),
+            // Not coalesced, the way a pointer move is: every key is a
+            // different key, and dropping one loses a character rather than
+            // losing a position that the next event supersedes anyway.
+            WindowEvent::KeyboardInput { event, .. } => self.keyed(event),
             WindowEvent::MouseWheel { delta, .. } => self.turned(delta),
             WindowEvent::MouseInput {
                 state,
@@ -277,3 +281,4 @@ mod blit;
 mod reading;
 mod showing;
 mod speaking;
+mod typing;

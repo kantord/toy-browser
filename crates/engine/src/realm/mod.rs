@@ -157,6 +157,30 @@ impl Realm {
             .context("raising a mouse event")
     }
 
+    /// What every typed-into field holds, and where the caret is.
+    pub fn fields(&self) -> crate::Typed {
+        crate::Typed {
+            values: self
+                .dom
+                .fields()
+                .iter()
+                .map(|(node, field)| {
+                    let (from, to) = field.range();
+                    (*node, (field.value().to_owned(), from, to))
+                })
+                .collect(),
+            focused: self.dom.focused(),
+        }
+    }
+
+    /// Raises one key event wherever the focus is, answering whether it
+    /// changed the document.
+    pub fn raise_key(&self, key: crate::Key<'_>) -> Result<bool> {
+        self.context
+            .with(|ctx| node::raise_key(&ctx, key))
+            .context("raising a key event")
+    }
+
     /// Whether `node` sits anywhere under `ancestor`.
     pub fn contains(&self, ancestor: NodeId, node: NodeId) -> bool {
         let mut at = self.dom.parent(node);

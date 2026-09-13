@@ -249,4 +249,3 @@ fn the_font_set_can_be_waited_on_and_listened_to() {
     );
     assert_eq!(result, json!(["function", "loaded", true, "function"]));
 }
-

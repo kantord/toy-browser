@@ -143,6 +143,14 @@ fn a_count_and_a_list_are_described_in_english() {
     );
     assert_eq!(
         result,
-        json!(["one", "other", "two", "other", "a and b", "a, b, and c", "GB"])
+        json!([
+            "one",
+            "other",
+            "two",
+            "other",
+            "a and b",
+            "a, b, and c",
+            "GB"
+        ])
     );
 }

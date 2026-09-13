@@ -11,8 +11,8 @@
 
 use blitz_dom::Node;
 
-use toy_browser_rasterizer::{Ink, Mark};
 use toy_browser_engine::ids;
+use toy_browser_rasterizer::{Ink, Mark};
 
 /// Whether this element paints as a stacking context of its own.
 ///

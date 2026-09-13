@@ -200,21 +200,24 @@ being painted as itself — into every SVG, snapshot and comparison report this
 browser writes. Corpus cases 080 to 083. What is left of the drawing is the
 placeholder, which blitz has no notion of at all.
 
-What is left is that nothing can be typed. The window handles no
-`KeyboardInput` and no `Ime`; `KeyboardEvent` and `InputEvent` are aliases of
-`Event`, so `key` and `data` are always `null`; there is no `selectionStart`,
-`select`, `setSelectionRange` or `form.elements`; and `input.value = x` sets the
-attribute, which is not what the property does.
+**And typing works.** A key goes where the focus is, `keydown` → `beforeinput` →
+the edit → `input` → `keyup`, and what each key means is a string operation in
+`dom/fields.rs` — which is why it needed no fonts and is unit-tested with no
+window. `value` is a real property distinct from the attribute, the caret is
+drawn, and `just window <url> 60,44 t:typed k:BackSpace` proves it on a real X
+server.
 
-What is already here is most of the parts: the engine has focus and the
-`Activated` seam, blitz has a complete parley editor seeded from the `value`
-attribute, and parley answers every question about where a caret is.
+What is left is the part that genuinely needs a text layout, and the OS. **Clicking into the text does not put the caret where you clicked**, and Up and
+Down move by typed lines rather than by drawn ones — those two are the only
+edits that need to ask a text layout, and they are what stage 3 of
+`docs/text-input.md` left. There is no input method, no clipboard, the caret
+does not blink, Tab does not move focus, `:focus` never matches (focus does not
+reach layout, so the outline blitz asks for never fires — gap 1), and there is
+no `form.elements` or form submission.
 
-The one design question is who owns the caret, given that `compose` re-parses
-the document from serialised HTML several times a second. `docs/text-input.md`
-measures all of the above, argues for the engine owning the string and the
-selection while layout measures them — the trade `getBoundingClientRect`
-already made — and cuts it into five stages.
+`docs/text-input.md` records the design — the engine owns the string and the
+selection, layout measures them, the trade `getBoundingClientRect` already made
+— and which of the five stages are done.
 
 ---
 

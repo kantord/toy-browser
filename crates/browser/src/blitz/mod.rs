@@ -27,7 +27,7 @@ use crate::Viewport;
 
 mod agent;
 mod export;
-mod fields;
+pub(crate) mod fields;
 pub(crate) mod fonts;
 pub(crate) mod geometry;
 mod held;
@@ -46,6 +46,10 @@ pub use held::{Kind, Source, Webview};
 /// A document, laid out.
 pub struct LaidOut {
     pub document: BaseDocument,
+    /// Which field the caret is in, if any. Not in the document: focus lives in
+    /// the engine, and the document laid out here is a re-parse that never
+    /// heard about it.
+    pub caret: Option<NodeId>,
     /// What the page's own references resolve against, kept so the painter can
     /// write out somewhere a rasterizer can find rather than somewhere only
     /// this document could.
@@ -109,6 +113,7 @@ pub fn lay_out(
     }
     Ok(LaidOut {
         document,
+        caret: None,
         base: base.to_owned(),
     })
 }
@@ -273,4 +278,21 @@ pub(super) fn keyed(node: &Node) -> Option<usize> {
     node.element_data()?
         .attr(blitz_dom::local_name!("class"))
         .and_then(key_of)
+}
+
+impl LaidOut {
+    /// Puts what has been typed into this document's fields, and the caret
+    /// where it was left.
+    ///
+    /// Separate from laying out because the two know different things: laying
+    /// out is handed a document and told to measure it, and this is the one
+    /// place that knows the document came from somewhere with a person in front
+    /// of it. Lays the page out again only when something moved.
+    pub fn typed(&mut self, typed: &toy_browser_engine::Typed) {
+        if typed.values.is_empty() && typed.focused.is_none() {
+            return;
+        }
+        self.caret = fields::typed(&mut self.document, typed);
+        self.document.resolve(0.0);
+    }
 }
