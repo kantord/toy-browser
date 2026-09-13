@@ -27,6 +27,12 @@ pub(super) const LINE_HEIGHT: &str = "html { line-height: 1.08 }\
 table[cellspacing=\"0\"] { border-spacing: 0 }\
 table[cellpadding=\"0\"] td, table[cellpadding=\"0\"] th { padding: 0 }\
 \
+\
+/* blitz gives `input` an inline-block and forgets `textarea`, which leaves it \
+   an inline box with no box of its own — so the border its own user-agent \
+   sheet asks for is never drawn, and neither is anything else about it. */\
+textarea { display: inline-block; overflow: hidden }\
+\
 webview { display: block; overflow: hidden }\
 \
 iframe { display: block; overflow: hidden; width: 300px; height: 150px; border: 2px inset }";

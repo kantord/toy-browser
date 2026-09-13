@@ -94,19 +94,32 @@ not knowing*. A caret is a box, and boxes are measured one layer up.
 Five stages. Each is worth having on its own, and each is testable before the
 next one starts.
 
-### 1. Draw what is in the field  — *half a session*
+### 1. Draw what is in the field — **done**
 
-`paint/words.rs` reads `inline_layout_data` and nothing else, so a field's text
-is never drawn. Add a paint phase that walks `text_input_data`, takes
-`try_layout()`, and emits the same glyph Marks — plus the placeholder when the
-value is empty, clipped to the content box, offset by `scroll_offset`.
+`paint/fields.rs` hands the editor's parley layout to the same `written` a
+paragraph goes through, clipped to the content box and offset by
+`scroll_offset`. Corpus cases 080 to 083; `crates/browser/tests/fields.rs`.
 
-No new state, no events. It closes the worst of the table above: a filled form
-currently screenshots as a row of empty boxes, which makes every corpus and WPT
-comparison of a form page wrong before anything else is considered.
+Three things this turned up that were not in the plan, and one it did not do.
 
-**Done when:** a corpus case with a filled input and a `<textarea>` agrees with
-Chromium.
+**A password was being drawn as itself.** Not merely shown to whoever is behind
+you: a Scene *names the words it draws*, so the password reached every SVG,
+every snapshot and every comparison report. `blitz/fields.rs` replaces the value
+with bullets in the laid-out document, before anything downstream holds it — the
+mask has to be what was laid out, so that the field is as wide as what it shows.
+
+**A `<textarea>` was empty.** blitz seeds every field's editor from the `value`
+attribute, and a textarea has no `value` attribute — its value is the text
+between its tags. Same file, same walk.
+
+**And a `<textarea>` had no box at all.** blitz's own user-agent sheet gives it
+`border: 1px solid #999` and gives only `input` an `inline-block`, so the
+textarea stayed an inline box with nothing to draw the border on. One rule in
+`blitz/agent.rs`.
+
+**The placeholder is not drawn.** blitz has no notion of one, so it needs a
+parley layout built here rather than read off the editor — which is the same
+machinery stage 3 needs anyway, and is folded into it.
 
 ### 2. Make the DOM tell the truth about fields — *one session*
 
@@ -166,12 +179,16 @@ This is the part called "integrates properly".
 - **The caret blinks**, so `ControlFlow::Wait` becomes `WaitUntil` while a field
   has focus, and goes back when it does not. Focus lost at the window level
   hides the caret and fires `blur`.
-- **Tab** moves focus; `input { cursor: text }` in the user-agent sheet gives an
-  I-beam through machinery that already exists.
+- **Tab** moves focus. The I-beam is already done — `agent.rs` has had
+  `input, textarea { cursor: text }` since the cursors went in.
 
 **Done when:** `just window` types a string into a field and photographs it.
 
 ### 5. A screen reader can use it — *half a session*
+
+Cheaper than it looks: **parley already speaks AccessKit**. `PlainEditor` has
+`accessibility(..)` and `select_from_accesskit(..)`, so the character lengths,
+positions and widths below are a call rather than a derivation.
 
 The `Reading` already gives a field `Role::TextInput` and a box. A reader needs
 three things more, and parley has the numbers for all of them:
@@ -197,9 +214,9 @@ its own and none of them is on the way to this one.
 
 ## The shape of the whole thing
 
-Four to six sessions, and the first one is worth doing whatever happens to the
-rest: **a form that renders as empty boxes is wrong on every page that has a
-form**, and that is a paint bug rather than an input feature.
+Four to six sessions. The first is done, and was worth doing whatever happens to
+the rest: **a form that renders as empty boxes is wrong on every page that has a
+form**, and that was a paint bug rather than an input feature.
 
 The order is also the order of risk. Stages 1 and 2 touch nothing structural.
 Stage 3 is where the design either holds or does not, and the question it

@@ -36,6 +36,7 @@ mod backdrop;
 pub(super) mod boxes;
 mod edges;
 mod effects;
+mod fields;
 mod markers;
 mod pass;
 mod phases;
@@ -241,7 +242,8 @@ fn itself(unit: &Composed, node: &Node, at: (f32, f32), pass: &mut Pass<'_>) -> 
     marks
 }
 
-/// What is drawn *in* a box: its pictures, its marker, its words.
+/// What is drawn *in* a box: its pictures, its marker, its words, and — where
+/// the box is a form field — whatever has been written in it.
 ///
 /// This is what `overflow` cuts, and it includes the element's own text: an
 /// inline root holds the words of everything inside it, so leaving them out
@@ -255,6 +257,7 @@ fn within(unit: &Composed, node: &Node, at: (f32, f32), pass: &mut Pass<'_>) -> 
     marks.extend(pictures::of(&unit.laid_out, node, across, down, pass));
     marks.extend(markers::of(&unit.laid_out, node, across, down, pass));
     marks.extend(words::of(&unit.laid_out, node, across, down, pass));
+    marks.extend(fields::of(&unit.laid_out, node, at, pass));
     marks
 }
 

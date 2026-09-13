@@ -193,13 +193,14 @@ input fails saying so.
 
 ## 10. A text field cannot be typed into
 
-Not a rendering gap in the usual sense, and the first half of it is one. A page
-with `<input value="hello">` **renders as an empty box** — `paint/words.rs`
-reads `inline_layout_data` and a field's text lives in `text_input_data`, so it
-is never drawn. Every comparison of a page with a form is wrong before anything
-else is considered. A `<textarea>` is not drawn at all.
+**The drawing half is done.** `paint/fields.rs` draws what is in a field, blitz
+seeded a `<textarea>` from a `value` attribute it does not have, a textarea had
+no box for its own user-agent border to be drawn on, and a `type="password"` was
+being painted as itself — into every SVG, snapshot and comparison report this
+browser writes. Corpus cases 080 to 083. What is left of the drawing is the
+placeholder, which blitz has no notion of at all.
 
-The second half is that nothing can be typed. The window handles no
+What is left is that nothing can be typed. The window handles no
 `KeyboardInput` and no `Ime`; `KeyboardEvent` and `InputEvent` are aliases of
 `Event`, so `key` and `data` are always `null`; there is no `selectionStart`,
 `select`, `setSelectionRange` or `form.elements`; and `input.value = x` sets the
