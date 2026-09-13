@@ -4,10 +4,11 @@
 //! operations and the shared resource cache. Nothing here knows about any wire
 //! protocol; nothing above here knows about the engine. See `docs/layers.md`.
 //!
-//! The [`Browser`] and its pages live here, with the vocabulary the rest of the
-//! crate shares. What a caller can then do with a page is a module each:
-//! [`navigate`] loads a document, [`script`] runs JavaScript, [`dom`] reads the
-//! document, [`view`] measures and renders it.
+//! The [`Browser`] lives here, with the vocabulary the rest of the crate
+//! shares; `page` holds what one page remembers between calls. What a caller
+//! can then do with a page is a module each: [`navigate`] loads a document,
+//! [`script`] runs JavaScript, [`dom`] reads the document, [`view`] measures
+//! and renders it.
 
 pub mod blitz;
 mod dom;
@@ -18,11 +19,14 @@ mod pointer;
 mod scene;
 
 mod measure;
+mod page;
 mod script;
 mod view;
 mod viewport;
 
 use std::collections::HashMap;
+
+pub(crate) use page::{Laid, Measured, Mounted, Page, Pointer};
 
 use anyhow::Result;
 use toy_browser_engine::{Engine, Handle, SessionId};
@@ -73,107 +77,6 @@ pub struct Emitted {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PageId(u32);
 
-/// One navigable thing.
-struct Page {
-    session: SessionId,
-    url: String,
-    viewport: Viewport,
-    /// Whether loads run the page's scripts. A setting, so it survives them.
-    run_scripts: bool,
-    /// The last measurement, and the state it described. Re-measuring is a full
-    /// layout pass, so it happens only when that state has moved on.
-    measured: Option<Measured>,
-    /// What the page's scripts were last told about their surroundings.
-    ///
-    /// Telling them means handing the realm a copy of every element's box and
-    /// every element's computed style — two copies, since the realm keeps its
-    /// own — and that is 3.4ms on a long article. It was being done on the way
-    /// into anything that might run a script, which on a window is every frame.
-    told: Option<measure::Told>,
-    /// The last composition, and the state it described.
-    ///
-    /// Separate from `measured` because it holds far more — every page in the
-    /// unit, laid out — and because both halves of a render want it. Measuring
-    /// composed the page and then drawing composed it again, which is two full
-    /// parse-and-cascade passes for one frame.
-    composed: Option<Laid>,
-    /// The Scene that composition paints to, kept until something changes it.
-    ///
-    /// Building it is a walk over every box on the page — 150ms on a long
-    /// article — and a window redraws for reasons that do not change it at all:
-    /// scrolling, or being moved over. Thrown away when the composition is
-    /// rebuilt, and when hovering restyles something.
-    drawn: Option<scene::Scene>,
-    /// What part of the document `drawn` has the text of.
-    ///
-    /// A Scene painted for a window is complete about everything except words
-    /// outside the zone it was painted for — see `paint::Pass`. So it answers
-    /// for another zone only if it already covers it. `None` means it was
-    /// painted whole and answers for anything.
-    drawn_for: Option<scene::Area>,
-    /// Where the mouse is and whether it is pressed. A setting of the Page, so
-    /// it outlives each event the way a real pointer does.
-    pointer: Pointer,
-    /// The pages behind this one, oldest first. What Back walks.
-    visited: Vec<String>,
-    /// The page behind each `<webview>` in this one, by the element holding it.
-    ///
-    /// A whole page, not a frame: its own session, its own DOM, its own realm.
-    /// Kept here so it outlives a draw — a webview that opened its page afresh
-    /// every frame would lose whatever the person using it had done.
-    mounted: HashMap<blitz_dom::NodeId, Mounted>,
-}
-
-/// A page put inside another one, and where it was last drawn.
-struct Mounted {
-    page: PageId,
-    /// What the element asked for. Kept so the page is only sent there once: a
-    /// webview whose page was reloaded whenever it did not match its `src`
-    /// would undo every link the person using it followed.
-    source: crate::blitz::Source,
-    /// The box it was drawn into, so a click in it can be given to it.
-    area: ElementBox,
-}
-
-/// Where the mouse is and whether it is pressed.
-///
-/// Held across calls because entering and leaving an element is a difference
-/// between two of them, which no single call could see.
-#[derive(Clone, Copy, Default)]
-struct Pointer {
-    /// The topmost element under the pointer as of the last move.
-    over: Option<NodeId>,
-    /// What the press landed on, while the button is still down.
-    pressed: Option<NodeId>,
-}
-
-struct Measured {
-    revision: u64,
-    /// The whole Viewport, not the parts of it that seemed to matter.
-    ///
-    /// It used to be a width and a height compared one at a time, and when the
-    /// Viewport gained a zoom the comparison did not: changing it left this
-    /// looking fresh, so the page was drawn bigger without being laid out
-    /// again and nothing reflowed. Holding the value means a field added to it
-    /// is a field this compares by.
-    viewport: Viewport,
-    boxes: toy_browser_engine::Boxes,
-    /// What each element's style computed to, published with the boxes.
-    styles: toy_browser_engine::Styles,
-}
-
-/// A composition, and the state it is only good for.
-///
-/// The revisions are every page in the unit, not just this one: a `<webview>`
-/// whose own document moved on makes the picture around it stale even though
-/// nothing in the host changed.
-struct Laid {
-    unit: blitz::Composed,
-    /// What it was laid out for. The whole Viewport, for the reason
-    /// [`Measured`] gives.
-    viewport: Viewport,
-    revisions: Vec<(PageId, u64)>,
-}
 
 /// Pages, and everything needed to drive them.
 ///
@@ -192,6 +95,14 @@ pub struct Browser {
     /// cascades the whole document again look identical from outside, and cost
     /// about 48ms apart on a real page.
     laid: usize,
+    /// How many times a script forced the document to be laid out again.
+    ///
+    /// Counted for the same reason as `laid`, and it is the sharper number of
+    /// the two: a page that adds an element and then asks how big it is has to
+    /// be laid out as it stands, and a page that builds a list this way asks
+    /// hundreds of times. Shared with the callback that does it, which is
+    /// deliberately given nothing else of this Browser.
+    forced: std::rc::Rc<std::cell::Cell<usize>>,
     /// Whether a page opened from here runs its own scripts.
     ///
     /// A setting of the Browser rather than an argument to [`Self::new_page`]
@@ -211,6 +122,7 @@ impl Browser {
             pages: HashMap::new(),
             next_id: 0,
             laid: 0,
+            forced: std::rc::Rc::new(std::cell::Cell::new(0)),
             scripts: true,
         })
     }
@@ -226,6 +138,16 @@ impl Browser {
     /// worked out.
     pub fn layouts(&self) -> usize {
         self.laid
+    }
+
+    /// How many times a script's own measurement forced one.
+    ///
+    /// The measure of whether a page is paying for the way it builds itself:
+    /// the answer is cached against the document it was asked about, so the
+    /// count is the number of times the page measured *after changing
+    /// something*, not the number of times it measured.
+    pub fn forced_layouts(&self) -> usize {
+        self.forced.get()
     }
 
     /// Opens a page showing `about:blank`, as a fresh tab does.

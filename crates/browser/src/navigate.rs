@@ -137,6 +137,7 @@ impl Browser {
                         self.resources.clone(),
                         target.to_string(),
                         viewport,
+                        std::rc::Rc::clone(&self.forced),
                     )),
                     run_scripts,
                     scheme: viewport.scheme.as_str().to_owned(),

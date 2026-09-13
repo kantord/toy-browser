@@ -110,18 +110,22 @@ pub fn render(args: RenderArgs) -> Result<()> {
             .and_then(|stem| stem.to_str())
             .unwrap_or("page");
 
+        let began = std::time::Instant::now();
         let loaded = browser
             .navigate(&page, url.as_str())
             .map_err(|error| anyhow::anyhow!("loading {}: {error}", input.display()))?;
+        let loading = began.elapsed();
 
         let raster = browser
             .render(&page)
             .with_context(|| format!("rendering {}", input.display()))?;
+        let drawing = began.elapsed() - loading;
         let html = browser.html(&page)?;
         let png_path = write_artifacts(&html, &loaded, &raster, &args.out_dir, stem)?;
 
         println!("{} -> {}", input.display(), png_path.display());
         report(&loaded, &raster, !args.no_scripts);
+        report_time(loading, drawing);
     }
 
     println!(
@@ -167,6 +171,22 @@ fn report(loaded: &Loaded, raster: &toy_browser::Rendered, ran_scripts: bool) {
     report_scripts(loaded, ran_scripts);
     report_output(loaded);
     report_raster(raster);
+}
+
+/// How long the page took, split where the answer usually is.
+///
+/// Worth printing every time rather than behind a flag: the two halves are
+/// measured in completely different things — fetching and running a page's
+/// scripts against drawing what they built — and a page that has become slow
+/// has almost always become slow in one of them. Saying which turns "it is
+/// slow" into a question with somewhere to look.
+fn report_time(loading: std::time::Duration, drawing: std::time::Duration) {
+    println!(
+        "  {:.1}s: load and scripts {:.1}s, layout and paint {:.1}s",
+        (loading + drawing).as_secs_f32(),
+        loading.as_secs_f32(),
+        drawing.as_secs_f32(),
+    );
 }
 
 /// What script the page had, and what became of it.

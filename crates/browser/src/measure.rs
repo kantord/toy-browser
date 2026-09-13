@@ -98,8 +98,9 @@ impl Browser {
             .map(|url| url.to_string())
             .unwrap_or_else(|| "about:blank".to_owned());
         let resources = self.resources.clone();
+        let forced = std::rc::Rc::clone(&self.forced);
         self.engine
-            .set_relayout(session, relayout_with(resources, base, viewport))
+            .set_relayout(session, relayout_with(resources, base, viewport, forced))
     }
 
     /// Hands the page's scripts their surroundings: how big the window is,
@@ -183,6 +184,10 @@ impl Browser {
     }
 }
 
+/// What one forced measurement comes to: where every box ended up, and what
+/// every element computed.
+type Tables = (toy_browser_engine::Boxes, toy_browser_engine::Styles);
+
 /// One way of measuring a document again, holding only what `lay_out` wants.
 ///
 /// Free-standing rather than a method for the reason [`Browser::arm_relayout`]
@@ -192,10 +197,31 @@ pub(crate) fn relayout_with(
     resources: toy_browser_fetch::Resources,
     base: String,
     viewport: Viewport,
+    forced: std::rc::Rc<std::cell::Cell<usize>>,
 ) -> toy_browser_engine::Relayout {
+    // What the last measurement was of, and what it came to.
+    //
+    // A page that measures, then measures again without having changed anything
+    // in between, asks the same question twice — and hundreds of times over a
+    // load, because measuring is how it decides where to put the next thing. On
+    // one real page this was asked 300 times with the same million bytes of
+    // document, each answer costing a full parse and cascade: twenty of the
+    // twenty-three seconds that load took.
+    //
+    // Comparing a megabyte of text is a memcmp; laying it out again is ninety
+    // milliseconds. The comparison is the whole trick.
+    let held: std::cell::RefCell<Option<(String, Tables)>> = std::cell::RefCell::new(None);
     std::rc::Rc::new(move |html: &str| {
-        crate::blitz::lay_out(html, &[], viewport, &base, &resources)
+        if let Some((was, answer)) = held.borrow().as_ref()
+            && was == html
+        {
+            return answer.clone();
+        }
+        forced.set(forced.get() + 1);
+        let answer: Tables = crate::blitz::lay_out(html, &[], viewport, &base, &resources)
             .map(|laid| (laid.boxes(), laid.styles()))
-            .unwrap_or_default()
+            .unwrap_or_default();
+        *held.borrow_mut() = Some((html.to_owned(), answer.clone()));
+        answer
     })
 }
