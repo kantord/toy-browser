@@ -119,6 +119,32 @@ wpt tests="css/CSS2/normal-flow": wpt-image
         -v toy-browser-wpt-target:/repo/target \
         toy-browser-wpt {{ tests }}
 
+# --- accessibility ---
+
+# Build the desktop the a11y test runs on: X, a session bus, the accessibility
+# bus, and this browser compiled inside so its glibc matches the image's.
+#
+# `a11y` depends on this, so editing the Containerfile, the entrypoint, the
+# probe or any Rust source rebuilds it. Running it by hand is only for forcing
+# the issue.
+a11y-image:
+    podman build -t toy-browser-a11y:local \
+        -f {{ justfile_directory() }}/crates/e2e/Containerfile \
+        {{ justfile_directory() }}
+
+# Read the browser the way a screen reader does: from another process, over
+# AT-SPI, with no idea what drew the window.
+#
+# testcontainers speaks the Docker API, so podman has to be listening on one.
+# The socket is started here rather than assumed, because the failure when it is
+# missing is a connection error thirty seconds into a test rather than a
+# sentence about the socket.
+a11y *ARGS: a11y-image
+    -systemctl --user start podman.socket
+    DOCKER_HOST="unix://${XDG_RUNTIME_DIR}/podman/podman.sock" \
+    TESTCONTAINERS_RYUK_DISABLED=true \
+        cargo test -p toy-browser-e2e -- --ignored --nocapture {{ ARGS }}
+
 # --- measuring against a real browser ---
 
 # The corpus: small pages, each isolating one thing, against real Chromium.

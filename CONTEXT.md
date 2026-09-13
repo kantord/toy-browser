@@ -37,6 +37,20 @@ One element's rectangle after a Measure, in CSS pixels from the top-left of the
 document. Elements the layout produced no box for have none, not an empty one.
 _Avoid_: rect, bounds, geometry
 
+**Read**:
+Turning a Document into a Reading: what each element is, what it is called, and
+what can be done to it. A sibling of Render rather than a part of it — the same
+document and the same layout, asked a different question, and the answer is a
+tree rather than pixels.
+_Avoid_: a11y, accessibility pass, semantics
+
+**Reading**:
+The page as a tree of things with names, roles and boxes, which is what a screen
+reader is given. A value: built with no window open, printed, compared, asserted
+on. Handing one to a desktop is a front end's job and needs a window; building
+one needs only a Document.
+_Avoid_: a11y tree, AX tree, semantics tree
+
 **Scene**:
 Everything one picture is made of, as a value rather than as text: the Marks to
 draw, and the Pictures and Faces they name. What a Render produces before there

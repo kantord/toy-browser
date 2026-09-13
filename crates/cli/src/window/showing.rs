@@ -88,6 +88,9 @@ impl Open {
             shown.window.set_title(&format!("toy-browser — {url}"));
             shown.window.request_redraw();
         }
+        // Whatever moved on screen moved in the tree as well. Nothing is built
+        // unless somebody is reading it.
+        self.spoke();
     }
 
     /// Blits the band of the page the window is over.

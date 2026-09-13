@@ -3,7 +3,7 @@
 ```
 crates/cli         CLI, CDP and WebDriver         deps: browser
 crates/browser     pages, elements, measuring,    deps: engine, fetch, rasterizer
-                   painting
+                   painting, reading
 crates/engine      the door                       deps: fetch
 crates/rasterizer  a picture, and pixels of it    deps: resvg, skrifa, image
 crates/fetch       shared remembered bytes        deps: ureq
@@ -116,6 +116,13 @@ element carries a `__tb-key-<id>` class, this layer measures it, and
 
 Measuring is a full layout pass, so it is cached against `(revision, viewport)`.
 A test that evaluates twenty times against a static page lays out once.
+
+**Reading is here for the same reason painting is.** An accessibility tree needs
+roles, names and structure — element knowledge, which the rasterizer deliberately
+does not have — and it needs geometry, which only layout has. Both meet here and
+nowhere else. A `Reading` comes out in AccessKit's vocabulary because that is the
+one every platform's accessibility API is reachable from; nothing in this crate
+talks to any of them. See `docs/accessibility.md`.
 
 **Navigation fails as a reason, not a message.** `NavigationError` says
 `UnsupportedScheme` or `NotFound`; the words a client sees are its protocol's

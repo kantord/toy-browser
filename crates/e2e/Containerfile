@@ -1,0 +1,74 @@
+# A desktop with an accessibility bus on it, and this browser in a window.
+#
+# Not for isolation's sake. The only way to prove a screen reader can read this
+# browser is to put a real one in front of it, and a real one needs a session
+# D-Bus, the AT-SPI bus on top of that, an X server to own the window, and a
+# client library to walk the tree with. None of that is on a build machine and
+# all of it is here.
+#
+# The browser is compiled in here rather than copied in from outside: a binary
+# built on a rolling distro links a glibc newer than any stable base ships, and
+# glibc only promises to work forwards. The build context is the repo root:
+#
+#   podman build -t toy-browser-a11y -f crates/e2e/Containerfile .
+#
+# A sibling of `tests/window/Containerfile`, not a duplicate of it: that one
+# photographs a window and this one reads it. The overlap is Xvfb and the fonts;
+# everything that makes this image interesting is the four packages below.
+
+FROM docker.io/library/rust:1-trixie AS builder
+
+# What winit, softbuffer and the AccessKit adapter need headers for. The last
+# of them is libatspi: the adapter speaks to the bus over D-Bus and does not
+# link it, but `accesskit_unix` still wants the development files present.
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        pkg-config libxkbcommon-dev libwayland-dev libxcb1-dev libfontconfig-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY . .
+
+# The cache mounts are what make building in here bearable. `target/` is one of
+# them, so the binary has to be copied out inside the same RUN — nothing under
+# a cache mount survives into the layer.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/build/target \
+    cargo build --release -p toy-browser-cli \
+    && mkdir -p /artifacts && cp target/release/toy-browser /artifacts/
+
+FROM docker.io/library/debian:trixie-slim
+
+# Four things, and every one of them is load-bearing:
+#
+#   xvfb        a screen for the window to be on
+#   libX*       what winit loads at run time to talk to that screen. It dlopens
+#               them, so a missing one is a message about "xlib's shared
+#               libraries" rather than a link error at build time
+#   dbus-x11    a session bus, which the accessibility bus rides on
+#   at-spi2-core the accessibility bus itself, and the registry an AT talks to
+#   python3-gi + gir1.2-atspi-2.0
+#               a client library, so the probe is thirty lines of Python rather
+#               than a C program with a build step of its own
+#
+# fonts-liberation is here for the same reason the WPT image has it: which fonts
+# are installed decides every line height on every page, so a run here and a run
+# on a laptop are only comparable if they agree about that.
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        xvfb x11-utils \
+        dbus-x11 at-spi2-core \
+        python3 python3-gi gir1.2-atspi-2.0 \
+        libx11-6 libx11-xcb1 libxcursor1 libxrandr2 libxi6 \
+        libxkbcommon0 libxkbcommon-x11-0 libwayland-client0 libfontconfig1 \
+        libxcb1 libxcb-randr0 libxcb-shm0 libxcb-render0 libxcb-xfixes0 \
+        fonts-liberation fontconfig \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /artifacts/toy-browser /usr/local/bin/
+COPY crates/e2e/desktop/ /usr/local/bin/
+RUN chmod +x /usr/local/bin/desktop-up /usr/local/bin/probe
+
+ENV DISPLAY=:99 \
+    SCREEN=1000x800x24 \
+    HOME=/root
+
+ENTRYPOINT ["desktop-up"]

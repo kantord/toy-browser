@@ -1,0 +1,36 @@
+#!/bin/sh
+# Brings up a desktop with an accessibility bus on it, then gets out of the way.
+#
+# Nothing is started here that a test could start for itself, and the browser is
+# not among them: a test says which page it wants and when, and the desktop has
+# to already exist for it to say so.
+set -eu
+
+Xvfb "$DISPLAY" -screen 0 "$SCREEN" -nolisten tcp &
+
+# A mapped X server, not a started one. Xvfb returns from `exec` long before it
+# is listening, and a browser that opens a window against a socket nobody is
+# accepting on dies with a message about the display rather than about the race.
+for _ in $(seq 1 100); do
+    xdpyinfo >/dev/null 2>&1 && break
+    sleep 0.1
+done
+
+# The session bus. Everything else on this desktop is reached through it.
+eval "$(dbus-launch --sh-syntax)"
+export DBUS_SESSION_BUS_ADDRESS
+
+# The accessibility bus, which is a second bus of its own that the session bus
+# hands out the address of. Launched now rather than on demand so that an
+# assistive technology attaching later finds it already there.
+/usr/libexec/at-spi-bus-launcher --launch-immediately &
+
+# An `exec` into a container gets a fresh environment and inherits none of this,
+# so where the buses are has to be written down somewhere both sides can read.
+cat > /tmp/desktop.env <<ENV
+export DISPLAY=$DISPLAY
+export DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS
+ENV
+
+echo "e2e: desktop up"
+exec sleep infinity

@@ -21,6 +21,16 @@ tiny_http = "0.12.0"
 serde = { version = "1.0.229", features = ["derive"] }
 winit = "0.30"
 softbuffer = "0.4"
+# The other half of AccessKit: the one that talks to the desktop. Optional
+# because it is the half with a platform in it — a session bus, an executor and
+# a thread — and a build that only ever renders to a file has nothing to say to
+# any of them. `--no-default-features` leaves the window with no accessibility
+# and the rest of this crate unchanged.
+accesskit_winit = { version = "0.34", optional = true }
+
+[features]
+default = ["a11y"]
+a11y = ["dep:accesskit_winit"]
 
 [dev-dependencies]
 insta = { version = "1.48.0", features = ["yaml"] }

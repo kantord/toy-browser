@@ -113,7 +113,7 @@ fn clipped_away(page: &LaidOut, node: &Node, area: ElementBox) -> bool {
 
 /// Where an element is: the box layout gave it, or the one around what it
 /// holds when layout gave it none.
-pub(super) fn placed(
+pub(crate) fn placed(
     node: &Node,
     x: f32,
     y: f32,
@@ -162,7 +162,7 @@ const NOWHERE: ElementBox = ElementBox {
 /// x=772 running 984px wide, off the side of a 1000px window — and it made the
 /// browser disagree with itself, since the same elements correctly reported no
 /// computed style.
-pub(super) fn rendered(node: &Node) -> bool {
+pub(crate) fn rendered(node: &Node) -> bool {
     node.primary_styles()
         .is_some_and(|style| !style.get_box().display.is_none())
 }

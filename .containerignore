@@ -1,0 +1,7 @@
+# What a container build has no use for. `target` alone is many gigabytes, and
+# a build context is copied to the daemon before a single instruction runs.
+target
+node_modules
+out
+test-results
+.git

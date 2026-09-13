@@ -8,6 +8,7 @@
 mod cdp;
 mod compare;
 mod produce;
+mod reading;
 mod webdriver;
 mod window;
 
@@ -48,10 +49,13 @@ enum Command {
     /// Lay a page out with the browser engine and write the same account of it
     /// the comparison tooling reads from a real browser.
     Layout(LayoutArgs),
+    /// Print what a screen reader would be given: every element on the page,
+    /// what it is, and what it is called.
+    Reading(ReadingArgs),
 }
 
 #[derive(clap::Args)]
-struct BrowseArgs {
+pub struct BrowseArgs {
     /// The page to open.
     #[arg(default_value = "https://news.ycombinator.com/")]
     url: String,
@@ -68,6 +72,36 @@ struct BrowseArgs {
 
     /// Which colour scheme the page is shown in, which decides what
     /// `prefers-color-scheme` matches.
+    #[arg(long, value_parser = scheme, default_value = "light")]
+    scheme: Scheme,
+
+    /// Do not offer the page to the desktop's accessibility services.
+    ///
+    /// They are offered it by default, and the offer costs nothing until an
+    /// assistive technology takes it up. Turn it off for a window nobody is
+    /// looking at — a screenshot harness, a machine with no session bus — where
+    /// reaching for one is a cost with nothing on the other side.
+    #[arg(long)]
+    no_a11y: bool,
+}
+
+#[derive(clap::Args)]
+pub struct ReadingArgs {
+    /// The page to read.
+    url: String,
+
+    #[arg(long, default_value_t = 1000)]
+    width: u32,
+
+    #[arg(long, default_value_t = 800)]
+    height: u32,
+
+    /// Read the markup as parsed, without running the page's scripts.
+    #[arg(long)]
+    no_scripts: bool,
+
+    /// Which colour scheme the page is read in, which decides what
+    /// `prefers-color-scheme` matches — and so what is on the page at all.
     #[arg(long, value_parser = scheme, default_value = "light")]
     scheme: Scheme,
 }
@@ -189,14 +223,9 @@ fn main() -> Result<()> {
             browser.set_scripts(!args.no_scripts);
             webdriver::serve(args.port, browser)
         }
-        Command::Browse(args) => window::open(
-            &args.url,
-            args.width,
-            args.height,
-            !args.no_scripts,
-            args.scheme,
-        ),
+        Command::Browse(args) => window::open(args),
         Command::Layout(args) => produce::layout(args),
+        Command::Reading(args) => reading::read(args),
         Command::Compare(args) => compare::run(
             &args.dir,
             args.top,

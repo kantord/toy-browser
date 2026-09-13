@@ -19,6 +19,7 @@ mod pointer;
 
 mod measure;
 mod page;
+mod reading;
 mod script;
 mod view;
 mod viewport;
@@ -30,23 +31,28 @@ pub(crate) use page::{Laid, Measured, Mounted, Page, Pointer};
 use anyhow::Result;
 use toy_browser_engine::{Engine, Handle, SessionId};
 
-pub use blitz::{LaidOut, lay_out};
-pub use cursor_icon::CursorIcon;
-pub use hovering::Hovering;
-pub use navigate::{Loaded, NavigationError};
 /// The pixel buffer this browser rasterizes into.
 ///
 /// Re-exported rather than left for a caller to depend on: it comes in through
 /// resvg, and a caller that named its own version got a different type for the
 /// same thing. Bridging those meant encoding a PNG and decoding it straight
 /// back, which is a lot of work to change one name into another.
+// The accessibility tree's whole vocabulary — roles, actions, node ids —
+// re-exported so that reading a page does not oblige a caller to depend on
+// AccessKit by name, the way `tiny_skia` is here for pixels.
+pub use accesskit;
+pub use blitz::{LaidOut, lay_out};
+pub use cursor_icon::CursorIcon;
+pub use hovering::Hovering;
+pub use navigate::{Loaded, NavigationError};
+pub use reading::Reading;
 pub use resvg::tiny_skia;
+pub use toy_browser_engine::{Budget, ElementBox, NodeId, Point, ScriptSurvey};
+pub use toy_browser_fetch::{Resources, Url};
 pub use toy_browser_rasterizer::{
     Area, Mark, Rendered, Scene, draw as draw_scene, family, normal_form, pixels as scene_pixels,
     render as render_scene,
 };
-pub use toy_browser_engine::{Budget, ElementBox, NodeId, Point, ScriptSurvey};
-pub use toy_browser_fetch::{Resources, Url};
 pub use viewport::{Scheme, Viewport};
 
 /// A reference handed to a caller.
@@ -75,7 +81,6 @@ pub struct Emitted {
 /// Names one open page.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PageId(u32);
-
 
 /// Pages, and everything needed to drive them.
 ///

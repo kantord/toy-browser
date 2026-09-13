@@ -28,9 +28,9 @@ use crate::Viewport;
 mod agent;
 mod export;
 pub(crate) mod fonts;
-mod geometry;
+pub(crate) mod geometry;
 mod held;
-mod implied;
+pub(crate) mod implied;
 mod net;
 mod order;
 

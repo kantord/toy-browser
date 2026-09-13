@@ -21,7 +21,7 @@ use toy_browser_engine::ElementBox;
 
 /// A rectangle being built up from the pieces that make it.
 #[derive(Clone, Copy)]
-pub(super) struct Around {
+pub(crate) struct Around {
     left: f32,
     top: f32,
     right: f32,
@@ -81,7 +81,7 @@ impl LaidOut {
     /// **Rows and row groups** are structural in a table: the cells are laid
     /// out, and `<tr>` is what they are laid out in. A browser reports a box for
     /// one anyway, so it is the cells it holds.
-    pub(super) fn implied(&self) -> HashMap<NodeId, Vec<Around>> {
+    pub(crate) fn implied(&self) -> HashMap<NodeId, Vec<Around>> {
         let mut found: HashMap<NodeId, Vec<Around>> = HashMap::new();
         self.walk(&mut |node, x, y| {
             if !rendered(node) {

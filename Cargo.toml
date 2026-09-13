@@ -1,5 +1,12 @@
 [workspace]
-members = ["crates/fetch", "crates/rasterizer", "crates/engine", "crates/browser", "crates/cli"]
+members = [
+    "crates/fetch",
+    "crates/rasterizer",
+    "crates/engine",
+    "crates/browser",
+    "crates/cli",
+    "crates/e2e",
+]
 resolver = "3"
 
 [workspace.package]

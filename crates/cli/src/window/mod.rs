@@ -14,6 +14,8 @@ use std::rc::Rc;
 use anyhow::{Context as _, Result};
 use toy_browser::tiny_skia::Pixmap;
 use toy_browser::{Area, Browser, PageId, Resources, Scheme, Viewport};
+
+use crate::BrowseArgs;
 use winit::application::ApplicationHandler;
 use winit::event::{MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -35,32 +37,52 @@ const LADDER: [u16; 17] = [
 /// Which rung [`LADDER`] is unzoomed at.
 const NORMAL: usize = 7;
 
-/// Opens a window showing `url`, and does not return until it is closed.
-pub fn open(url: &str, width: u32, height: u32, scripts: bool, scheme: Scheme) -> Result<()> {
+/// A browser with the page already in it, set up the way the command line
+/// asked for.
+///
+/// Split out for the same reason `produce::prepared` is: what a window *is* and
+/// what one was *asked for* move for different reasons, and a settings-shaped
+/// argument list that grows a flag at a time is how a window ends up taking six
+/// of them.
+fn loaded(args: &BrowseArgs) -> Result<(Browser, PageId)> {
     let mut browser = Browser::new(Resources::new())?;
     // Before the page exists, because a page runs its scripts as it loads and
     // there is no moment afterwards in which to have changed its mind.
-    browser.set_scripts(scripts);
+    browser.set_scripts(!args.no_scripts);
     let page = browser.new_page()?;
     browser.set_viewport(
         &page,
         Viewport {
-            width,
-            scheme,
+            width: args.width,
+            scheme: args.scheme,
             ..Viewport::default()
         },
     );
     browser
-        .navigate(&page, url)
+        .navigate(&page, &args.url)
         .map_err(|error| anyhow::anyhow!("{error}"))?;
+    Ok((browser, page))
+}
 
-    let event_loop = EventLoop::new().context("starting a window system")?;
+/// Opens a window showing the page, and does not return until it is closed.
+pub fn open(args: BrowseArgs) -> Result<()> {
+    let (browser, page) = loaded(&args)?;
+
+    // A loop that can be woken from outside itself, which is what an assistive
+    // technology needs: it attaches on its own schedule, on a thread of its
+    // own, and the answer has to be built here where the browser is.
+    let event_loop = EventLoop::<speaking::Woken>::with_user_event()
+        .build()
+        .context("starting a window system")?;
     event_loop.set_control_flow(ControlFlow::Wait);
     let mut open = Open {
+        proxy: event_loop.create_proxy(),
+        speaking: speaking::Speaking::silent(),
+        a11y: !args.no_a11y,
         browser,
         page,
-        title: url.to_owned(),
-        size: (width, height),
+        title: args.url.clone(),
+        size: (args.width, args.height),
         shown: None,
         painted: None,
         over: None,
@@ -71,7 +93,7 @@ pub fn open(url: &str, width: u32, height: u32, scripts: bool, scheme: Scheme) -
         pinched: 0.0,
         held: ModifiersState::empty(),
         rung: NORMAL,
-        scheme,
+        scheme: args.scheme,
         scrolled: (0.0, 0.0),
         reaches: None,
     };
@@ -121,6 +143,15 @@ struct Open {
     /// How far the page reaches, across and down. Kept because it costs a Scene
     /// to work out and a wheel does not change it.
     reaches: Option<(f32, f32)>,
+    /// What wakes this loop from outside it.
+    proxy: winit::event_loop::EventLoopProxy<speaking::Woken>,
+    /// The desktop's view of the page.
+    speaking: speaking::Speaking,
+    /// Whether to offer one at all. A setting rather than a build: a window
+    /// opened by a test harness that drives pixels has no use for an
+    /// accessibility tree, and attaching to a session bus that is not there is
+    /// a cost with nothing on the other side of it.
+    a11y: bool,
 }
 
 struct Shown {
@@ -128,15 +159,22 @@ struct Shown {
     surface: softbuffer::Surface<Rc<Window>, Rc<Window>>,
 }
 
-impl ApplicationHandler for Open {
+impl ApplicationHandler<speaking::Woken> for Open {
     fn resumed(&mut self, events: &ActiveEventLoop) {
+        // Invisible to begin with, because an accessibility adapter has to be
+        // attached before the window is first shown and says so by panicking.
         let attributes = Window::default_attributes()
             .with_title(format!("toy-browser — {}", self.title))
+            .with_visible(false)
             .with_inner_size(winit::dpi::LogicalSize::new(self.size.0, self.size.1));
         let window = match events.create_window(attributes) {
             Ok(window) => Rc::new(window),
             Err(error) => return eprintln!("could not open a window: {error}"),
         };
+        if self.a11y {
+            self.speaking.attach(events, &window, self.proxy.clone());
+        }
+        window.set_visible(true);
         let context = match softbuffer::Context::new(Rc::clone(&window)) {
             Ok(context) => context,
             Err(error) => return eprintln!("could not reach the display: {error}"),
@@ -187,7 +225,19 @@ impl ApplicationHandler for Open {
         }
     }
 
+    /// What an assistive technology asked for, answered here because this is
+    /// where the browser is.
+    fn user_event(&mut self, _: &ActiveEventLoop, woken: speaking::Woken) {
+        self.woken(woken);
+    }
+
     fn window_event(&mut self, events: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
+        // Before the window makes anything of it, which is the adapter's rule:
+        // it is watching for focus and size, and a resize it learns about after
+        // the fact reports every box on the page in the wrong place.
+        if let Some(shown) = &self.shown {
+            self.speaking.saw(&shown.window, &event);
+        }
         match event {
             WindowEvent::CloseRequested => events.exit(),
             WindowEvent::Resized(size) => self.resized(size.width, size.height),
@@ -224,4 +274,6 @@ impl ApplicationHandler for Open {
 
 mod acts;
 mod blit;
+mod reading;
 mod showing;
+mod speaking;

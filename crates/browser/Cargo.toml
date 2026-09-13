@@ -7,6 +7,10 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+# The accessibility tree, as data and nothing else. This is the half of
+# AccessKit with no platform in it — no bus, no adapter, no thread — so a
+# Reading can be built and looked at by anything, including a test.
+accesskit = "0.25"
 blitz-dom = { version = "0.3.0-beta.2", features = ["floats"] }
 blitz-html = "0.3.0-beta.2"
 blitz-traits = "0.3.0-beta.2"
