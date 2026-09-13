@@ -12,6 +12,7 @@
 
 pub mod blitz;
 mod dom;
+mod drawing;
 mod frames;
 mod hovering;
 mod keyboard;
@@ -42,6 +43,8 @@ use toy_browser_engine::{Engine, Handle, SessionId};
 // re-exported so that reading a page does not oblige a caller to depend on
 // AccessKit by name, the way `tiny_skia` is here for pixels.
 pub use accesskit;
+// The rasterizer entire, so that a front end can start one without naming a
+// crate this one already depends on.
 pub use blitz::{LaidOut, lay_out};
 pub use cursor_icon::CursorIcon;
 pub use hovering::Hovering;
@@ -51,6 +54,7 @@ pub use reading::Reading;
 pub use resvg::tiny_skia;
 pub use toy_browser_engine::{Budget, ElementBox, NodeId, Point, ScriptSurvey};
 pub use toy_browser_fetch::{Resources, Url};
+pub use toy_browser_rasterizer as rasterizer;
 pub use toy_browser_rasterizer::{
     Area, Ink, Mark, Rendered, Scene, draw as draw_scene, family, normal_form,
     pixels as scene_pixels, render as render_scene,
@@ -116,6 +120,10 @@ pub struct Browser {
     /// CDP or WebDriver client opens its own, and a front end told to keep
     /// scripts off has to be able to say so once rather than on each.
     scripts: bool,
+    /// Where this browser's pixels come from: here, or a rasterizer on a
+    /// socket. Here unless something asks otherwise — see
+    /// [`Self::draw_elsewhere`].
+    drawing: crate::drawing::Drawing,
 }
 
 impl Browser {
@@ -130,6 +138,7 @@ impl Browser {
             laid: 0,
             forced: std::rc::Rc::new(std::cell::Cell::new(0)),
             scripts: true,
+            drawing: crate::drawing::Drawing::default(),
         })
     }
 
@@ -211,6 +220,21 @@ impl Browser {
     ///
     /// Does not reach back to pages already open; [`Self::set_run_scripts`] is
     /// the one that changes a page's mind.
+    /// Draws through a rasterizer in another process, starting one if nobody
+    /// else has.
+    ///
+    /// Worth it for a window and not for a single render: connecting costs a
+    /// process start the first time and every typeface the first frame, and
+    /// both are repaid only by the frames after them. What it buys is the
+    /// thread — a page that takes a second and a half to draw takes it
+    /// somewhere other than where the mouse is answered.
+    pub fn draw_elsewhere(&mut self, socket: Option<&std::path::Path>) -> Result<()> {
+        let socket = socket.map_or_else(toy_browser_rasterizer::wire::default_socket, Into::into);
+        let client = crate::drawing::reached(&socket)?;
+        self.drawing = crate::drawing::Drawing::Elsewhere(Box::new(client));
+        Ok(())
+    }
+
     pub fn set_scripts(&mut self, scripts: bool) {
         self.scripts = scripts;
     }

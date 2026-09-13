@@ -33,103 +33,18 @@ use std::collections::BTreeMap;
 
 mod band;
 mod draw;
+mod named;
 mod raster;
 mod shapes;
 mod svg;
 mod values;
+pub mod wire;
 
 pub use draw::draw;
-pub use raster::{Rendered, pixels, render};
+pub use named::{Digest, Face, Format, Picture};
+pub use raster::{Rendered, pixels, render, written};
 pub use svg::{export, family, normal_form};
 pub use values::{Area, Corners, Glyph, Ink, Paint, Shadow, Stop, Tiles};
-
-/// Bytes named by their own content.
-///
-/// Two Scenes that fetched the same image agree about it without either knowing
-/// where the other got it, which is what makes a Scene something that could be
-/// written out and read back later.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct Digest(u128);
-
-impl Digest {
-    pub fn of(bytes: &[u8]) -> Self {
-        Self(xxhash_rust::xxh3::xxh3_128(bytes))
-    }
-}
-
-impl std::fmt::Display for Digest {
-    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(out, "{:032x}", self.0)
-    }
-}
-
-/// An image a Scene draws, as the bytes that were fetched.
-#[derive(Clone, PartialEq, Debug)]
-pub struct Picture {
-    pub bytes: std::sync::Arc<[u8]>,
-    pub format: Format,
-}
-
-/// What kind of image the bytes are, sniffed rather than taken from the URL.
-///
-/// A server that mislabels a PNG is a server this browser can still render.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Format {
-    Png,
-    Jpeg,
-    Gif,
-    Webp,
-    Svg,
-}
-
-impl Format {
-    /// What these bytes actually are, by their leading bytes.
-    pub fn sniff(bytes: &[u8]) -> Option<Self> {
-        const LEADING: &[(&[u8], Format)] = &[
-            (b"\x89PNG\r\n\x1a\n", Format::Png),
-            (b"\xff\xd8\xff", Format::Jpeg),
-            (b"GIF87a", Format::Gif),
-            (b"GIF89a", Format::Gif),
-        ];
-        LEADING
-            .iter()
-            .find(|(magic, _)| bytes.starts_with(magic))
-            .map(|(_, format)| *format)
-            .or_else(|| is_webp(bytes).then_some(Self::Webp))
-            .or_else(|| looks_like_svg(bytes).then_some(Self::Svg))
-    }
-
-    /// The media type, for the one place bytes have to be spelled out.
-    pub fn media_type(self) -> &'static str {
-        match self {
-            Self::Png => "image/png",
-            Self::Jpeg => "image/jpeg",
-            Self::Gif => "image/gif",
-            Self::Webp => "image/webp",
-            Self::Svg => "image/svg+xml",
-        }
-    }
-}
-
-/// WebP is the one format here whose mark is not at the very front: the length
-/// of the file sits between the container's name and the format's.
-fn is_webp(bytes: &[u8]) -> bool {
-    bytes.len() > 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP"
-}
-
-/// SVG has no magic number, so this is a guess — but only ever a last one,
-/// after every format that does have one has been ruled out.
-fn looks_like_svg(bytes: &[u8]) -> bool {
-    let head = &bytes[..bytes.len().min(1024)];
-    let text = String::from_utf8_lossy(head);
-    text.contains("<svg") || text.trim_start().starts_with("<?xml")
-}
-
-/// The exact font glyphs are drawn with, as bytes.
-#[derive(Clone, PartialEq, Debug)]
-pub struct Face {
-    pub bytes: std::sync::Arc<[u8]>,
-}
 
 /// One thing drawn.
 ///
@@ -139,7 +54,7 @@ pub struct Face {
 /// the output be traced back to whatever drew it, which is the property that
 /// makes a rendering difference readable as *this thing is filled wrong* rather
 /// than as a percentage of pixels. The browser above this puts a node id there.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum Mark {
     /// An area of flat colour: a background, a side of a border, an underline.
     ///
@@ -210,7 +125,7 @@ pub enum Mark {
 /// The tables are sorted maps so that the same Scene writes down the same way
 /// twice — a Scene that serialised differently on each run would be no use for
 /// comparing anything, which is most of what this project does with them.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Scene {
     pub marks: Vec<Mark>,
     pub pictures: BTreeMap<Digest, Picture>,
@@ -264,7 +179,63 @@ impl Default for Scene {
     }
 }
 
+/// What a Scene comes to, counted separately for the two halves that behave
+/// entirely differently.
+///
+/// The marks are small, many, and different every frame. The bytes — pictures
+/// and faces — are large, few, and the *same* every frame: one font file is
+/// megabytes and is the same font file it was last time. Anything that carries
+/// a Scene anywhere has to treat the two differently or carry a typeface over a
+/// socket sixty times a second.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Weight {
+    pub marks: usize,
+    pub pictures: usize,
+    pub picture_bytes: usize,
+    pub faces: usize,
+    pub face_bytes: usize,
+}
+
+impl std::fmt::Display for Weight {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let kb = |bytes: usize| bytes as f32 / 1024.0;
+        write!(
+            f,
+            "{} marks, {} pictures ({:.0}kB), {} faces ({:.0}kB)",
+            self.marks,
+            self.pictures,
+            kb(self.picture_bytes),
+            self.faces,
+            kb(self.face_bytes),
+        )
+    }
+}
+
 impl Scene {
+    /// What this Scene comes to: how many marks, and how many bytes the things
+    /// they name weigh.
+    ///
+    /// Marks are counted whole rather than one deep — a Clip holds its own —
+    /// because what a caller wants to know is how many things are drawn.
+    pub fn weight(&self) -> Weight {
+        fn count(marks: &[Mark]) -> usize {
+            marks
+                .iter()
+                .map(|mark| match mark {
+                    Mark::Clip { marks, .. } => 1 + count(marks),
+                    _ => 1,
+                })
+                .sum()
+        }
+        Weight {
+            marks: count(&self.marks),
+            pictures: self.pictures.len(),
+            picture_bytes: self.pictures.values().map(|it| it.bytes.len()).sum(),
+            faces: self.faces.len(),
+            face_bytes: self.faces.values().map(|it| it.bytes.len()).sum(),
+        }
+    }
+
     /// The size the rasterizer draws this at.
     pub fn drawn(&self) -> (u32, u32) {
         let sized = |css: u32| ((css as f32 * self.scale).round() as u32).max(1);

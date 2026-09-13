@@ -52,6 +52,13 @@ enum Command {
     /// Print what a screen reader would be given: every element on the page,
     /// what it is, and what it is called.
     Reading(ReadingArgs),
+    /// Draw Scenes for anyone who connects, until stopped.
+    ///
+    /// The rasterizer on a socket, which `--raster` draws through. One of these
+    /// serves every window, so they share a copy of each typeface and a page
+    /// that takes a second to draw takes it off the thread a window answers the
+    /// mouse from.
+    Rasterize(RasterizeArgs),
 }
 
 #[derive(clap::Args)]
@@ -75,6 +82,15 @@ pub struct BrowseArgs {
     #[arg(long, value_parser = scheme, default_value = "light")]
     scheme: Scheme,
 
+    /// Draw through a rasterizer in another process, starting one if nobody
+    /// has.
+    ///
+    /// One of them serves every window, so they share a copy of each typeface
+    /// and a page that takes a second to draw takes it off the thread this
+    /// window answers the mouse from. Give a path to name the socket.
+    #[arg(long, value_name = "SOCKET", num_args = 0..=1, default_missing_value = "")]
+    raster: Option<String>,
+
     /// Do not offer the page to the desktop's accessibility services.
     ///
     /// They are offered it by default, and the offer costs nothing until an
@@ -83,6 +99,13 @@ pub struct BrowseArgs {
     /// reaching for one is a cost with nothing on the other side.
     #[arg(long)]
     no_a11y: bool,
+}
+
+#[derive(clap::Args)]
+pub struct RasterizeArgs {
+    /// Where to listen. Defaults to one socket per user, under the run-time
+    /// directory — what `--raster` looks for when it is given no path.
+    socket: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -168,6 +191,11 @@ pub struct RenderArgs {
     #[arg(long)]
     no_scripts: bool,
 
+    /// Draw through a rasterizer in another process, starting one if nobody
+    /// has. See `browse --raster`.
+    #[arg(long, value_name = "SOCKET", num_args = 0..=1, default_missing_value = "")]
+    raster: Option<String>,
+
     /// A script to run in the page before any of its own, given as a file.
     ///
     /// What a debugger is, without a debugger: wrap what a page reaches for,
@@ -208,6 +236,23 @@ struct ServeArgs {
     no_scripts: bool,
 }
 
+/// The rasterizer, listening.
+///
+/// A subcommand of the browser rather than a binary of its own, and that is
+/// not only tidiness: the browser starts one by running *its own executable*,
+/// so the two ends of the socket are the same build and cannot disagree about
+/// what a Mark is.
+fn rasterize(args: RasterizeArgs) -> Result<()> {
+    let socket = args
+        .socket
+        .unwrap_or_else(toy_browser::rasterizer::wire::default_socket);
+    if let Some(parent) = socket.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    println!("rasterizing on {}", socket.display());
+    toy_browser::rasterizer::wire::serve(&socket)
+}
+
 fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Render(args) => produce::render(args),
@@ -226,6 +271,7 @@ fn main() -> Result<()> {
         Command::Browse(args) => window::open(args),
         Command::Layout(args) => produce::layout(args),
         Command::Reading(args) => reading::read(args),
+        Command::Rasterize(args) => rasterize(args),
         Command::Compare(args) => compare::run(
             &args.dir,
             args.top,

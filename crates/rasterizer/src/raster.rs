@@ -24,6 +24,10 @@ pub struct Rendered {
     /// file opens and shows the page.
     pub svg: String,
     pub png: Vec<u8>,
+    /// What the Scene that produced these came to. Carried rather than
+    /// recomputed, because the caller that wants it has thrown the Scene away
+    /// by the time it has this.
+    pub weight: crate::Weight,
     /// Set when every pixel is identical, which is how a page that needed
     /// JavaScript announces that nothing ran.
     pub uniform_color: Option<[u8; 4]>,
@@ -45,11 +49,21 @@ pub fn pixels(scene: &Scene) -> Result<tiny_skia::Pixmap> {
 }
 
 pub fn render(scene: &Scene) -> Result<Rendered> {
-    let pixmap = pixels(scene)?;
+    written(scene, pixels(scene)?)
+}
+
+/// The same, from pixels somebody else drew.
+///
+/// What a browser drawing through a rasterizer in another process needs: the
+/// pixels came back over a socket, and the PNG and the SVG are written from
+/// them here rather than sent as well. Encoding a PNG is not the expensive part
+/// and the SVG is written from the Scene, which this end already has.
+pub fn written(scene: &Scene, pixmap: tiny_skia::Pixmap) -> Result<Rendered> {
     let png = pixmap.encode_png().context("encoding PNG")?;
     Ok(Rendered {
         uniform_color: uniform_color(&pixmap),
         svg: super::export(scene),
+        weight: scene.weight(),
         png,
     })
 }

@@ -58,6 +58,12 @@ fn loaded(args: &BrowseArgs) -> Result<(Browser, PageId)> {
             ..Viewport::default()
         },
     );
+    // Before the page is loaded, so the first frame is already drawn wherever
+    // every frame after it will be.
+    if let Some(socket) = &args.raster {
+        let named = (!socket.is_empty()).then(|| std::path::Path::new(socket));
+        browser.draw_elsewhere(named)?;
+    }
     browser
         .navigate(&page, &args.url)
         .map_err(|error| anyhow::anyhow!("{error}"))?;

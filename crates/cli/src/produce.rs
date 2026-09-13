@@ -89,6 +89,10 @@ fn prepared(args: &RenderArgs, resources: Resources) -> Result<(Browser, PageId)
         },
     );
     browser.set_run_scripts(&page, !args.no_scripts);
+    if let Some(socket) = &args.raster {
+        let named = (!socket.is_empty()).then(|| std::path::Path::new(socket));
+        browser.draw_elsewhere(named)?;
+    }
     // Before the page's own scripts, which is the point of it: a tracer has to
     // be in place before there is anything to trace.
     for path in &args.init_script {
@@ -222,6 +226,10 @@ fn report_output(loaded: &Loaded) {
 /// What came out the other end. A page that needed script it did not get
 /// renders as one flat color.
 fn report_raster(raster: &toy_browser::Rendered) {
+    // What the Scene came to, split the way it behaves: the marks are many,
+    // small and new every frame; the bytes are few, large and the same ones as
+    // last time.
+    println!("  scene: {}", raster.weight);
     if let Some([r, g, b, a]) = raster.uniform_color {
         println!("  blank: every pixel is rgba({r}, {g}, {b}, {a})");
     }

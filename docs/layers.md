@@ -95,6 +95,20 @@ browser above puts a node id there.
 Knows nothing about documents, elements or styles, and was made a crate so that
 stays true by compilation rather than by care.
 
+**And it will draw one for somebody else.** `toy-browser rasterize` is the same
+rasterizer listening on a Unix socket; `browse --raster` draws through it,
+starting one if nobody has. That
+is possible only because a Scene carries everything it needs — there is nothing
+in one to resolve, so the far end needs to know nothing about where it came
+from — and affordable only because of the Digest: a Scene is a few thousand
+marks and several megabytes of typeface, the typeface is the same one it was
+last frame, so the marks cross every time and the bytes cross once.
+
+Measured: building a Scene costs 4ms on Hacker News and 19ms on a long
+Wikipedia article, and *drawing* it costs 120ms and 1.5 seconds. That second is
+spent on the thread the page's JavaScript runs on and its window answers the
+mouse from. See `docs/rasterizing-elsewhere.md`.
+
 ## browser — pages
 
 Pages, navigation, elements, measuring, painting. Built entirely out of the

@@ -1,7 +1,9 @@
 //! What a Mark is made of.
 //!
 //! Geometry and colour, with no drawing in them and no knowledge of how they
-//! are written down. Split from the Marks themselves because these change when
+//! are written down — except that they can be, which is what the serde derives
+//! are for: a Scene that could not be written down could not be handed to a
+//! rasterizer in another process. See `wire.rs`. Split from the Marks themselves because these change when
 //! a Mark gains a way of being *described* — a rounding, a gradient, a shadow —
 //! rather than when the Scene gains a new kind of Mark.
 
@@ -10,7 +12,7 @@
 /// Not a Box: a Box is one element's rectangle after a Measure, and a Mark need
 /// not belong to an element at all — the paper a page is drawn on belongs to
 /// none.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Area {
     pub x: f32,
     pub y: f32,
@@ -32,7 +34,7 @@ impl Area {
 ///
 /// Four rather than one because a page that rounds only the top of a box — a
 /// tab, a card header — is ordinary, and one radius could not say it.
-#[derive(Clone, Copy, PartialEq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Corners {
     pub top_left: f32,
     pub top_right: f32,
@@ -83,7 +85,7 @@ impl Corners {
 /// Text is always flat, so this is only on a Fill: a gradient is a property of
 /// an area rather than of a colour, and folding it into [`Paint`] would put a
 /// list of stops on every glyph that will never have one.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum Ink {
     Flat(Paint),
     /// A line of colour across the area, at `angle` degrees clockwise from
@@ -106,7 +108,7 @@ pub enum Ink {
 /// One value rather than four fields on the variant, because they are only ever
 /// read together: every one of them is needed to say where a single tile goes,
 /// and none of them means anything without the others.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Tiles {
     pub picture: super::Digest,
     /// Where the first tile's top-left corner sits, in document coordinates.
@@ -131,7 +133,7 @@ impl Ink {
 }
 
 /// One colour along a gradient, at a fraction of the way across it.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Stop {
     pub at: f32,
     pub paint: Paint,
@@ -144,7 +146,7 @@ pub struct Stop {
 /// carrying a filter chain, which is more machinery than the difference has so
 /// far been worth. `spread` has no equivalent in what draws this and is left
 /// out for the same reason.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Shadow {
     pub across: f32,
     pub down: f32,
@@ -154,7 +156,7 @@ pub struct Shadow {
 }
 
 /// A colour to fill with.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Paint {
     pub red: u8,
     pub green: u8,
@@ -174,7 +176,7 @@ pub struct Paint {
 /// text a second time. Handing a rasterizer the characters instead meant it
 /// re-derived every glyph on every frame — 29ms of a 30ms parse on one article,
 /// to arrive at what parley had already worked out.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Glyph {
     /// The face's own number for it. Meaningless without the Face, which is
     /// why the mark names one.

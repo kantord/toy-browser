@@ -78,7 +78,8 @@ impl Browser {
     pub fn pixels(&mut self, page: &PageId) -> Result<crate::tiny_skia::Pixmap> {
         self.sync(page)?;
         let viewport = self.viewport(page);
-        toy_browser_rasterizer::pixels(&self.painted(page, viewport, None)?)
+        let scene = self.painted(page, viewport, None)?;
+        self.drawing.pixels(&scene)
     }
 
     /// One screenful of the page, from `top` down.
@@ -105,7 +106,7 @@ impl Browser {
             .ok_or_else(|| anyhow::anyhow!("no such page"))?;
         let strip = whole.over(zone);
         let cut = clock.elapsed();
-        let pixels = toy_browser_rasterizer::pixels(&strip);
+        let pixels = self.drawing.pixels(&strip);
         // `TOY_BROWSER_TRACE_FRAME=1` says where a frame went. The four costs
         // are separable and only one of them is the drawing: measuring the page
         // again, painting the Scene, cutting the band out of it, and filling
@@ -200,8 +201,25 @@ impl Browser {
     }
 
     /// Renders the page as a Scene and rasterizes it.
+    ///
+    /// `TOY_BROWSER_TRACE_FRAME=1` splits the two, which is the one number that
+    /// says whether drawing a page is mostly deciding what to draw or mostly
+    /// drawing it. They move for entirely different reasons and only one of
+    /// them is the rasterizer's.
     fn draw(&mut self, page: &PageId, viewport: Viewport) -> Result<Rendered> {
-        toy_browser_rasterizer::render(&self.painted(page, viewport, None)?)
+        let clock = std::time::Instant::now();
+        let scene = self.painted(page, viewport, None)?;
+        let painted = clock.elapsed();
+        let drawn = toy_browser_rasterizer::written(&scene, self.drawing.pixels(&scene)?)?;
+        if std::env::var_os("TOY_BROWSER_TRACE_FRAME").is_some() {
+            eprintln!(
+                "render  paint {:>7.1}ms  rasterize {:>7.1}ms  ({})",
+                painted.as_secs_f32() * 1000.0,
+                (clock.elapsed() - painted).as_secs_f32() * 1000.0,
+                drawn.weight,
+            );
+        }
+        Ok(drawn)
     }
 
     /// The Scene this page paints to, for anything that wants to measure it.
