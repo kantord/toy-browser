@@ -9,7 +9,7 @@
 
 use blitz_dom::{Node, NodeId};
 
-use crate::scene::{Area, Corners, Ink, Mark, Shadow};
+use toy_browser_rasterizer::{Area, Corners, Ink, Mark, Shadow};
 
 use super::channels;
 use super::phases::Phases;
@@ -40,7 +40,7 @@ pub(super) fn background(node: &Node, area: Area, backdrop: Option<Ink>) -> Vec<
         shadow,
         area,
         ink,
-        node: Some(ids::raw(node.id)),
+        from: Some(ids::raw(node.id)),
     };
     // The colour, then whatever is laid over it. Two fills rather than one,
     // because CSS paints the picture *over* the colour and a single ink could
@@ -97,7 +97,7 @@ pub(super) fn cut(node: &Node, id: NodeId, at: (f32, f32), inside: Phases) -> Ph
         vec![Mark::Clip {
             to: Area { x, y, ..to },
             marks,
-            node: Some(ids::raw(id)),
+            from: Some(ids::raw(id)),
         }]
     })
 }
@@ -178,7 +178,7 @@ pub(super) fn gradient(style: &style::properties::ComputedValues) -> Option<Ink>
                 GenericGradientItem::InterpolationHint(_) => return None,
             };
             let [red, green, blue, alpha] = *style.resolve_color(colour).raw_components();
-            Some(crate::scene::Stop {
+            Some(toy_browser_rasterizer::Stop {
                 at,
                 paint: channels(red, green, blue, alpha),
             })

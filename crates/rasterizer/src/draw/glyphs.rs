@@ -19,7 +19,7 @@ use skrifa::{FontRef, MetadataProvider};
 
 use super::atlas::{self, Cast, Cell, PHASES};
 use super::{Hand, Onto, colour};
-use crate::scene::{Digest, Face, Glyph, Paint};
+use crate::{Digest, Face, Glyph, Paint};
 
 /// Whether text under this matrix can be stamped rather than filled.
 ///

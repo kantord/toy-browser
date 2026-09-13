@@ -44,7 +44,7 @@ fn kept(marks: &[Mark], zone: &Area) -> Vec<Mark> {
     marks
         .iter()
         .filter_map(|mark| match mark {
-            Mark::Clip { to, marks, node } => {
+            Mark::Clip { to, marks, from } => {
                 let inside = kept(marks, zone);
                 // The clip itself has to be within the zone as well: marks
                 // inside it are already cut to it, so a clip that is nowhere
@@ -53,7 +53,7 @@ fn kept(marks: &[Mark], zone: &Area) -> Vec<Mark> {
                 shows.then_some(Mark::Clip {
                     to: *to,
                     marks: inside,
-                    node: *node,
+                    from: *from,
                 })
             }
             // A matrix can put its contents anywhere, so what is inside one is

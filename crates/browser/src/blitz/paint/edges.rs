@@ -23,7 +23,7 @@
 use blitz_dom::Node;
 use style::values::computed::BorderStyle;
 
-use crate::scene::{Area, Corners, Ink, Mark};
+use toy_browser_rasterizer::{Area, Corners, Ink, Mark};
 
 use super::channels;
 use toy_browser_engine::ids;
@@ -68,7 +68,7 @@ pub(super) fn of(node: &Node, x: f32, y: f32) -> Vec<Mark> {
                 shadow: None,
                 area: side.area,
                 ink: Ink::Flat(channels(red, green, blue, alpha)),
-                node: Some(ids::raw(node.id)),
+                from: Some(ids::raw(node.id)),
             }
         })
         .collect()

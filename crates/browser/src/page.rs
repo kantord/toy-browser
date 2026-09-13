@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use crate::{PageId, Viewport, blitz, measure, scene};
+use crate::{PageId, Viewport, blitz, measure};
 use toy_browser_engine::{ElementBox, NodeId, SessionId};
 
 /// One navigable thing.
@@ -45,14 +45,14 @@ pub(crate) struct Page {
     /// article — and a window redraws for reasons that do not change it at all:
     /// scrolling, or being moved over. Thrown away when the composition is
     /// rebuilt, and when hovering restyles something.
-    pub(crate) drawn: Option<scene::Scene>,
+    pub(crate) drawn: Option<toy_browser_rasterizer::Scene>,
     /// What part of the document `drawn` has the text of.
     ///
     /// A Scene painted for a window is complete about everything except words
     /// outside the zone it was painted for — see `paint::Pass`. So it answers
     /// for another zone only if it already covers it. `None` means it was
     /// painted whole and answers for anything.
-    pub(crate) drawn_for: Option<scene::Area>,
+    pub(crate) drawn_for: Option<toy_browser_rasterizer::Area>,
     /// Where the mouse is and whether it is pressed. A setting of the Page, so
     /// it outlives each event the way a real pointer does.
     pub(crate) pointer: Pointer,

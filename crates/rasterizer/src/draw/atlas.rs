@@ -21,7 +21,7 @@ use std::rc::Rc;
 
 use resvg::tiny_skia::{self, Pixmap, Transform};
 
-use crate::scene::Digest;
+use crate::Digest;
 
 /// How many places across a pixel a glyph may start.
 ///

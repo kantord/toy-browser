@@ -13,7 +13,7 @@
 use blitz_dom::{Node, NodeId};
 
 use crate::blitz::LaidOut;
-use crate::scene::{Area, Corners, Ink, Mark};
+use toy_browser_rasterizer::{Area, Corners, Ink, Mark};
 use toy_browser_engine::ids;
 
 use super::placed::Placed;
@@ -61,7 +61,7 @@ pub(super) fn behind(page: &LaidOut, placed: &Placed<'_>) -> Option<Mark> {
         ink: Ink::Flat(super::channels(red, green, blue, alpha)),
         corners: Corners::NONE,
         shadow: None,
-        node: Some(ids::raw(owner)),
+        from: Some(ids::raw(owner)),
     })
 }
 
@@ -142,7 +142,7 @@ struct Struck {
     width: f32,
     thick: f32,
     baseline: f32,
-    paint: crate::scene::Paint,
+    paint: toy_browser_rasterizer::Paint,
     owner: NodeId,
 }
 
@@ -159,7 +159,7 @@ impl Struck {
             ink: Ink::Flat(self.paint),
             corners: Corners::NONE,
             shadow: None,
-            node: Some(ids::raw(self.owner)),
+            from: Some(ids::raw(self.owner)),
         }
     }
 }

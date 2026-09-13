@@ -16,7 +16,7 @@
 
 use blitz_dom::Node;
 
-use crate::scene::Mark;
+use toy_browser_rasterizer::Mark;
 
 /// Marks gathered by the pass they belong to.
 #[derive(Default)]

@@ -1,0 +1,22 @@
+[package]
+name = "toy-browser-rasterizer"
+description = "A picture as a value, and the two ways of writing one down: pixels and SVG."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+base64 = "0.22"
+# Glyph outlines, so a run of text is drawn from the same shaping the caller
+# already did rather than shaped a second time here.
+skrifa = "0.44"
+# The rasterizer proper, and the SVG reader used to check what was written.
+resvg = "0.48.1"
+# Decoding a Picture's bytes, whatever format they arrived in.
+image = { version = "0.25.6", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+# What names a Picture and a Face: bytes named by their own content.
+xxhash-rust = { version = "0.8.18", features = ["xxh3"] }
+
+[lints]
+workspace = true

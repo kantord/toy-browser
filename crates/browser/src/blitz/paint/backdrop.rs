@@ -8,7 +8,7 @@
 //! place a picture rather than when fetching does.
 
 use crate::blitz::LaidOut;
-use crate::scene::{Ink, Tiles};
+use toy_browser_rasterizer::{Ink, Tiles};
 
 use super::pictures::known;
 

@@ -15,7 +15,7 @@ impl crate::Page {
     /// A Scene painted whole answers for anything. One painted for a window
     /// answers only where it has the words: outside the zone it was painted
     /// for, the text is simply not in it.
-    fn covers(&self, wanted: &crate::scene::Area) -> bool {
+    fn covers(&self, wanted: &toy_browser_rasterizer::Area) -> bool {
         if self.drawn.is_none() {
             return false;
         }
@@ -78,7 +78,7 @@ impl Browser {
     pub fn pixels(&mut self, page: &PageId) -> Result<crate::tiny_skia::Pixmap> {
         self.sync(page)?;
         let viewport = self.viewport(page);
-        crate::scene::pixels(&self.painted(page, viewport, None)?)
+        toy_browser_rasterizer::pixels(&self.painted(page, viewport, None)?)
     }
 
     /// One screenful of the page, from `top` down.
@@ -91,7 +91,7 @@ impl Browser {
     pub fn over(
         &mut self,
         page: &PageId,
-        zone: crate::scene::Area,
+        zone: toy_browser_rasterizer::Area,
     ) -> Result<crate::tiny_skia::Pixmap> {
         let clock = std::time::Instant::now();
         self.sync(page)?;
@@ -105,7 +105,7 @@ impl Browser {
             .ok_or_else(|| anyhow::anyhow!("no such page"))?;
         let strip = whole.over(zone);
         let cut = clock.elapsed();
-        let pixels = crate::scene::pixels(&strip);
+        let pixels = toy_browser_rasterizer::pixels(&strip);
         // `TOY_BROWSER_TRACE_FRAME=1` says where a frame went. The four costs
         // are separable and only one of them is the drawing: measuring the page
         // again, painting the Scene, cutting the band out of it, and filling
@@ -130,7 +130,7 @@ impl Browser {
     ///
     /// For a zone a windowful bigger than the window on every side, so that
     /// scrolling a little does not mean painting again.
-    fn repainted(&mut self, page: &PageId, wanted: crate::scene::Area) -> Result<()> {
+    fn repainted(&mut self, page: &PageId, wanted: toy_browser_rasterizer::Area) -> Result<()> {
         if self
             .pages
             .get(page)
@@ -138,7 +138,7 @@ impl Browser {
         {
             return Ok(());
         }
-        let zone = crate::scene::Area {
+        let zone = toy_browser_rasterizer::Area {
             x: wanted.x - wanted.width,
             y: wanted.y - wanted.height,
             width: wanted.width * 3.0,
@@ -178,7 +178,7 @@ impl Browser {
         // Scene and the Scene is what holds the answer.
         self.over(
             page,
-            crate::scene::Area {
+            toy_browser_rasterizer::Area {
                 x: 0.0,
                 y: 0.0,
                 width: 1.0,
@@ -201,14 +201,14 @@ impl Browser {
 
     /// Renders the page as a Scene and rasterizes it.
     fn draw(&mut self, page: &PageId, viewport: Viewport) -> Result<Rendered> {
-        crate::scene::render(&self.painted(page, viewport, None)?)
+        toy_browser_rasterizer::render(&self.painted(page, viewport, None)?)
     }
 
     /// The Scene this page paints to, for anything that wants to measure it.
     ///
     /// Whole, not a window's worth: a caller measuring the picture is asking
     /// about the page rather than about what can be seen of it.
-    pub fn scene_for(&mut self, page: &PageId) -> Result<crate::scene::Scene> {
+    pub fn scene_for(&mut self, page: &PageId) -> Result<toy_browser_rasterizer::Scene> {
         let viewport = self.viewport(page);
         self.painted(page, viewport, None)
     }
@@ -217,8 +217,8 @@ impl Browser {
         &mut self,
         page: &PageId,
         viewport: Viewport,
-        visible: Option<crate::scene::Area>,
-    ) -> Result<crate::scene::Scene> {
+        visible: Option<toy_browser_rasterizer::Area>,
+    ) -> Result<toy_browser_rasterizer::Scene> {
         // The same composition measuring used, not a second one.
         self.laid_out(page, viewport)?;
         let unit = self

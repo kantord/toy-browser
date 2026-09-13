@@ -7,7 +7,7 @@ use std::collections::HashSet;
 
 use blitz_dom::NodeId;
 
-use crate::scene::{Area, Scene};
+use toy_browser_rasterizer::{Area, Scene};
 
 /// One painting pass: where the marks go, what it has learned on the way, and
 /// what it is allowed to leave out.

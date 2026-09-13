@@ -20,7 +20,7 @@ use blitz_dom::{Node, NodeId};
 
 use super::placed::Placed;
 use crate::blitz::LaidOut;
-use crate::scene::{Digest, Mark, Paint, Scene};
+use toy_browser_rasterizer::{Digest, Mark, Paint, Scene};
 use toy_browser_engine::ids;
 
 /// Every run of text an element lays out, positioned glyph by glyph.
@@ -114,7 +114,7 @@ fn mark(page: &LaidOut, placed: &Placed<'_>, source: &str, scene: &mut Scene) ->
         size: placed.size(),
         paint: colour(page, owner),
         face: face(&placed.run, scene),
-        node: Some(ids::raw(owner)),
+        from: Some(ids::raw(owner)),
     })
 }
 
@@ -124,11 +124,11 @@ fn mark(page: &LaidOut, placed: &Placed<'_>, source: &str, scene: &mut Scene) ->
 /// already chosen these — ligatures joined, marks positioned, the right face
 /// picked from the fallback list — and deriving them again from the letters
 /// would be doing the hard part twice and getting a different answer.
-fn chosen(placed: &Placed<'_>, down: f32) -> Vec<crate::scene::Glyph> {
+fn chosen(placed: &Placed<'_>, down: f32) -> Vec<toy_browser_rasterizer::Glyph> {
     placed
         .run
         .positioned_glyphs()
-        .map(|glyph| crate::scene::Glyph {
+        .map(|glyph| toy_browser_rasterizer::Glyph {
             id: glyph.id,
             x: placed.origin.0 + placed.css(glyph.x),
             y: down + placed.css(glyph.y),
@@ -197,10 +197,10 @@ fn covered(
     line: &parley::layout::Line<'_, blitz_dom::node::TextBrush>,
     origin: (f32, f32),
     scale: f32,
-) -> crate::scene::Area {
+) -> toy_browser_rasterizer::Area {
     let metrics = line.metrics();
     let css = |device: f32| device / scale;
-    crate::scene::Area {
+    toy_browser_rasterizer::Area {
         x: origin.0 + css(metrics.inline_min_coord),
         y: origin.1 + css(metrics.block_min_coord),
         width: css(metrics.inline_max_coord - metrics.inline_min_coord),

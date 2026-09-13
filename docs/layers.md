@@ -1,16 +1,23 @@
 # The layers
 
 ```
-crates/cli       CLI, CDP and WebDriver           deps: browser
-crates/browser   pages, elements, measuring,     deps: engine, fetch
-                 rendering
-crates/engine    the door                        deps: fetch
-crates/fetch     shared remembered bytes         deps: ureq
+crates/cli         CLI, CDP and WebDriver         deps: browser
+crates/browser     pages, elements, measuring,    deps: engine, fetch, rasterizer
+                   painting
+crates/engine      the door                       deps: fetch
+crates/rasterizer  a picture, and pixels of it    deps: resvg, skrifa, image
+crates/fetch       shared remembered bytes        deps: ureq
 ```
 
 Each crate can only name what its dependency list allows. `cli` cannot say
-`Engine`, `Realm` or `Resources`; `engine` cannot say `Scene`. That is what
-enforces the layering — not convention, and not module boundaries.
+`Engine`, `Realm` or `Resources`; `engine` cannot say `Scene`; `rasterizer`
+cannot say any of them. That is what enforces the layering — not convention,
+and not module boundaries.
+
+`rasterizer` sits beside `engine` rather than under it: nothing else in the
+tree depends on it and it depends on nothing in the tree. `browser` is where
+the two halves meet — it reads a laid-out document and writes a Scene, and the
+Scene is the last thing in the pipeline that knows what an element is.
 
 ## fetch — one remembered place, every byte
 
@@ -65,10 +72,35 @@ round trip.
 `revision` counts DOM mutations. It is how anything above can tell whether work
 done against an earlier state is still good.
 
+## rasterizer — a picture, and pixels of it
+
+Everything drawn is a `Mark`, and everything a Mark needs travels with it. A
+`Scene` is a list of them in one coordinate space; what comes out is pixels, or
+SVG.
+
+**It names bytes it already holds.** A picture and a font face are carried in
+full and a Mark refers to one by content digest, so nothing downstream resolves
+anything. That is the whole reason this is a value rather than a document:
+handing a rasterizer `<image href="http://…">` looks like a description of a
+picture and is really an instruction to go and fetch one, which usvg declines
+silently. The same mistake one level up cost more — naming a font family and
+letting the rasterizer resolve it a second time is how Hacker News came out in
+Greek letters.
+
+Each Mark carries `from`: a number the caller may attach to say what produced
+it. Nothing here reads it. It is what lets a rendering difference be read as
+*this thing is filled wrong* rather than as a percentage of pixels, and the
+browser above puts a node id there.
+
+Knows nothing about documents, elements or styles, and was made a crate so that
+stays true by compilation rather than by care.
+
 ## browser — pages
 
-Pages, navigation, elements, measuring, rendering. Built entirely out of the
-door's operations plus the cache.
+Pages, navigation, elements, measuring, painting. Built entirely out of the
+door's operations plus the cache — and it is where a laid-out document becomes
+a `Scene`, which is the last thing in the pipeline that knows what an element
+is.
 
 A `Remote` is one type covering the three things a caller can hold: a plain
 value, an element the DOM knows by id, or a JavaScript object the engine is

@@ -10,7 +10,7 @@ use resvg::tiny_skia::{self, Pixmap, Transform};
 
 use super::blur::blur;
 use super::{Area, Hand, Onto, colour, rectangle};
-use crate::scene::{Corners, Ink, Shadow, Stop, Tiles};
+use crate::{Corners, Ink, Shadow, Stop, Tiles};
 
 /// Everything a Fill needs beyond its shape.
 impl Hand<'_> {

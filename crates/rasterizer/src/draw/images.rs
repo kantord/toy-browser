@@ -18,8 +18,8 @@ use std::rc::Rc;
 use resvg::tiny_skia::{self, Pixmap, Transform};
 
 use super::{Area, Hand, Onto};
-use crate::scene::raster::decoded_pixmap;
-use crate::scene::{Digest, Tiles};
+use crate::raster::decoded_pixmap;
+use crate::{Digest, Tiles};
 
 /// How many prepared pictures to keep before starting again.
 ///

@@ -1,4 +1,10 @@
-//! A picture, as a value.
+//! A picture, as a value — and the two ways of writing one down.
+//!
+//! Knows nothing about documents, elements or styles. What arrives is a
+//! [`Scene`]: a list of [`Mark`]s in one coordinate space, each carrying
+//! everything it needs. What leaves is pixels, or SVG. Whoever decided where
+//! the marks go is somebody else's problem, and that is the point of the seam
+//! — see `docs/layers.md`.
 //!
 //! Everything drawn is a [`Mark`], and everything a Mark needs in order to be
 //! drawn travels with it. SVG is one way of writing a Scene down; it is not the
@@ -127,10 +133,12 @@ pub struct Face {
 
 /// One thing drawn.
 ///
-/// Every variant carries the node it came from where there is one, so a mark in
-/// the output can be traced back to the element that produced it — the property
-/// that makes a rendering difference readable as *this element is filled wrong*
-/// rather than as a percentage of pixels.
+/// Every variant carries `from`: a number the caller may attach to say what
+/// produced this mark. Nothing here reads it — it is written into the SVG as
+/// `data-from` and otherwise carried untouched — but it is what lets a mark in
+/// the output be traced back to whatever drew it, which is the property that
+/// makes a rendering difference readable as *this thing is filled wrong* rather
+/// than as a percentage of pixels. The browser above this puts a node id there.
 #[derive(Clone, PartialEq, Debug)]
 pub enum Mark {
     /// An area of flat colour: a background, a side of a border, an underline.
@@ -144,7 +152,7 @@ pub enum Mark {
         corners: Corners,
         /// Cast behind the shape, if the element asks for one.
         shadow: Option<Shadow>,
-        node: Option<usize>,
+        from: Option<usize>,
     },
     /// Text, positioned glyph by glyph, in a named Face.
     ///
@@ -166,20 +174,20 @@ pub enum Mark {
         size: f32,
         paint: Paint,
         face: Digest,
-        node: Option<usize>,
+        from: Option<usize>,
     },
     /// A Picture, placed.
     Image {
         area: Area,
         picture: Digest,
-        node: Option<usize>,
+        from: Option<usize>,
     },
     /// Marks that show only within an Area. What a `<webview>` is, once every
     /// page in the unit shares one coordinate space.
     Clip {
         to: Area,
         marks: Vec<Mark>,
-        node: Option<usize>,
+        from: Option<usize>,
     },
     /// Marks moved by a matrix, about a point.
     ///
@@ -193,7 +201,7 @@ pub enum Mark {
         /// document coordinates.
         about: (f32, f32),
         marks: Vec<Mark>,
-        node: Option<usize>,
+        from: Option<usize>,
     },
 }
 

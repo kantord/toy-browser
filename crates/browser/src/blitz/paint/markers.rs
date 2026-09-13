@@ -12,7 +12,7 @@
 use blitz_dom::Node;
 
 use crate::blitz::LaidOut;
-use crate::scene::Mark;
+use toy_browser_rasterizer::Mark;
 
 /// The marker on a list item: a disc, a number, a letter — whatever the counter
 /// style says.

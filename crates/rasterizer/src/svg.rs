@@ -90,15 +90,15 @@ fn write_mark(scene: &Scene, mark: &Mark, refer: Refer, out: &mut String) {
         Mark::Image {
             area,
             picture,
-            node,
-        } => image(scene, area, picture, *node, refer, out),
-        Mark::Clip { to, marks, node } => clip(scene, to, marks, *node, refer, out),
+            from,
+        } => image(scene, area, picture, *from, refer, out),
+        Mark::Clip { to, marks, from } => clip(scene, to, marks, *from, refer, out),
         Mark::Moved {
             by,
             about,
             marks,
-            node,
-        } => moved(scene, *by, *about, marks, *node, refer, out),
+            from,
+        } => moved(scene, *by, *about, marks, *from, refer, out),
     }
 }
 
@@ -112,7 +112,7 @@ fn glyphs(mark: &Mark, out: &mut String) {
         size,
         paint,
         face,
-        node,
+        from,
     } = mark
     else {
         return;
@@ -129,7 +129,7 @@ fn glyphs(mark: &Mark, out: &mut String) {
         family(face),
         colour(paint),
         opacity(paint),
-        named(*node),
+        named(*from),
         escaped(text),
     );
 }
@@ -138,7 +138,7 @@ fn image(
     scene: &Scene,
     area: &Area,
     picture: &super::Digest,
-    node: Option<usize>,
+    from: Option<usize>,
     refer: Refer,
     out: &mut String,
 ) {
@@ -153,7 +153,7 @@ fn image(
         area.width,
         area.height,
         reference(picture, held, refer),
-        named(node),
+        named(from),
     );
 }
 
@@ -167,7 +167,7 @@ fn moved(
     by: [f32; 6],
     about: (f32, f32),
     marks: &[Mark],
-    node: Option<usize>,
+    from: Option<usize>,
     refer: Refer,
     out: &mut String,
 ) {
@@ -180,7 +180,7 @@ fn moved(
         about.1,
         -about.0,
         -about.1,
-        named(node),
+        named(from),
     );
     for inner in marks {
         write_mark(scene, inner, refer, out);
@@ -192,7 +192,7 @@ fn clip(
     scene: &Scene,
     to: &Area,
     marks: &[Mark],
-    node: Option<usize>,
+    from: Option<usize>,
     refer: Refer,
     out: &mut String,
 ) {
@@ -210,7 +210,7 @@ fn clip(
         to.y,
         to.width,
         to.height,
-        named(node),
+        named(from),
     );
     for inner in marks {
         write_mark(scene, inner, refer, out);
@@ -224,7 +224,7 @@ fn fill(scene: &Scene, mark: &Mark, refer: Refer, out: &mut String) {
         ink,
         corners,
         shadow,
-        node,
+        from,
     } = mark
     else {
         return;
@@ -236,7 +236,7 @@ fn fill(scene: &Scene, mark: &Mark, refer: Refer, out: &mut String) {
     let Some((paint, alpha)) = spread(scene, ink, area, refer, out) else {
         return;
     };
-    let rest = format!("{alpha}{cast}{}", named(*node));
+    let rest = format!("{alpha}{cast}{}", named(*from));
     if corners.any() {
         let _ = writeln!(
             out,
@@ -291,8 +291,8 @@ pub fn family(digest: &super::Digest) -> String {
     format!("tb-face-{digest}")
 }
 
-fn named(node: Option<usize>) -> String {
-    node.map(|id| format!(" data-node=\"{id}\""))
+fn named(from: Option<usize>) -> String {
+    from.map(|id| format!(" data-from=\"{id}\""))
         .unwrap_or_default()
 }
 

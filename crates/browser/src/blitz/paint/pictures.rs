@@ -19,7 +19,7 @@ use base64::Engine as _;
 use blitz_dom::Node;
 
 use crate::blitz::LaidOut;
-use crate::scene::{Area, Digest, Format, Mark, Scene};
+use toy_browser_rasterizer::{Area, Digest, Format, Mark, Scene};
 use toy_browser_engine::ids;
 
 /// The `<img>` this node is, if it is one and there is anything to draw.
@@ -64,7 +64,7 @@ pub(super) fn of(
             height,
         },
         picture,
-        node: Some(ids::raw(node.id)),
+        from: Some(ids::raw(node.id)),
     })
 }
 

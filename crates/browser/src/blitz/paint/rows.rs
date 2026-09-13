@@ -13,7 +13,7 @@
 use blitz_dom::{Node, NodeId};
 
 use crate::blitz::Composed;
-use crate::scene::{Area, Mark};
+use toy_browser_rasterizer::{Area, Mark};
 
 use super::{Pass, backdrop, boxes};
 

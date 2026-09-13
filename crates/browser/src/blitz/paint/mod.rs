@@ -25,7 +25,7 @@ use blitz_dom::{Node, NodeId};
 
 use crate::Viewport;
 use crate::blitz::{Composed, LaidOut};
-use crate::scene::{Area, Corners, Ink, Mark, Paint, Scene};
+use toy_browser_rasterizer::{Area, Corners, Ink, Mark, Paint, Scene};
 
 use pass::Pass;
 use phases::Phases;
@@ -120,7 +120,7 @@ fn paper(page: &LaidOut, area: Area) -> Mark {
             blue: blue.round() as u8,
             alpha,
         }),
-        node: None,
+        from: None,
     }
 }
 
@@ -155,7 +155,7 @@ fn compose(unit: &Composed, across: f32, down: f32, pass: &mut Pass<'_>) -> Vec<
         marks.push(Mark::Clip {
             to,
             marks: inner,
-            node: Some(ids::raw(*node)),
+            from: Some(ids::raw(*node)),
         });
     }
     marks

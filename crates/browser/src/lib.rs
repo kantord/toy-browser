@@ -16,7 +16,6 @@ mod frames;
 mod hovering;
 mod navigate;
 mod pointer;
-mod scene;
 
 mod measure;
 mod page;
@@ -42,7 +41,7 @@ pub use navigate::{Loaded, NavigationError};
 /// same thing. Bridging those meant encoding a PNG and decoding it straight
 /// back, which is a lot of work to change one name into another.
 pub use resvg::tiny_skia;
-pub use scene::{
+pub use toy_browser_rasterizer::{
     Area, Mark, Rendered, Scene, draw as draw_scene, family, normal_form, pixels as scene_pixels,
     render as render_scene,
 };
