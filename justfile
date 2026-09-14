@@ -48,8 +48,8 @@ open url:
 #
 # Optimised, because this is the one target somebody sits and waits for: the
 # same page takes 2.5s to draw unoptimised and 0.3s built properly.
-browse url="https://news.ycombinator.com/":
-    cargo run --release -- browse {{ url }}
+browse url="https://news.ycombinator.com/" *ARGS:
+    cargo run --release -- browse {{ url }} {{ ARGS }}
 
 # The browser with a browser's chrome: a Back button and an address, over a
 # webview holding the page. The chrome is a page of ours too.

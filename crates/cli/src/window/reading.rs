@@ -13,13 +13,15 @@
 //! spliced the two would have two nodes called 0. What that costs is the Back
 //! button: it is chrome, not page, and no reader is offered it yet.
 
-use super::{Open, speaking};
+use super::Open;
+#[cfg(feature = "a11y")]
+use super::speaking;
 
 #[cfg(feature = "a11y")]
 impl Open {
     /// What that wake-up was about.
-    pub(super) fn woken(&mut self, woken: speaking::Woken) {
-        match self.speaking.asked(woken) {
+    pub(super) fn spoken_to(&mut self, event: speaking::Event) {
+        match self.speaking.asked(event) {
             speaking::Asked::Everything => self.spoke(),
             speaking::Asked::Press(node) => self.pressed(node),
             speaking::Asked::Nothing => {}
@@ -71,9 +73,5 @@ impl Open {
 /// nothing, and nothing wakes it either.
 #[cfg(not(feature = "a11y"))]
 impl Open {
-    pub(super) fn woken(&mut self, woken: speaking::Woken) {
-        match woken {}
-    }
-
     pub(super) fn spoke(&mut self) {}
 }

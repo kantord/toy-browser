@@ -18,9 +18,17 @@ use common::{browser, fixture};
 ///
 /// Under the temporary directory rather than beside the test, because a Unix
 /// socket keeps its whole path in one fixed field of 108 bytes and a target
-/// directory is most of that on its own.
+/// directory is most of that on its own. In a directory of ours under it,
+/// never the directory itself: one there is a socket any user on the machine
+/// can reach, and the rasterizer refuses to speak down one of those.
 fn listening(name: &str) -> std::path::PathBuf {
-    let socket = std::env::temp_dir().join(format!("toy-browser-elsewhere-{name}.sock"));
+    use std::os::unix::fs::DirBuilderExt;
+    let directory = std::env::temp_dir().join("toy-browser-tests");
+    let _ = std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(&directory);
+    let socket = directory.join(format!("elsewhere-{name}.sock"));
     let there = socket.clone();
     std::thread::spawn(move || toy_browser_rasterizer::wire::serve(&there));
     settled(&socket);

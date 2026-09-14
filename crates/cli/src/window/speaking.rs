@@ -13,15 +13,15 @@
 //! [`Reading`]: toy_browser::Reading
 
 #[cfg(feature = "a11y")]
-pub(super) use attached::{Asked, Speaking, Woken};
+pub(super) use attached::{Asked, Event, Speaking};
 
 #[cfg(not(feature = "a11y"))]
-pub(super) use unattached::{Speaking, Woken};
+pub(super) use unattached::Speaking;
 
 /// What a window with accessibility compiled in does.
 #[cfg(feature = "a11y")]
 mod attached {
-    use accesskit_winit::{Adapter, Event, WindowEvent as Requested};
+    use accesskit_winit::{Adapter, WindowEvent as Requested};
     use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
     use winit::window::Window;
 
@@ -37,20 +37,9 @@ mod attached {
         Nothing,
     }
 
-    /// What AccessKit wakes the event loop with.
-    ///
-    /// A newtype rather than AccessKit's own event, because the loop's user
-    /// event is the window's to name: the next thing that needs to wake it —
-    /// a load finishing, a timer — becomes a variant here rather than a second
-    /// loop.
-    #[derive(Debug)]
-    pub(crate) struct Woken(Event);
-
-    impl From<Event> for Woken {
-        fn from(event: Event) -> Self {
-            Self(event)
-        }
-    }
+    /// What AccessKit wakes the loop with, named here so that `waking.rs` can
+    /// carry one without the rest of this crate naming AccessKit at all.
+    pub(crate) type Event = accesskit_winit::Event;
 
     /// The desktop's view of the page, if anybody has asked for one.
     pub(crate) struct Speaking {
@@ -80,7 +69,7 @@ mod attached {
             &mut self,
             events: &ActiveEventLoop,
             window: &Window,
-            proxy: EventLoopProxy<Woken>,
+            proxy: EventLoopProxy<super::super::waking::Woken>,
         ) {
             self.adapter = Some(Adapter::with_event_loop_proxy(events, window, proxy));
         }
@@ -104,8 +93,8 @@ mod attached {
         }
 
         /// What that wake-up was about.
-        pub(crate) fn asked(&mut self, woken: Woken) -> Asked {
-            match woken.0.window_event {
+        pub(crate) fn asked(&mut self, event: Event) -> Asked {
+            match event.window_event {
                 Requested::InitialTreeRequested => {
                     self.awake = true;
                     Asked::Everything
@@ -127,11 +116,6 @@ mod unattached {
     use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
     use winit::window::Window;
 
-    /// Nothing ever wakes this loop, and an empty type is how that is said in
-    /// a way the compiler will hold anybody to.
-    #[derive(Debug)]
-    pub(crate) enum Woken {}
-
     pub(crate) struct Speaking;
 
     impl Speaking {
@@ -139,7 +123,12 @@ mod unattached {
             Self
         }
 
-        pub(crate) fn attach(&mut self, _: &ActiveEventLoop, _: &Window, _: EventLoopProxy<Woken>) {
+        pub(crate) fn attach(
+            &mut self,
+            _: &ActiveEventLoop,
+            _: &Window,
+            _: EventLoopProxy<super::super::waking::Woken>,
+        ) {
         }
 
         pub(crate) fn saw(&mut self, _: &Window, _: &winit::event::WindowEvent) {}

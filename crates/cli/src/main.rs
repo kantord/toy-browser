@@ -88,7 +88,13 @@ pub struct BrowseArgs {
     /// One of them serves every window, so they share a copy of each typeface
     /// and a page that takes a second to draw takes it off the thread this
     /// window answers the mouse from. Give a path to name the socket.
-    #[arg(long, value_name = "SOCKET", num_args = 0..=1, default_missing_value = "")]
+    // `require_equals`, or a bare `--raster` swallows whatever comes next: an
+    // optional value and a positional argument look identical to a parser, so
+    // `browse --raster <url>` read the url as the socket path and then browsed
+    // the default page instead. Silently, which is the worst of the ways that
+    // could have gone. Spelled `--raster=/path/to.sock` when it is spelled at
+    // all.
+    #[arg(long, value_name = "SOCKET", num_args = 0..=1, require_equals = true, default_missing_value = "")]
     raster: Option<String>,
 
     /// Do not offer the page to the desktop's accessibility services.
@@ -193,7 +199,13 @@ pub struct RenderArgs {
 
     /// Draw through a rasterizer in another process, starting one if nobody
     /// has. See `browse --raster`.
-    #[arg(long, value_name = "SOCKET", num_args = 0..=1, default_missing_value = "")]
+    // `require_equals`, or a bare `--raster` swallows whatever comes next: an
+    // optional value and a positional argument look identical to a parser, so
+    // `browse --raster <url>` read the url as the socket path and then browsed
+    // the default page instead. Silently, which is the worst of the ways that
+    // could have gone. Spelled `--raster=/path/to.sock` when it is spelled at
+    // all.
+    #[arg(long, value_name = "SOCKET", num_args = 0..=1, require_equals = true, default_missing_value = "")]
     raster: Option<String>,
 
     /// A script to run in the page before any of its own, given as a file.
@@ -246,9 +258,10 @@ fn rasterize(args: RasterizeArgs) -> Result<()> {
     let socket = args
         .socket
         .unwrap_or_else(toy_browser::rasterizer::wire::default_socket);
-    if let Some(parent) = socket.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
+    // The directory is not made here. `serve` makes it, with a mode that keeps
+    // everybody else out — one made with the ordinary umask is one any user on
+    // the machine can put a socket in, and what crosses this one is every word
+    // of every page.
     println!("rasterizing on {}", socket.display());
     toy_browser::rasterizer::wire::serve(&socket)
 }

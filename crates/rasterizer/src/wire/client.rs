@@ -15,7 +15,7 @@ use std::os::unix::net::UnixStream;
 
 use anyhow::{Context, Result, bail};
 
-use super::{Answered, Asked, reachable, read_frame, write_frame};
+use super::{Answered, Asked, private, reachable, read_frame, write_frame};
 use crate::{Digest, Scene};
 
 /// A connection to a rasterizer in another process.
@@ -33,6 +33,10 @@ impl Client {
     /// Connects to the rasterizer listening at `socket`.
     pub fn connect(socket: &std::path::Path) -> Result<Self> {
         reachable(socket)?;
+        // Before connecting, not after: a socket somewhere anybody can write
+        // is a socket somebody else may have created, and the first thing this
+        // sends down it is the page.
+        private(socket)?;
         let stream = UnixStream::connect(socket)
             .with_context(|| format!("connecting to {}", socket.display()))?;
         Ok(Self {
@@ -92,13 +96,40 @@ impl Client {
     }
 
     /// Offers whatever is new, asks for the drawing, and waits.
+    ///
+    /// `TOY_BROWSER_TRACE_FRAME=1` says where the time went, split into the
+    /// three things it could be: writing the marks down, the round trip, and
+    /// the pixels coming back. They have entirely different answers — a smaller
+    /// wire format, not blocking, and shared memory — so knowing which one this
+    /// is, is the whole question.
     fn attempt(&mut self, scene: &Scene) -> Result<Answered> {
+        let clock = std::time::Instant::now();
         self.offer(scene)?;
+        let offered = clock.elapsed();
         let mut bare = scene.clone();
         bare.pictures.clear();
         bare.faces.clear();
-        self.say(&Asked::Draw(Box::new(bare)))?;
-        self.hear()
+        let written = postcard::to_allocvec(&Asked::Draw(Box::new(bare)))?;
+        let marks = written.len();
+        write_frame(&mut self.to, &written)?;
+        let asked = clock.elapsed();
+        let frame = read_frame(&mut self.from)?;
+        let heard = clock.elapsed();
+        let answer: Answered = postcard::from_bytes(&frame)?;
+        if std::env::var_os("TOY_BROWSER_TRACE_FRAME").is_some() {
+            let ms = |took: std::time::Duration| took.as_secs_f32() * 1000.0;
+            let kb = |bytes: usize| bytes as f32 / 1024.0;
+            eprintln!(
+                "wire    offer {:>6.1}ms  ask {:>6.1}ms  wait+read {:>6.1}ms  \
+                 marks {:.0}kB  back {:.0}kB",
+                ms(offered),
+                ms(asked - offered),
+                ms(heard - asked),
+                kb(marks),
+                kb(frame.len()),
+            );
+        }
+        Ok(answer)
     }
 
     /// Sends whatever this Scene names that has not crossed yet.
@@ -128,10 +159,5 @@ impl Client {
 
     fn say(&mut self, asked: &Asked) -> Result<()> {
         write_frame(&mut self.to, &postcard::to_allocvec(asked)?)
-    }
-
-    fn hear(&mut self) -> Result<Answered> {
-        let frame = read_frame(&mut self.from)?;
-        Ok(postcard::from_bytes(&frame)?)
     }
 }

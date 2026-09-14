@@ -126,6 +126,31 @@ impl Browser {
         pixels
     }
 
+    /// Asks for this band without waiting, if this browser draws somewhere it
+    /// can wait for.
+    ///
+    /// Answers whether it did. `false` means the caller should use
+    /// [`over`](Self::over), which waits — there is nowhere else for the work
+    /// to happen. Painting the Scene still happens here, on this thread; it is
+    /// the drawing that goes, and the drawing is 97% of it.
+    pub fn begin(&mut self, page: &PageId, zone: toy_browser_rasterizer::Area) -> Result<bool> {
+        if matches!(self.drawing, crate::drawing::Drawing::Here) {
+            return Ok(false);
+        }
+        self.sync(page)?;
+        self.repainted(page, zone)?;
+        let Some(whole) = self.pages.get(page).and_then(|held| held.drawn.as_ref()) else {
+            return Ok(false);
+        };
+        let strip = whole.over(zone);
+        Ok(self.drawing.begin(zone, &strip))
+    }
+
+    /// The last band that finished drawing elsewhere, if one has.
+    pub fn finished(&mut self) -> Option<crate::Drawn> {
+        self.drawing.finished()
+    }
+
     /// Paints the page again if what is kept does not answer for this part of
     /// it.
     ///

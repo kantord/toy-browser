@@ -77,7 +77,7 @@ pub fn open(args: BrowseArgs) -> Result<()> {
     // A loop that can be woken from outside itself, which is what an assistive
     // technology needs: it attaches on its own schedule, on a thread of its
     // own, and the answer has to be built here where the browser is.
-    let event_loop = EventLoop::<speaking::Woken>::with_user_event()
+    let event_loop = EventLoop::<waking::Woken>::with_user_event()
         .build()
         .context("starting a window system")?;
     event_loop.set_control_flow(ControlFlow::Wait);
@@ -102,6 +102,7 @@ pub fn open(args: BrowseArgs) -> Result<()> {
         scheme: args.scheme,
         scrolled: (0.0, 0.0),
         reaches: None,
+        asked: None,
     };
     event_loop
         .run_app(&mut open)
@@ -149,8 +150,15 @@ struct Open {
     /// How far the page reaches, across and down. Kept because it costs a Scene
     /// to work out and a wheel does not change it.
     reaches: Option<(f32, f32)>,
+    /// Which band has been asked for and not yet arrived.
+    ///
+    /// Distinct from `over`, which is what `painted` actually holds: between
+    /// the two is the time a rasterizer somewhere else is taking, and telling
+    /// them apart is what stops a band of the wrong place being put up when a
+    /// scroll has moved on.
+    asked: Option<Area>,
     /// What wakes this loop from outside it.
-    proxy: winit::event_loop::EventLoopProxy<speaking::Woken>,
+    proxy: winit::event_loop::EventLoopProxy<waking::Woken>,
     /// The desktop's view of the page.
     speaking: speaking::Speaking,
     /// Whether to offer one at all. A setting rather than a build: a window
@@ -165,7 +173,7 @@ struct Shown {
     surface: softbuffer::Surface<Rc<Window>, Rc<Window>>,
 }
 
-impl ApplicationHandler<speaking::Woken> for Open {
+impl ApplicationHandler<waking::Woken> for Open {
     fn resumed(&mut self, events: &ActiveEventLoop) {
         // Invisible to begin with, because an accessibility adapter has to be
         // attached before the window is first shown and says so by panicking.
@@ -180,6 +188,12 @@ impl ApplicationHandler<speaking::Woken> for Open {
         if self.a11y {
             self.speaking.attach(events, &window, self.proxy.clone());
         }
+        // How a band drawn somewhere else gets itself looked at. The loop is
+        // asleep in `wait` when one lands, and nothing else will wake it.
+        let proxy = self.proxy.clone();
+        self.browser.wake_when_drawn(Box::new(move || {
+            let _ = proxy.send_event(waking::Woken::Drawn);
+        }));
         window.set_visible(true);
         let context = match softbuffer::Context::new(Rc::clone(&window)) {
             Ok(context) => context,
@@ -233,8 +247,13 @@ impl ApplicationHandler<speaking::Woken> for Open {
 
     /// What an assistive technology asked for, answered here because this is
     /// where the browser is.
-    fn user_event(&mut self, _: &ActiveEventLoop, woken: speaking::Woken) {
-        self.woken(woken);
+    fn user_event(&mut self, _: &ActiveEventLoop, woken: waking::Woken) {
+        match woken {
+            // A band finished somewhere else. Collect it and put it up.
+            waking::Woken::Drawn => self.collected(),
+            #[cfg(feature = "a11y")]
+            waking::Woken::Spoke(event) => self.spoken_to(event),
+        }
     }
 
     fn window_event(&mut self, events: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
@@ -288,3 +307,4 @@ mod reading;
 mod showing;
 mod speaking;
 mod typing;
+mod waking;

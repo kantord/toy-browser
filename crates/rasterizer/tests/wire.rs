@@ -5,43 +5,13 @@
 //! These check the claim by actually doing it — a real socket, a real server
 //! thread, real pixels — rather than by asserting that the types serialise.
 
+mod common;
+
 use std::collections::BTreeSet;
 
-use toy_browser_rasterizer::wire::{Client, serve};
-use toy_browser_rasterizer::{Area, Corners, Digest, Face, Ink, Mark, Paint, Scene};
-
-/// A server on a socket of its own, so two tests never share one.
-fn listening(name: &str) -> std::path::PathBuf {
-    let socket = std::env::temp_dir().join(format!("toy-browser-raster-test-{name}.sock"));
-    let there = socket.clone();
-    std::thread::spawn(move || serve(&there));
-    settled(&socket);
-    socket
-}
-
-/// Waits until something answers on the socket.
-///
-/// A connection, not the file. The file is there the moment anything binds —
-/// and, worse, it is still there from the last run, so a test that waited for
-/// it connected to a socket nobody was listening on and failed in a way that
-/// depended on whether it had ever been run before.
-fn settled(socket: &std::path::Path) {
-    for _ in 0..200 {
-        if std::os::unix::net::UnixStream::connect(socket).is_ok() {
-            return;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-}
-
-fn red() -> Paint {
-    Paint {
-        red: 255,
-        green: 0,
-        blue: 0,
-        alpha: 1.0,
-    }
-}
+use common::{listening, red};
+use toy_browser_rasterizer::wire::Client;
+use toy_browser_rasterizer::{Area, Corners, Digest, Face, Ink, Mark, Scene};
 
 /// One filled square, which is the smallest thing that proves pixels came back.
 fn square(size: u32) -> Scene {

@@ -8,10 +8,12 @@
 use std::collections::BTreeSet;
 use std::io::{BufReader, BufWriter};
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 
-use super::{Answered, Asked, reachable, read_frame, write_frame};
+use super::store::{Proved, Store};
+use super::{Answered, Asked, only_ours, private, reachable, read_frame, write_frame};
 use crate::{Digest, Scene};
 
 /// Listens on `socket` and draws whatever arrives, until it is stopped.
@@ -21,16 +23,23 @@ use crate::{Digest, Scene};
 /// independent draws — which is the other reason this is worth doing at all.
 pub fn serve(socket: &std::path::Path) -> Result<()> {
     reachable(socket)?;
+    private(socket)?;
     // A socket file outlives the process that made it, so a server that was
     // killed leaves one behind that nothing is listening on. Removing it is
     // safe here and not in general: `bind` would have failed if somebody were.
     let _ = std::fs::remove_file(socket);
     let listening =
         UnixListener::bind(socket).with_context(|| format!("listening on {}", socket.display()))?;
+    only_ours(socket)?;
+    // One store for the process, so a typeface ten windows use is held once.
+    // What keeps them apart is not the store but who may name what is in it —
+    // see `store.rs`.
+    let store = Arc::new(Store::default());
     for arriving in listening.incoming() {
         let stream = arriving.context("accepting a connection")?;
+        let mine = Arc::clone(&store);
         std::thread::spawn(move || {
-            if let Err(error) = attend(stream) {
+            if let Err(error) = attend(stream, mine) {
                 eprintln!("rasterizer: {error:#}");
             }
         });
@@ -39,10 +48,12 @@ pub fn serve(socket: &std::path::Path) -> Result<()> {
 }
 
 /// One client, for as long as it is connected.
-fn attend(stream: UnixStream) -> Result<()> {
+fn attend(stream: UnixStream, store: Arc<Store>) -> Result<()> {
     let mut from = BufReader::new(stream.try_clone()?);
     let mut to = BufWriter::new(stream);
-    let mut held = Scene::default();
+    // What *this* connection may name. Dropped with the connection, which is
+    // when its hold on each of them is given up.
+    let mut proved = Proved::of(store);
     loop {
         let frame = match read_frame(&mut from) {
             Ok(frame) => frame,
@@ -50,28 +61,58 @@ fn attend(stream: UnixStream) -> Result<()> {
             Err(_) => return Ok(()),
         };
         let answer = match postcard::from_bytes::<Asked>(&frame) {
-            Ok(Asked::Holds { pictures, faces }) => {
-                held.pictures.extend(pictures);
-                held.faces.extend(faces);
-                continue;
-            }
-            Ok(Asked::Draw(scene)) => drawn(*scene, &held),
+            Ok(Asked::Holds { pictures, faces }) => match kept(&mut proved, pictures, faces) {
+                // Silence on success, so that a client learns nothing from how
+                // long it took or whether anything came back — including
+                // whether these bytes were already here.
+                Ok(()) => continue,
+                Err(why) => Answered::Failed(why),
+            },
+            Ok(Asked::Draw(scene)) => drawn(*scene, &proved),
             Err(error) => Answered::Failed(format!("unreadable request: {error}")),
         };
         write_frame(&mut to, &postcard::to_allocvec(&answer)?)?;
     }
 }
 
-/// Fills a Scene's tables from what this connection has sent, and draws it.
-fn drawn(mut scene: Scene, held: &Scene) -> Answered {
+/// Takes everything a client offered, or none of it.
+fn kept(
+    proved: &mut Proved,
+    pictures: Vec<(Digest, crate::Picture)>,
+    faces: Vec<(Digest, crate::Face)>,
+) -> Result<(), String> {
+    for (digest, picture) in pictures {
+        proved
+            .keep_picture(digest, picture)
+            .map_err(|why| why.to_string())?;
+    }
+    for (digest, face) in faces {
+        proved
+            .keep_face(digest, face)
+            .map_err(|why| why.to_string())?;
+    }
+    Ok(())
+}
+
+/// Fills a Scene's tables from what this connection has proved it holds, and
+/// draws it.
+///
+/// `Missing` for anything this connection never sent — whether or not somebody
+/// else sent it. That is the whole of the isolation: the answer to "do you have
+/// this" is the same for a digest nobody has ever sent and one that ten other
+/// clients are using.
+fn drawn(mut scene: Scene, proved: &Proved) -> Answered {
+    if let Some(why) = too_big(&scene) {
+        return Answered::Failed(why);
+    }
     let mut missing = Vec::new();
     for digest in named(&scene) {
-        match (held.pictures.get(&digest), held.faces.get(&digest)) {
-            (Some(picture), _) => {
-                scene.pictures.insert(digest, picture.clone());
+        match proved.look(digest) {
+            Some((Some(picture), _)) => {
+                scene.pictures.insert(digest, picture);
             }
-            (_, Some(face)) => {
-                scene.faces.insert(digest, face.clone());
+            Some((_, Some(face))) => {
+                scene.faces.insert(digest, face);
             }
             _ => missing.push(digest),
         }
@@ -87,6 +128,23 @@ fn drawn(mut scene: Scene, held: &Scene) -> Answered {
         },
         Err(error) => Answered::Failed(format!("{error:#}")),
     }
+}
+
+/// How many pixels this rasterizer will draw at once.
+///
+/// A picture is four bytes a pixel, so this is a gigabyte of answer. A long
+/// Wikipedia article drawn whole is 30 million, so the limit is well clear of
+/// anything real — it is here because a client that asks for a hundred thousand
+/// squared is asking this process to die, and refusing is cheaper than finding
+/// out.
+const MOST_PIXELS: u64 = 256 * 1024 * 1024;
+
+/// Whether this Scene asks for more than will be drawn.
+fn too_big(scene: &Scene) -> Option<String> {
+    let (width, height) = scene.drawn();
+    let pixels = u64::from(width) * u64::from(height);
+    (pixels > MOST_PIXELS)
+        .then(|| format!("{width}x{height} is more than this draws at once ({MOST_PIXELS} pixels)"))
 }
 
 /// Every Digest this Scene's marks refer to.

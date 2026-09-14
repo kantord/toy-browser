@@ -31,13 +31,57 @@ impl Open {
             width: wide,
             height: tall,
         };
-        if self.painted.is_none() || self.over != Some(over) {
-            let clock = std::time::Instant::now();
-            self.painted = Some(self.browser.over(&self.page, over)?);
-            self.over = Some(over);
-            timed("band", &[("draw", clock.elapsed())]);
+        if self.painted.is_some() && self.over == Some(over) {
+            return Ok(());
         }
+        // Asked for without waiting, where there is somewhere to wait. The
+        // window then blits whatever it last had — a band of where it used to
+        // be, or nothing at all on the first frame — and puts the new one up
+        // when it arrives. What that buys is the twenty-six milliseconds a
+        // rasterizer takes: they are spent somewhere other than between this
+        // window and the mouse.
+        //
+        // `asked` rather than `over`, because the answer is not here yet: the
+        // window is not over what it has drawn until it has it.
+        // Already on its way. Without this a window redrawing while it waits
+        // posts the same band again on every pass, and the rasterizer draws
+        // the same picture as many times as the loop turns.
+        if self.asked == Some(over) {
+            return Ok(());
+        }
+        let clock = std::time::Instant::now();
+        if self.browser.begin(&self.page, over)? {
+            self.asked = Some(over);
+            // Painting the Scene still happens here — it is the *drawing* that
+            // went elsewhere. Worth its own number, because it is what is left
+            // of a frame on this thread.
+            timed("band", &[("paint", clock.elapsed())]);
+            return Ok(());
+        }
+        self.painted = Some(self.browser.over(&self.page, over)?);
+        self.over = Some(over);
+        timed("band", &[("draw", clock.elapsed())]);
         Ok(())
+    }
+
+    /// Takes whatever finished drawing elsewhere and puts it up.
+    ///
+    /// Only if it is still of the part the window is over. A band drawn of
+    /// somewhere the scroll has already left is a picture of the past, and
+    /// showing it would make a fast scroll flicker between where it is and
+    /// where it was.
+    pub(super) fn collected(&mut self) {
+        let Some(drawn) = self.browser.finished() else {
+            return;
+        };
+        if self.asked != Some(drawn.of) {
+            return;
+        }
+        self.painted = Some(drawn.pixels);
+        self.over = Some(drawn.of);
+        if let Some(shown) = &self.shown {
+            shown.window.request_redraw();
+        }
     }
 
     /// How the page is to be laid out: as wide as the window, as tall as it
@@ -88,6 +132,10 @@ impl Open {
     pub(super) fn changed(&mut self) {
         self.painted = None;
         self.reaches = None;
+        // What was asked for was of the page as it used to be, so an answer to
+        // it is already wrong. Forgetting it is what makes the next redraw ask
+        // again rather than wait for a picture of what has gone.
+        self.asked = None;
         // A page that has been navigated or resized has different things under
         // a pointer that never moved, so the cursor is asked again here too.
         self.hovered();

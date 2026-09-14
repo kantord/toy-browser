@@ -28,6 +28,7 @@
 
 mod client;
 mod server;
+mod store;
 
 use std::io::{Read, Write};
 
@@ -102,14 +103,79 @@ pub(super) fn reachable(socket: &std::path::Path) -> Result<()> {
 
 /// Where a rasterizer listens when nobody says otherwise.
 ///
-/// Under the run-time directory, so it is per-user and goes away when the
-/// session does — a socket in `/tmp` is one every user on the machine can
-/// reach, and what crosses this one is the contents of somebody's screen.
+/// Under the run-time directory, which is the user's own and mode 0700, so
+/// nobody else can reach it. What crosses this socket is everything on
+/// somebody's screen: every word of every page they have open, as text.
+///
+/// When there is no run-time directory — a cron job, an ssh session without a
+/// session manager, some containers — the fallback is a directory of our own
+/// under the temporary one, made 0700. **Never the temporary directory
+/// itself.** It is world-writable, so a socket there is one every user on the
+/// machine can connect to, and worse: another user can create the path *first*
+/// and then be handed every Scene this browser draws. See [`private`].
 pub fn default_socket() -> std::path::PathBuf {
-    let base = std::env::var_os("XDG_RUNTIME_DIR")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir);
-    base.join("toy-browser-raster.sock")
+    match std::env::var_os("XDG_RUNTIME_DIR") {
+        Some(runtime) => std::path::PathBuf::from(runtime).join("toy-browser-raster.sock"),
+        // The name only keeps two users on one machine from colliding. What
+        // keeps them apart is the mode, checked in `private`.
+        None => std::env::temp_dir()
+            .join(format!(
+                "toy-browser-{}",
+                std::env::var("USER").unwrap_or_else(|_| "raster".to_owned())
+            ))
+            .join("raster.sock"),
+    }
+}
+
+/// Only the owner may read, write or enter.
+const OWNER_ONLY: u32 = 0o700;
+
+/// Makes sure the directory this socket sits in is nobody else's, creating it
+/// if it is not there.
+///
+/// The whole defence, and it holds without asking the system who we are.
+/// Creating a directory with mode 0700 makes it ours; finding one that already
+/// exists and is 0700 means it is *somebody's*, and if that somebody is not us
+/// then everything we try inside it fails with permission denied. An attacker
+/// who gets there first therefore makes this fail rather than succeed quietly,
+/// which is the direction a thing like this has to fail in.
+///
+/// A directory that exists with any other mode is refused outright, and that is
+/// the case worth refusing: a 0755 directory somebody else owns is one they can
+/// put a socket in and be handed the contents of this screen.
+pub(super) fn private(socket: &std::path::Path) -> Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+    let Some(directory) = socket.parent() else {
+        return Ok(());
+    };
+    let Ok(found) = std::fs::metadata(directory) else {
+        return std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(OWNER_ONLY)
+            .create(directory)
+            .with_context(|| format!("making {} private", directory.display()));
+    };
+    let mode = found.permissions().mode() & 0o777;
+    if mode != OWNER_ONLY {
+        bail!(
+            "{} is mode {mode:o}, and a rasterizer's socket has to sit somewhere only its owner \
+             can reach: what crosses it is every word of every page",
+            directory.display(),
+        );
+    }
+    Ok(())
+}
+
+/// Narrows a socket to its owner, once it exists.
+///
+/// Belt and braces — the directory is already 0700 — but `bind` takes the
+/// umask, which is usually 0022, so a socket comes out connectable by every
+/// user on the machine. Which is what this one came out as before anybody
+/// looked at it.
+pub(super) fn only_ours(socket: &std::path::Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(socket, std::fs::Permissions::from_mode(0o600))
+        .with_context(|| format!("narrowing {} to its owner", socket.display()))
 }
 
 /// A frame is its length and then its bytes.

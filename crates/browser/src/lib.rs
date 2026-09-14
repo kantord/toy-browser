@@ -47,6 +47,7 @@ pub use accesskit;
 // crate this one already depends on.
 pub use blitz::{LaidOut, lay_out};
 pub use cursor_icon::CursorIcon;
+pub use drawing::{Drawn, Waker};
 pub use hovering::Hovering;
 pub use keyboard::Held;
 pub use navigate::{Loaded, NavigationError};
@@ -230,9 +231,17 @@ impl Browser {
     /// somewhere other than where the mouse is answered.
     pub fn draw_elsewhere(&mut self, socket: Option<&std::path::Path>) -> Result<()> {
         let socket = socket.map_or_else(toy_browser_rasterizer::wire::default_socket, Into::into);
-        let client = crate::drawing::reached(&socket)?;
-        self.drawing = crate::drawing::Drawing::Elsewhere(Box::new(client));
+        let elsewhere = crate::drawing::reached(&socket)?;
+        self.drawing = crate::drawing::Drawing::Elsewhere(elsewhere);
         Ok(())
+    }
+
+    /// Says how to wake this browser's owner when a background drawing lands.
+    ///
+    /// Only a window needs one: it is asleep in its event loop when the answer
+    /// arrives, and a picture nobody wakes it for is a picture nobody draws.
+    pub fn wake_when_drawn(&self, waker: Waker) {
+        self.drawing.wake_with(waker);
     }
 
     pub fn set_scripts(&mut self, scripts: bool) {
