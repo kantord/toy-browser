@@ -14,10 +14,23 @@
 //! Kept between frames, not within one. A frame draws each shape a dozen times
 //! and there are hundreds of frames; a cache that started empty every frame
 //! would pay the whole cost again each time and save nothing.
+//!
+//! **And between everybody, in a rasterizer serving more than one client.** A
+//! [`Cast`] is a Digest and four numbers — the key is a pure function of
+//! content, so the same letter at the same size in the same face is the same
+//! entry whoever asked for it, and two clients drawing the same text fill it
+//! once between them.
+//!
+//! That sharing needs no permission of its own, which is the point worth
+//! stating. Reaching an entry means naming a Cast, naming a Cast means naming a
+//! face by Digest, and naming a face means having sent it — see `wire/store.rs`.
+//! **Access to a derived thing is access to what it was derived from**, already
+//! established, so there is no second question to answer and no notion of one
+//! client or another anywhere in here.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use resvg::tiny_skia::{self, Pixmap, Transform};
 
@@ -59,8 +72,29 @@ pub(super) struct Cell {
     pub top: i32,
 }
 
-thread_local! {
-    static KEPT: RefCell<HashMap<Cast, Option<Rc<Cell>>>> = RefCell::new(HashMap::new());
+/// Every glyph this process has filled, for every thread and every client.
+///
+/// A poisoned lock is taken anyway. This is a cache of filled outlines, and a
+/// thread that panicked mid-draw left it holding either an entry or nothing —
+/// there is no half-written state to protect anybody from. Refusing it instead
+/// would mean one client's malformed typeface killing every other client's
+/// drawing, which is the failure this shared atlas exists to be worth having
+/// despite. Sharing the work has to mean sharing the work, not the crash.
+fn kept() -> &'static Mutex<HashMap<Cast, Option<Arc<Cell>>>> {
+    static KEPT: OnceLock<Mutex<HashMap<Cast, Option<Arc<Cell>>>>> = OnceLock::new();
+    KEPT.get_or_init(Mutex::default)
+}
+
+/// How many glyphs have actually been filled, as opposed to found.
+///
+/// The only way to tell a shared atlas from an unshared one from outside: two
+/// clients drawing the same words should fill them once between them, and
+/// nothing about the pictures they get back would say whether they had.
+static FILLED: AtomicUsize = AtomicUsize::new(0);
+
+/// How many glyphs this process has filled since it started.
+pub fn filled_so_far() -> usize {
+    FILLED.load(Ordering::Relaxed)
 }
 
 /// The cell for this cast, filling it the first time it is asked for.
@@ -70,18 +104,29 @@ thread_local! {
 pub(super) fn stamp(
     cast: Cast,
     fill: impl FnOnce() -> Option<tiny_skia::Path>,
-) -> Option<Rc<Cell>> {
-    if let Some(known) = KEPT.with(|kept| kept.borrow().get(&cast).cloned()) {
+) -> Option<Arc<Cell>> {
+    if let Some(known) = kept()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(&cast)
+        .cloned()
+    {
         return known;
     }
-    let made = fill().and_then(|path| filled(&path, cast)).map(Rc::new);
-    KEPT.with(|kept| {
-        let mut kept = kept.borrow_mut();
-        if kept.len() >= MOST {
-            kept.clear();
-        }
-        kept.insert(cast, made.clone());
-    });
+    // Outside the lock. Filling an outline is the expensive part and holding
+    // the atlas while it happens would make every other thread wait for a
+    // letter it is not drawing. Two threads that miss at once both fill and one
+    // wins the insert, which costs a glyph and no correctness: the answer is a
+    // function of the key.
+    let made = fill().and_then(|path| drawn(&path, cast)).map(Arc::new);
+    FILLED.fetch_add(1, Ordering::Relaxed);
+    let mut kept = kept()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if kept.len() >= MOST {
+        kept.clear();
+    }
+    kept.insert(cast, made.clone());
     made
 }
 
@@ -89,7 +134,7 @@ pub(super) fn stamp(
 ///
 /// A pixel of margin all round, because an anti-aliased edge writes outside the
 /// bounds the path reports.
-fn filled(path: &tiny_skia::Path, cast: Cast) -> Option<Cell> {
+fn drawn(path: &tiny_skia::Path, cast: Cast) -> Option<Cell> {
     let slide = f32::from(cast.phase) / PHASES as f32;
     let bounds = path.bounds();
     let left = (bounds.left() + slide).floor() as i32 - 1;

@@ -27,6 +27,7 @@
 //! rasterizer keeps.
 
 mod client;
+mod public;
 mod server;
 mod store;
 
@@ -36,6 +37,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 pub use client::Client;
+pub use public::faces_found;
 pub use server::serve;
 
 use crate::{Digest, Face, Picture, Scene};
@@ -58,7 +60,12 @@ pub enum Asked {
     /// Draw this, and send back the pixels.
     ///
     /// The Scene arrives with its own tables empty — whatever it names has
-    /// already been sent, or the server already had it.
+    /// already been sent, or the server can reach it for itself.
+    ///
+    /// A Scene it cannot draw is **kept**, and the bytes that follow finish it.
+    /// Otherwise a first frame sends the marks, is told what is missing, and
+    /// sends the marks again — and on a whole page the marks are 1.7MB, which
+    /// is more than everything the round trip was saving.
     Draw(Box<Scene>),
 }
 

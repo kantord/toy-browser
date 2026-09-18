@@ -1,10 +1,18 @@
 //! The end that asks.
 //!
-//! One connection, and a tally of what has already crossed it. The tally is the
-//! whole reason this is affordable: a Scene is a few thousand marks and several
-//! megabytes of typeface, the typeface is the same one it was last frame, and a
-//! Digest is how both ends agree they already have it without either describing
-//! it.
+//! One connection, and a tally of what the far end is known to have. The tally
+//! is the whole reason this is affordable: a Scene is a few thousand marks and
+//! several megabytes of typeface, the typeface is the same one it was last
+//! frame, and a Digest is how both ends agree they already have it without
+//! either describing it.
+//!
+//! **Nothing is sent until it is asked for.** A Scene names its typefaces and
+//! its pictures by Digest and goes over with its tables empty; the rasterizer
+//! answers `Missing` for whatever it cannot reach, and only those bytes cross.
+//! It matters because a client's typefaces are usually the *machine's* — read
+//! out of `/usr/share/fonts` by fontconfig — and a rasterizer on the same
+//! machine opens the same files. Offering them up front shipped three and a
+//! half megabytes to a process that already had it.
 //!
 //! Per connection rather than per server, because a server that restarted has
 //! forgotten and neither end can tell that from a server that never knew.
@@ -58,19 +66,23 @@ impl Client {
                 height,
                 rgba,
             } => Ok((width, height, rgba)),
-            // Worth exactly one retry. A server that has forgotten one of these
-            // has forgotten all of them — it restarted — so the tally is thrown
-            // away and everything is offered again, rather than one blob being
-            // trickled across per attempt.
-            Answered::Missing(_) => {
-                self.sent.clear();
-                match self.attempt(scene)? {
+            // Not a failure: the ordinary first frame. The Scene named things
+            // this connection has not established the far end can reach, so
+            // they cross now — only these, and only once.
+            Answered::Missing(wanted) => {
+                // The marks are not sent again: the rasterizer kept them and
+                // these bytes are what it was waiting for.
+                self.offer(scene, &wanted)?;
+                match self.hear()? {
                     Answered::Pixels {
                         width,
                         height,
                         rgba,
                     } => Ok((width, height, rgba)),
-                    Answered::Missing(what) => bail!("the rasterizer is missing {what:?}"),
+                    Answered::Missing(still) => bail!(
+                        "sent the {} it asked for and it still wants {still:?}",
+                        wanted.len()
+                    ),
                     Answered::Failed(why) => bail!("the rasterizer refused: {why}"),
                 }
             }
@@ -95,7 +107,12 @@ impl Client {
         self.sent.clear();
     }
 
-    /// Offers whatever is new, asks for the drawing, and waits.
+    /// Asks for the drawing, sends whatever the answer says is missing, and
+    /// asks again.
+    ///
+    /// At most one extra round trip, on the first frame that names something
+    /// new. Every frame after it names the same typefaces, which are by then
+    /// known to be reachable, and crosses as marks alone.
     ///
     /// `TOY_BROWSER_TRACE_FRAME=1` says where the time went, split into the
     /// three things it could be: writing the marks down, the round trip, and
@@ -104,7 +121,6 @@ impl Client {
     /// is, is the whole question.
     fn attempt(&mut self, scene: &Scene) -> Result<Answered> {
         let clock = std::time::Instant::now();
-        self.offer(scene)?;
         let offered = clock.elapsed();
         let mut bare = scene.clone();
         bare.pictures.clear();
@@ -132,29 +148,45 @@ impl Client {
         Ok(answer)
     }
 
-    /// Sends whatever this Scene names that has not crossed yet.
-    fn offer(&mut self, scene: &Scene) -> Result<()> {
-        let pictures: Vec<_> = scene
-            .pictures
+    /// Sends exactly the bytes the far end said it was missing.
+    ///
+    /// `wanted` rather than everything this Scene names, because most of what a
+    /// Scene names is a typeface the rasterizer opened for itself out of the
+    /// machine's own font directories. Sending those was most of what this
+    /// connection ever weighed.
+    fn offer(&mut self, scene: &Scene, wanted: &[Digest]) -> Result<()> {
+        let pictures: Vec<_> = wanted
             .iter()
-            .filter(|(digest, _)| !self.sent.contains(digest))
-            .map(|(digest, picture)| (*digest, picture.clone()))
+            .filter_map(|digest| Some((*digest, scene.pictures.get(digest)?.clone())))
             .collect();
-        let faces: Vec<_> = scene
-            .faces
+        let faces: Vec<_> = wanted
             .iter()
-            .filter(|(digest, _)| !self.sent.contains(digest))
-            .map(|(digest, face)| (*digest, face.clone()))
+            .filter_map(|digest| Some((*digest, scene.faces.get(digest)?.clone())))
             .collect();
         if pictures.is_empty() && faces.is_empty() {
-            return Ok(());
+            bail!("the rasterizer wants {wanted:?}, which this Scene does not carry");
         }
-        let crossing = pictures
-            .iter()
-            .map(|(digest, _)| *digest)
-            .chain(faces.iter().map(|(digest, _)| *digest));
-        self.sent.extend(crossing);
+        if std::env::var_os("TOY_BROWSER_TRACE_FRAME").is_some() {
+            let kb = |bytes: usize| bytes as f32 / 1024.0;
+            let weigh = |bytes: usize| kb(bytes);
+            eprintln!(
+                "wire    asked for {} of {} named: {} pictures ({:.0}kB), {} faces ({:.0}kB)",
+                wanted.len(),
+                scene.pictures.len() + scene.faces.len(),
+                pictures.len(),
+                weigh(pictures.iter().map(|(_, it)| it.bytes.len()).sum()),
+                faces.len(),
+                weigh(faces.iter().map(|(_, it)| it.bytes.len()).sum()),
+            );
+        }
+        self.sent.extend(wanted.iter().copied());
         self.say(&Asked::Holds { pictures, faces })
+    }
+
+    /// One answer, waited for.
+    fn hear(&mut self) -> Result<Answered> {
+        let frame = read_frame(&mut self.from)?;
+        Ok(postcard::from_bytes(&frame)?)
     }
 
     fn say(&mut self, asked: &Asked) -> Result<()> {

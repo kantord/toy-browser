@@ -51,27 +51,57 @@ pub fn serve(socket: &std::path::Path) -> Result<()> {
 fn attend(stream: UnixStream, store: Arc<Store>) -> Result<()> {
     let mut from = BufReader::new(stream.try_clone()?);
     let mut to = BufWriter::new(stream);
-    // What *this* connection may name. Dropped with the connection, which is
-    // when its hold on each of them is given up.
-    let mut proved = Proved::of(store);
+    let mut talking = Talking {
+        proved: Proved::of(store),
+        pending: None,
+    };
     loop {
         let frame = match read_frame(&mut from) {
             Ok(frame) => frame,
             // The client hung up, which is how a client says goodbye.
             Err(_) => return Ok(()),
         };
-        let answer = match postcard::from_bytes::<Asked>(&frame) {
-            Ok(Asked::Holds { pictures, faces }) => match kept(&mut proved, pictures, faces) {
-                // Silence on success, so that a client learns nothing from how
-                // long it took or whether anything came back — including
-                // whether these bytes were already here.
-                Ok(()) => continue,
-                Err(why) => Answered::Failed(why),
-            },
-            Ok(Asked::Draw(scene)) => drawn(*scene, &proved),
-            Err(error) => Answered::Failed(format!("unreadable request: {error}")),
+        let Some(answer) = talking.heard(&frame) else {
+            continue;
         };
         write_frame(&mut to, &postcard::to_allocvec(&answer)?)?;
+    }
+}
+
+/// One connection's state: what it may name, and what it is waiting to draw.
+struct Talking {
+    proved: Proved,
+    /// A Scene that could not be drawn for want of bytes, kept until they come.
+    ///
+    /// One at a time, because a client waits for its answer before asking
+    /// again. Kept rather than asked for twice: the marks are the large half of
+    /// a first frame — 1.7MB on a whole page — and they have already crossed.
+    pending: Option<Scene>,
+}
+
+impl Talking {
+    /// What to say back, or nothing at all.
+    ///
+    /// Nothing is an answer: bytes that were not wanted for anything get
+    /// silence, so a client learns nothing from whether something came back —
+    /// including whether they were already here.
+    fn heard(&mut self, frame: &[u8]) -> Option<Answered> {
+        match postcard::from_bytes::<Asked>(frame) {
+            Ok(Asked::Holds { pictures, faces }) => match kept(&mut self.proved, pictures, faces) {
+                Ok(()) => self.pending.take().map(|scene| drawn(scene, &self.proved)),
+                Err(why) => Some(Answered::Failed(why)),
+            },
+            Ok(Asked::Draw(scene)) => Some(self.draw(*scene)),
+            Err(error) => Some(Answered::Failed(format!("unreadable request: {error}"))),
+        }
+    }
+
+    fn draw(&mut self, scene: Scene) -> Answered {
+        let answer = drawn(scene.clone(), &self.proved);
+        if matches!(answer, Answered::Missing(_)) {
+            self.pending = Some(scene);
+        }
+        answer
     }
 }
 

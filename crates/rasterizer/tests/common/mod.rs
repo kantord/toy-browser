@@ -52,3 +52,53 @@ pub fn red() -> Paint {
         alpha: 1.0,
     }
 }
+
+/// A Scene with real text in it, drawn in whatever face is handed in.
+///
+/// Glyphs rather than fills, because the atlas is about glyphs — and a Scene
+/// with no text in it exercises none of it.
+pub fn lettered(words: &str, bytes: std::sync::Arc<[u8]>) -> toy_browser_rasterizer::Scene {
+    use toy_browser_rasterizer::{Digest, Face, Glyph, Mark, Scene};
+    let digest = Digest::of(&bytes);
+    let mut scene = Scene {
+        width: 200,
+        height: 40,
+        ..Scene::default()
+    };
+    scene.faces.insert(digest, Face { bytes });
+    scene.marks.push(Mark::Glyphs {
+        places: (0..words.len()).map(|at| at as f32 * 10.0).collect(),
+        text: words.to_owned(),
+        // Glyph ids rather than characters: what layout chose. Any distinct set
+        // will do — what is being counted is how often they are filled.
+        glyphs: (0..words.len())
+            .map(|at| Glyph {
+                id: 20 + at as u32,
+                x: at as f32 * 10.0,
+                y: 0.0,
+            })
+            .collect(),
+        baseline: 30.0,
+        size: 16.0,
+        paint: red(),
+        face: digest,
+        from: None,
+    });
+    scene
+}
+
+/// Any font this machine has where anybody could read it, since the point is
+/// never which one — only that a rasterizer can open it for itself.
+pub fn a_public_face() -> std::path::PathBuf {
+    for at in [
+        "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ] {
+        if std::path::Path::new(at).exists() {
+            return at.into();
+        }
+    }
+    panic!("no font found to test with");
+}

@@ -40,7 +40,7 @@ mod svg;
 mod values;
 pub mod wire;
 
-pub use draw::draw;
+pub use draw::{draw, filled_so_far};
 pub use named::{Digest, Face, Format, Picture};
 pub use raster::{Rendered, pixels, render, written};
 pub use svg::{export, family, normal_form};

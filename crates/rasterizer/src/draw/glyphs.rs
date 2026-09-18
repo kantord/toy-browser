@@ -10,8 +10,6 @@
 //! matrix has not turned is stamped from the [`atlas`](super::atlas) instead,
 //! which fills each shape once and keeps it.
 
-use std::rc::Rc;
-
 use resvg::tiny_skia::{self, Transform};
 use skrifa::outline::{DrawSettings, OutlineGlyphCollection, OutlinePen};
 use skrifa::prelude::{LocationRef, Size as FaceSize};
@@ -115,7 +113,7 @@ impl Hand<'_> {
     }
 
     /// The cell for a glyph, filled the first time this shape is asked for.
-    fn stamp(&mut self, cast: Cast, size: f32) -> Option<Rc<Cell>> {
+    fn stamp(&mut self, cast: Cast, size: f32) -> Option<std::sync::Arc<Cell>> {
         // The outline is built here rather than in the atlas because building
         // one means opening a face, and which bytes a Digest names is this
         // file's business.

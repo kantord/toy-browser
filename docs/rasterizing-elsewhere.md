@@ -101,100 +101,8 @@ gradient, radius, shadow and transform probes are byte-identical as PNGs. Live
 `hcker.news` is not, and that is the page rather than the rasterizer — it prints
 how long ago each story was posted.
 
-## Shared by clients that do not trust each other
-
-The point of a daemon is that many clients use one. If those clients are
-untrusted apps, two things have to be true at once, and they pull against each
-other: **hold one copy** of each typeface, because they are megabytes and
-everybody sends the same handful; and **tell nobody anything**, because one
-client must not learn what another has drawn.
-
-### The obvious reading of content addressing, and why it is wrong
-
-A Digest is bytes named by their own content, so it is tempting to treat the
-name as the permission: to say the digest you must have had the content, so you
-may have it back. That is nearly right, and it leaks the one thing worth
-leaking — **existence**.
-
-A client that can ask *do you have this digest* and be told **yes** has an
-oracle. It names the digest of a document, a photograph, a company's logo, and
-learns whether anyone else on this machine has drawn it. It never receives a
-byte it did not already have, and it learns something it had no business
-knowing.
-
-### What is done instead
-
-**Deduplicated globally, authorised per connection.** `store.rs` holds the
-bytes once for everybody; the permission to *name* them is per connection and
-is earned only by sending them. A client that has the content sends it and is
-told nothing about whether it was already here. A client that does not have the
-content cannot get it, and cannot discover that it exists — a digest ten other
-clients are using answers exactly as a digest nobody has ever sent.
-
-So the saving is **memory, not transfer**: one copy in this process rather than
-one per client. A client still sends each typeface once per connection, which
-costs it four milliseconds at the start and nothing afterwards.
-
-*(Before this, `held` was per connection and nothing was shared at all — ten
-windows held ten copies. The isolation was perfect and the saving was zero.)*
-
-### The one check it all rests on
-
-**A digest is verified against its bytes before anything is kept.** Without it
-the model inverts: a hostile client sends the digest of a popular typeface with
-contents of its own, and every other client that later names that digest is
-handed the attacker's bytes. Content addressing is only addressing *by content*
-if somebody checks.
-
-### What content addressing does not do
-
-It gives the protocol no ambient authority — there is no way to say "open this
-file" or "use the font called Verdana", so a rasterizer cannot be talked into
-reaching for anything. That is a real and unusual property and it is the right
-foundation. It is not, on its own, isolation:
-
-- **It says nothing about resource exhaustion.** A client can send blobs until
-  memory is gone, ask for a picture the size of a wall, or simply connect a
-  thousand times. There is a cap on what is held and on how many pixels will be
-  drawn at once; there is nothing per client, and nothing counts connections.
-- **It says nothing about who is asking.** Nothing calls `SO_PEERCRED`, and on
-  Linux two apps under one uid are not separated by the kernel anyway. Real
-  per-app identity means a socket per app, handed in by whatever sandboxes them
-  — the shape a desktop portal has.
-- **Timing still says a little.** Keeping bytes that are already held is a hash
-  compare; keeping new ones is an allocation. The difference is small beside the
-  transfer that preceded it, and it is not nothing.
-- **The rasterizer parses what it is given.** Fonts through skrifa, images
-  through `image`, SVG through usvg — all safe Rust, so the worst case is a
-  panic or a hang rather than anything worse, and a panic takes one connection's
-  thread. A hang takes the daemon, and with it everybody.
-
-## Who can reach it
-
-What crosses this socket is everything on somebody's screen: every word of
-every page they have open, as text. So it sits somewhere only its owner can
-reach — `$XDG_RUNTIME_DIR`, which is already 0700 — and the socket itself is
-narrowed to 0600, because `bind` takes the umask and a socket made under the
-usual 0022 comes out connectable by every user on the machine. Which is what
-this one was, until somebody asked.
-
-The fallback when there is no run-time directory is a directory of *ours* under
-the temporary one, made 0700. **Never the temporary directory itself.** It is
-world-writable, and the attack that matters is not eavesdropping but squatting:
-another user creates the socket path first, this browser connects to it
-believing it is a rasterizer, and hands over every Scene it draws. So both ends
-check the directory's mode before they speak, and refuse anything but 0700 —
-the client especially, since the client is the end that would have sent the
-page.
-
-That check needs no syscall to ask who we are. Creating a 0700 directory makes
-it ours; finding one that already exists and is 0700 means it is *somebody's*,
-and if that somebody is not us then everything we try inside it fails with
-permission denied. It fails closed either way.
-
-One thing that helps by accident: a password is replaced with bullets in the
-laid-out document, before a Scene is ever built. A stolen Scene has never held
-one.
+Who may reach it, and what one client can learn about another, is
+`docs/rasterizing-safely.md`.
 
 ## What it does not do yet
 
@@ -212,14 +120,6 @@ one.
   window blits from and nothing is copied at all.
 - **Nothing stops the server.** It lives until it is killed, holding whatever
   typefaces its clients have sent. It should go away when the last one leaves.
-- **It does not ask who connected.** Anyone who can reach the socket can drive
-  the rasterizer, and the directory's mode is the whole of the answer. The
-  kernel will say — `SO_PEERCRED` — and nothing asks it. Worth doing if the
-  socket ever moves somewhere less private.
-- **A client can make the server allocate.** A frame declares its length and
-  the server allocates it, up to 256MB, before reading a byte. A rasterizer is
-  reachable only by its owner, so this is a way to inconvenience yourself; it
-  would be a denial of service if that ever stopped being true.
 - **The server keeps every picture and typeface it has been sent**, per
   connection, for as long as the connection lasts — and the process outlives
   every browser that used it. Nothing forgets and nothing stops it.

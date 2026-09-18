@@ -19,6 +19,8 @@
 //! [`glyphs`], [`fills`] and [`blur`] each draw one kind.
 
 mod atlas;
+
+pub use atlas::filled_so_far;
 mod blur;
 mod fills;
 mod glyphs;

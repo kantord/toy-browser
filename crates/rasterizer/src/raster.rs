@@ -70,18 +70,56 @@ pub fn written(scene: &Scene, pixmap: tiny_skia::Pixmap) -> Result<Rendered> {
 
 /// A Picture as pixels, for a painter that draws them itself.
 ///
+/// How large an SVG this will draw.
+///
+/// **Not the same question as how large a Scene may be**, which is checked on
+/// the way in. A Mark places a picture in an Area and the Area says nothing
+/// about the file: a hundred and twenty bytes of SVG can declare a hundred
+/// thousand pixels a side, and drawing it inside a ten-pixel box took *thirty
+/// five seconds* before this was here. On a rasterizer shared between clients,
+/// that is thirty five seconds of everybody's windows.
+///
+/// Only SVG. A raster picture that claims to be enormous is refused by the
+/// decoder's own limits, which are shaped better than this — a cap on what is
+/// allocated rather than on an edge, so a legitimate panorama still draws.
+/// Measured rather than assumed: the same test passes with this removed and the
+/// raster one removed too.
+///
+/// Sixteen thousand a side is four times the longest edge of a 4K screen.
+const LONGEST_EDGE: u32 = 16_384;
+
+fn too_many(wide: u32, tall: u32) -> bool {
+    wide > LONGEST_EDGE || tall > LONGEST_EDGE
+}
+
 /// The same bytes resvg is handed, decoded here instead. An SVG picture is
 /// rasterized at its own size and treated as any other image from then on:
 /// nothing downstream needs to know one was ever vector.
 pub(super) fn decoded_pixmap(picture: &Picture) -> Option<tiny_skia::Pixmap> {
-    if picture.format == Format::Svg {
-        let tree = usvg::Tree::from_data(&picture.bytes, &usvg::Options::default()).ok()?;
-        let size = tree.size().to_int_size();
-        let mut pixmap = tiny_skia::Pixmap::new(size.width().max(1), size.height().max(1))?;
-        resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
-        return Some(pixmap);
+    match picture.format {
+        Format::Svg => drawn_svg(&picture.bytes),
+        _ => decoded_raster(&picture.bytes),
     }
-    let decoded = image::ImageReader::new(std::io::Cursor::new(picture.bytes.as_ref()))
+}
+
+/// An SVG drawn at the size it says it is.
+///
+/// The size is the file's own claim and is checked, for the reason
+/// [`LONGEST_EDGE`] gives.
+fn drawn_svg(bytes: &[u8]) -> Option<tiny_skia::Pixmap> {
+    let tree = usvg::Tree::from_data(bytes, &usvg::Options::default()).ok()?;
+    let size = tree.size().to_int_size();
+    if too_many(size.width(), size.height()) {
+        return None;
+    }
+    let mut pixmap = tiny_skia::Pixmap::new(size.width().max(1), size.height().max(1))?;
+    resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
+    Some(pixmap)
+}
+
+/// Any other picture, decoded and turned into premultiplied pixels.
+fn decoded_raster(bytes: &[u8]) -> Option<tiny_skia::Pixmap> {
+    let decoded = image::ImageReader::new(std::io::Cursor::new(bytes))
         .with_guessed_format()
         .ok()?
         .decode()

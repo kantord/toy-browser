@@ -50,33 +50,51 @@ fn a_scene_drawn_over_a_socket_comes_back_as_the_same_pixels() {
     );
 }
 
-/// The property the whole design turns on: a typeface is megabytes and is the
-/// same one every frame, so it crosses once and the frames after that are
-/// marks alone.
+/// The rule the wire now follows: **nothing crosses until it is asked for.**
+///
+/// A client's typefaces are usually the *machine's* — fontconfig read them out
+/// of `/usr/share/fonts` — and a rasterizer on the same machine opens the same
+/// files. So it never asks for them and they never cross, which used to be
+/// three and a half megabytes a connection.
 #[test]
-fn the_bytes_cross_once_and_the_marks_cross_every_time() {
-    let socket = listening("once");
-    // Not a real font — nothing draws with it here. What is being counted is
-    // how often it is sent, and that does not depend on what is in it.
-    let bytes: std::sync::Arc<[u8]> = vec![7u8; 64 * 1024].into();
-    let digest = Digest::of(&bytes);
-    let mut scene = square(4);
-    scene.faces.insert(digest, Face { bytes });
+fn a_typeface_this_machine_already_has_never_crosses() {
+    let socket = listening("public");
+    let bytes: std::sync::Arc<[u8]> = std::fs::read(common::a_public_face())
+        .expect("a font")
+        .into();
+    let scene = common::lettered("public", bytes);
 
     let mut client = Client::connect(&socket).expect("connect");
-    let first = client.sent().len();
+    client.draw(&scene).expect("draw");
+    assert!(
+        client.sent().is_empty(),
+        "the rasterizer opened it for itself, so nothing was sent"
+    );
+}
+
+/// And one it does not have crosses exactly once.
+#[test]
+fn a_typeface_this_machine_lacks_crosses_once_and_no_more() {
+    let socket = listening("private");
+    // Not a real font, and nothing renders from it. What is being counted is
+    // how often it crosses, which does not depend on what is in it — only on
+    // its not being anywhere a rasterizer could have found it.
+    let bytes: std::sync::Arc<[u8]> = vec![7u8; 64 * 1024].into();
+    let digest = Digest::of(&bytes);
+    let scene = common::lettered("private", bytes);
+
+    let mut client = Client::connect(&socket).expect("connect");
+    assert!(client.sent().is_empty(), "nothing before the first drawing");
     client.draw(&scene).expect("first");
     let after_one = client.sent().clone();
     client.draw(&scene).expect("second");
-    let after_two = client.sent().clone();
 
-    assert_eq!(first, 0, "nothing has crossed before the first draw");
     assert_eq!(
         after_one,
         BTreeSet::from([digest]),
-        "the face crossed with the first drawing"
+        "it crossed when the rasterizer said it could not reach it"
     );
-    assert_eq!(after_two, after_one, "and not again with the second");
+    assert_eq!(client.sent(), &after_one, "and not again with the second");
 }
 
 /// A Scene naming bytes nobody ever sent is a question the server can answer

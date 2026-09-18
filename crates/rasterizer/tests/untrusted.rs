@@ -182,3 +182,119 @@ mod between_clients_that_do_not_trust_each_other {
         assert!(greedy.draw(&scene).is_err());
     }
 }
+
+/// What one client gets of another's *work* — as opposed to another's bytes.
+///
+/// A rasterizer serving many clients fills each glyph once for all of them: the
+/// atlas key is a face Digest and four numbers, so the same letter at the same
+/// size in the same face is the same entry whoever asked. That sharing needs no
+/// permission of its own, and that is the whole point — reaching an entry means
+/// naming a face, and naming a face means having sent it. **Access to a derived
+/// thing is access to what it was derived from**, which is already settled.
+mod work_is_shared_because_its_inputs_were_proved {
+    use toy_browser_rasterizer::filled_so_far;
+
+    use super::common::{a_public_face, lettered};
+
+    /// Drawing the same words twice fills them once.
+    ///
+    /// In one process here rather than over two connections, because what is
+    /// being shown is that the atlas is process-wide rather than per caller —
+    /// and a second connection is a second caller in the same process, which is
+    /// exactly the case that used to have an atlas of its own.
+    #[test]
+    fn the_same_glyphs_are_filled_once_however_often_they_are_asked_for() {
+        let bytes = std::fs::read(a_public_face()).expect("a font").into();
+        let scene = lettered("shared", bytes);
+        let before = filled_so_far();
+        toy_browser_rasterizer::pixels(&scene).expect("first");
+        let once = filled_so_far();
+        toy_browser_rasterizer::pixels(&scene).expect("second");
+        let twice = filled_so_far();
+
+        assert!(once > before, "the first drawing fills them");
+        assert_eq!(twice, once, "and the second fills nothing at all");
+    }
+}
+
+/// A client must not be able to decide how long this process spends, or how
+/// much memory it uses. On a rasterizer shared between clients, the one that
+/// stops is everybody.
+mod nothing_one_client_sends_can_take_the_others_down {
+    use toy_browser_rasterizer::{Area, Digest, Format, Mark, Picture, Scene};
+
+    /// A Scene that draws one picture in a ten-pixel box.
+    ///
+    /// Ten pixels because that is the point: where a Mark puts a picture says
+    /// nothing about what the file claims to be, so the Scene's own size limit
+    /// does not cover this at all.
+    fn showing(picture: Picture) -> Scene {
+        let digest = Digest::of(&picture.bytes);
+        let mut scene = Scene {
+            width: 10,
+            height: 10,
+            ..Scene::default()
+        };
+        scene.pictures.insert(digest, picture);
+        scene.marks.push(Mark::Image {
+            area: Area {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: 10.0,
+            },
+            picture: digest,
+            from: None,
+        });
+        scene
+    }
+
+    fn took(scene: &Scene) -> std::time::Duration {
+        let began = std::time::Instant::now();
+        toy_browser_rasterizer::pixels(scene).expect("it draws, with or without the picture");
+        began.elapsed()
+    }
+
+    /// A hundred and twenty bytes that took thirty-five seconds before the
+    /// guard, in a ten-pixel box.
+    ///
+    /// This is the one that was real. The raster version below is not, and both
+    /// are here so that the difference stays measured rather than remembered.
+    #[test]
+    fn an_svg_that_declares_itself_enormous_is_never_drawn() {
+        let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="100000" height="100000"><rect width="100%" height="100%" fill="red"/></svg>"#;
+        let scene = showing(Picture {
+            bytes: svg.to_vec().into(),
+            format: Format::Svg,
+        });
+        assert!(
+            took(&scene) < std::time::Duration::from_secs(5),
+            "refused on its declared size rather than drawn"
+        );
+    }
+
+    /// And the raster equivalent, which needs nothing from us: the decoder's own
+    /// limits refuse it, and they are shaped better than a limit here would be —
+    /// a cap on what is allocated rather than on an edge, so a legitimate
+    /// panorama still draws.
+    ///
+    /// Kept because it is the evidence for *not* having written that limit.
+    #[test]
+    fn a_raster_that_declares_itself_enormous_is_refused_by_its_decoder() {
+        let mut bytes = b"GIF89a".to_vec();
+        bytes.extend_from_slice(&u16::MAX.to_le_bytes());
+        bytes.extend_from_slice(&u16::MAX.to_le_bytes());
+        bytes.extend_from_slice(&[0xF7, 0x00, 0x00]);
+        bytes.extend(std::iter::repeat_n(0u8, 3 * 256));
+        bytes.extend_from_slice(b"\x2C");
+        bytes.extend_from_slice(&[0, 0, 0, 0]);
+        bytes.extend_from_slice(&u16::MAX.to_le_bytes());
+        bytes.extend_from_slice(&u16::MAX.to_le_bytes());
+        bytes.extend_from_slice(&[0x00, 0x08]);
+        let scene = showing(Picture {
+            bytes: bytes.into(),
+            format: Format::Gif,
+        });
+        assert!(took(&scene) < std::time::Duration::from_secs(5));
+    }
+}

@@ -107,7 +107,7 @@ last frame, so the marks cross every time and the bytes cross once.
 Measured: building a Scene costs 4ms on Hacker News and 19ms on a long
 Wikipedia article, and *drawing* it costs 120ms and 1.5 seconds. That second is
 spent on the thread the page's JavaScript runs on and its window answers the
-mouse from. See `docs/rasterizing-elsewhere.md`.
+mouse from. See `docs/rasterizing-elsewhere.md` and `docs/rasterizing-safely.md`.
 
 ## browser — pages
 

@@ -75,6 +75,11 @@ struct Kept {
 }
 
 /// Every byte this rasterizer holds, once each.
+///
+/// A poisoned lock is taken anyway, for the reason the atlas gives: one client
+/// panicking must not stop every other client from drawing. The worst a panic
+/// mid-update can leave here is a hold that is never given up, which costs
+/// memory until the process ends and costs nobody their pictures.
 #[derive(Default)]
 pub(super) struct Store {
     kept: Mutex<HashMap<Digest, Kept>>,
@@ -91,7 +96,10 @@ impl Store {
         if Digest::of(what.bytes()) != digest {
             return Err(Refused::NotWhatItSays);
         }
-        let mut kept = self.kept.lock().expect("the store");
+        let mut kept = self
+            .kept
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(already) = kept.get_mut(&digest) {
             // Held once, however many ask for it. The copy that just arrived is
             // dropped: it is the same bytes, by construction.
@@ -113,7 +121,10 @@ impl Store {
     /// the two apart is what stops a lookup ever being the thing that answers
     /// whether something exists.
     fn holding(&self, digest: Digest) -> Option<(Option<Picture>, Option<Face>)> {
-        let kept = self.kept.lock().expect("the store");
+        let kept = self
+            .kept
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         match &kept.get(&digest)?.what {
             Held::Picture(picture) => Some((Some(picture.clone()), None)),
             Held::Face(face) => Some((None, Some(face.clone()))),
@@ -122,7 +133,10 @@ impl Store {
 
     /// Gives up one hold on each of these, freeing whatever nobody else wants.
     fn release(&self, digests: &HashSet<Digest>) {
-        let mut kept = self.kept.lock().expect("the store");
+        let mut kept = self
+            .kept
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         for digest in digests {
             let Some(one) = kept.get_mut(digest) else {
                 continue;
@@ -192,13 +206,19 @@ impl Proved {
         Ok(())
     }
 
-    /// What this digest names, or nothing — and *nothing* for a digest this
-    /// connection never sent, whatever anybody else has sent.
+    /// What this digest names, or nothing.
+    ///
+    /// Two sources, and the difference between them is the whole access rule.
+    /// **What this connection sent**, which nobody else can reach. And **what
+    /// this machine already had where anyone could read it** — a system
+    /// typeface — which everybody can reach without sending it and without
+    /// learning anything by asking. Nothing a client sends ever becomes the
+    /// second kind.
     pub(super) fn look(&self, digest: Digest) -> Option<(Option<Picture>, Option<Face>)> {
-        if !self.mine.contains(&digest) {
-            return None;
+        if self.mine.contains(&digest) {
+            return self.store.holding(digest);
         }
-        self.store.holding(digest)
+        super::public::face(digest).map(|face| (None, Some(face)))
     }
 }
 
