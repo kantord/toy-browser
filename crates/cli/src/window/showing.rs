@@ -92,6 +92,7 @@ impl Open {
             height: None,
             zoom: LADDER[self.rung],
             scheme: self.scheme,
+            ..Viewport::default()
         }
     }
 

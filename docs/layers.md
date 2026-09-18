@@ -2,6 +2,7 @@
 
 ```
 crates/cli         CLI, CDP and WebDriver         deps: browser
+crates/tui         the browser in a terminal      deps: browser
 crates/browser     pages, elements, measuring,    deps: engine, fetch, rasterizer
                    painting, reading
 crates/engine      the door                       deps: fetch
@@ -142,6 +143,15 @@ talks to any of them. See `docs/accessibility.md`.
 `UnsupportedScheme` or `NotFound`; the words a client sees are its protocol's
 business.
 
+**A `Viewport` can force a `Monospace` grid onto every element's text.**
+`rules.rs` turns it into a user-agent rule — `font-family`, `font-size`,
+`line-height`, `letter-spacing` and `word-spacing`, all `!important` — added
+to `lay_out`'s own `sheets`, the same seam `noscript`'s fallback rule already
+used. Being a field of the Viewport is what makes it a cascade input: a page
+laid out for its own fonts has to be laid out again once one is forced. Only
+`tui` asks for one; a page nobody asked to grid still measures its own fonts
+exactly as it always did.
+
 ## cli — front ends
 
 The command line, and two protocols: Chrome DevTools (`cdp/`) and W3C WebDriver
@@ -158,6 +168,36 @@ They also use different halves of the browser layer, which is the useful part:
 CDP drives everything through `evaluate` because that is what its client does,
 while WebDriver's `find`, `text` and `attribute` run no JavaScript at all.
 See `docs/cdp-surface.md` and `docs/webdriver-surface.md`.
+
+## tui — the browser in a terminal
+
+A separate crate and a separate binary, not a subcommand of `cli`, because it
+answers to a different input system end to end — crossterm's events rather
+than winit's — and shares nothing with the window front end but `browser`
+itself, the same way `cli` shares nothing with it but that.
+
+**It measures text in character units, not pixels rescaled into them.**
+`app.rs` forces a `Monospace` grid onto every page it opens; `calibrate.rs`
+answers what that grid's cell actually comes to, in real pixels, by loading a
+two-character probe under the same grid and reading back how far apart they
+landed — CSS has a property for `line-height` but none for how wide a
+character is, so that half is measured rather than asked for. Once every
+element's text is the same size everywhere, a real position and a cell
+boundary are the same thing, and `grid.rs` divides by the cell size once
+instead of reconciling neighbours that used to disagree — see its own
+`glyphs` for what disagreeing looked like, and why it no longer needs to.
+
+Past that, it replaces one step only: where the window front end rasterizes a
+Scene to pixels, this paints it onto a grid of character cells, each one a
+character, a foreground and a background. Everything above that step is
+unchanged: the same `Browser`, the same pointer and keyboard calls, the same
+Scene. `Mark::Image` is left undrawn and a `Fill`'s corners are always
+square, which is the whole of what a cell cannot hold that a pixel can.
+
+Arrow keys, Page Up/Down, Home and End move the window over the page instead
+of reaching the DOM — nothing in this codebase scrolls a document from the
+keyboard, so a terminal, which cannot assume anyone has a wheel, is given
+these instead. Every other key is forwarded exactly as a keystroke would be.
 
 ## Concurrency
 

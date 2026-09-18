@@ -31,6 +31,7 @@ crates/fetch/      one shared, thread-safe, cached place bytes are read (file an
 crates/engine/     the door — sessions, DOM, JavaScript, HTML
 crates/browser/    pages, elements, measuring, rendering
 crates/cli/        the command line, and the CDP and WebDriver front ends
+crates/tui/        the browser in a terminal: a mouse and a keyboard, no pixels
 tests/fixtures/    sample pages
 tests/playwright/  @toy-browser/playwright — the acceptance suite
 docs/              layers, protocol surfaces, JS entry points, ADRs
