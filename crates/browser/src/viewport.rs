@@ -30,6 +30,31 @@ pub struct Viewport {
     /// field of the Viewport is also what makes it reach the caches — a page
     /// already laid out light has to be laid out again to be shown dark.
     pub scheme: Scheme,
+    /// Forces every element's text onto one uniform grid instead of whatever
+    /// font and size the page itself asked for.
+    ///
+    /// A field of the Viewport for the same reason `scheme` is: it is a
+    /// cascade input, so a page laid out for one grid has to be laid out again
+    /// for another, and being compared here is what makes that happen.
+    /// `None` leaves every page exactly as its own CSS describes it.
+    pub monospace: Option<Monospace>,
+}
+
+/// The text grid a Viewport forces onto every element, in CSS px.
+///
+/// Whole pixels, not a fraction: this is one half of the key the layout cache
+/// is compared by, and floats do not compare — see `zoom`'s own reasoning.
+///
+/// Only `font_size` needs answering for afterwards: CSS has no property for
+/// how wide a character is, so the *width* a page's chosen monospace face
+/// draws it at still has to be measured once it is known, the way `zoom`'s
+/// `scale` is worked out rather than asked for. `line_height` needs nothing
+/// of the kind — it is a CSS property in its own right, so asking for it here
+/// is already the last word.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Monospace {
+    pub font_size: u32,
+    pub line_height: u32,
 }
 
 /// The colour scheme a page is shown in, as `prefers-color-scheme` names them.
@@ -80,6 +105,7 @@ impl Default for Viewport {
             zoom: Self::NORMAL,
             height: None,
             scheme: Scheme::Light,
+            monospace: None,
         }
     }
 }

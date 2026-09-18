@@ -21,6 +21,7 @@ const DEFAULT_VIEWPORT: Viewport = Viewport {
     height: Some(720),
     zoom: Viewport::NORMAL,
     scheme: toy_browser::Scheme::Light,
+    monospace: None,
 };
 
 /// One WebDriver session: the windows it has open, which one it is looking at,

@@ -122,10 +122,11 @@ impl Browser {
             .base_url(page)
             .map(|url| url.to_string())
             .unwrap_or_else(|| "about:blank".to_owned());
-        let scripting = self.scripting(page);
+        let run_scripts = self.pages.get(page).is_none_or(|held| held.run_scripts);
+        let mut sheets = crate::rules::sheets(run_scripts, viewport.monospace);
         let typed = self.engine.fields(&session)?;
         let mut measuring =
-            crate::blitz::lay_out(&html, &scripting, viewport, &base, &self.resources)?;
+            crate::blitz::lay_out(&html, &sheets, viewport, &base, &self.resources)?;
         measuring.typed(&typed);
         let frames = measuring.webviews();
         if frames.is_empty() {
@@ -136,32 +137,13 @@ impl Browser {
         }
 
         let (inside, told) = self.inhabit(page, &frames, viewport)?;
-        let sheets: Vec<String> = scripting.into_iter().chain([told]).collect();
+        sheets.push(told);
         let mut laid_out = crate::blitz::lay_out(&html, &sheets, viewport, &base, &self.resources)?;
         laid_out.typed(&typed);
         Ok(crate::blitz::Composed {
             mounted: self.framed(page, &laid_out, inside),
             laid_out,
         })
-    }
-
-    /// What the cascade is owed about whether this page's scripts run.
-    ///
-    /// One rule, and it is in the HTML specification rather than here:
-    /// `noscript` is `display: none` when scripting is enabled, and shows what
-    /// it holds when it is not. Nothing else on the page can say it — the
-    /// element is *about* the browser rather than about the document — so a
-    /// browser that never wrote this rule down draws every "please enable
-    /// JavaScript" banner on the web over the page that was meant instead.
-    ///
-    /// Worked out per page rather than baked into the user-agent sheet, because
-    /// a page whose scripts were turned off is exactly the page that wants the
-    /// fallback it hides.
-    fn scripting(&self, page: &PageId) -> Vec<String> {
-        match self.pages.get(page).is_none_or(|held| held.run_scripts) {
-            true => vec!["noscript { display: none }".to_owned()],
-            false => Vec::new(),
-        }
     }
 
     /// Lays out the page behind every frame, and says how tall each turned out.

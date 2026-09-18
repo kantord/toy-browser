@@ -61,6 +61,11 @@ ui url="https://news.ycombinator.com/":
 split:
     cargo run --release -- browse "file://{{ justfile_directory() }}/tests/fixtures/webviews.html"
 
+# The same browser in a terminal instead of a window: a grid of character
+# cells, with a mouse and a keyboard that both work. Ctrl-C leaves it.
+term url="https://news.ycombinator.com/" *ARGS:
+    cargo run --release -p toy-browser-tui -- {{ url }} {{ ARGS }}
+
 # The same protocol without a test runner in the way.
 smoke:
     pnpm test:smoke
