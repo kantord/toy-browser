@@ -288,3 +288,17 @@ away.
 the *bytes* through `NetProvider` and blitz supplies the handler, so there is no
 seam on the embedder's side to put this behind. It is the handler's decision or
 nobody's.
+
+**Taken here — the larger fix.** `vendor/blitz-dom/src/net.rs` now calls
+`into_dimensions()` and carries no pixels at all, which this repository can do
+because it paints from the original bytes. Still worth reporting, because the
+one-line `clone()` fix helps every embedder and this one only helps embedders
+that paint for themselves.
+
+Measured again afterwards, on the same article, and the honest result is that
+**the time did not move**: 2.7s before and 2.7s after, because 28ms of decoding
+is one percent of a page that takes 2.7 seconds and this page lays out once.
+What moved is memory — **peak RSS 396MB → 387MB**, about nine megabytes, more
+than the 4.6MB retained because the decode allocates the image and the RGBA8
+copy of it on the way. The time would show on a page that composes repeatedly,
+which is what `docs/measuring-again.md` is about, and this page is not one.

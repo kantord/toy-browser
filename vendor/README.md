@@ -94,6 +94,10 @@ decoded when only its size was wanted. Every one is in the part blitz keeps
 private: not where bytes come from and not how they are drawn, but what they
 *mean*. There is no seam on our side to put any of them behind.
 
+One of the seven is fixed here already — the image decode, below. The other six
+are still open, and each is still worth reporting upstream whether or not it is
+patched here.
+
 **It moves anyway.** Table behaviour changed under us between 0.2.4 and 0.3.0.
 The churn is already ours; this is taking the wheel with it.
 
@@ -115,6 +119,14 @@ published. Everything below came after that.
 **Every `.rs` file gained the nine-line origin header** from rule 1. That is the
 one change made to all 41 of them, and it is additive — a `diff -r` against the
 published tarball shows it as the first hunk of each file and nothing else.
+
+**`net.rs` — the image handler reads a size instead of decoding a picture.**
+The first of the seven, and the reason this directory exists. `docs/upstream.md`
+has the measurements; the short version is that layout wants two integers and
+this decoded the file, cloned the decoded image and kept the RGBA8 — a second
+decode of a picture whose original bytes the painter already carries. Peak RSS
+on one Wikipedia article went 396MB → 387MB. The time did not move, and that is
+written down too.
 
 Two manifest edits, which are not source changes:
 

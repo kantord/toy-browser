@@ -542,22 +542,44 @@ impl NetHandler for ResourceHandler<ImageHandler> {
 
 impl ImageHandler {
     fn parse(&self, bytes: Bytes) -> Result<Resource, String> {
+        // tb+++ read the size, do not decode the picture.
+        //
+        // Layout wants two integers. This decoded the whole file, cloned the
+        // decoded image, converted the clone to RGBA8 and kept the pixels —
+        // 28.4ms and 4.6MB for one Wikipedia article's 46 pictures, against
+        // 1.2ms for the same article's dimensions. Paid again on every
+        // composition, because the document is rebuilt each time.
+        //
+        // Nothing reads those pixels here. `layout/mod.rs` takes `width` and
+        // `height` off `RasterImageData` for intrinsic sizing and never touches
+        // `data`; this browser's painter carries the *original* compressed
+        // bytes into the Scene and the rasterizer decodes those, once, keyed by
+        // content. The decode upstream was a second decode of the same file.
+        //
+        // So `data` is now empty, and a reader that wants pixels has to say so
+        // — which is the honest shape, since this never had any business
+        // holding a second copy.
+        //
+        // One behaviour changes. A file whose header parses but whose body is
+        // corrupt used to fall through to the SVG attempt and then to an error;
+        // it now lays out at its declared size and draws as nothing. That is
+        // what a real browser does with it, and `docs/upstream.md` says so.
         let image_err = match image::ImageReader::new(Cursor::new(&bytes))
             .with_guessed_format()
             .expect("IO errors impossible with Cursor")
-            .decode()
+            .into_dimensions()
         {
-            Ok(image) => {
-                let raw_rgba8_data = image.clone().into_rgba8().into_raw();
+            Ok((width, height)) => {
                 return Ok(Resource::Image(
                     self.kind,
-                    image.width(),
-                    image.height(),
-                    Arc::new(raw_rgba8_data),
+                    width,
+                    height,
+                    Arc::new(Vec::new()),
                 ));
             }
             Err(e) => e.to_string(),
         };
+        // tb---
 
         #[cfg(feature = "svg")]
         let svg_err = {
