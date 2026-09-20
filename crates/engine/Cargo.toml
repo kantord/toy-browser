@@ -9,8 +9,14 @@ license.workspace = true
 anyhow.workspace = true
 toy-browser-fetch.workspace = true
 serde_json.workspace = true
-blitz-dom = { version = "0.3.0-beta.2", features = ["floats"] }
-blitz-html = "0.3.0-beta.2"
+blitz-dom = { path = "../../vendor/blitz-dom", default-features = false, features = [
+    "floats",
+    "svg",
+    "woff",
+    "system-fonts",
+    "file-input",
+] }
+blitz-html = { path = "../../vendor/blitz-html" }
 rquickjs = { version = "0.12.2", features = ["macro", "classes", "properties", "loader"] }
 xml5ever = "0.39"
 html5ever = "0.39"

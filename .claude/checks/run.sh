@@ -35,7 +35,13 @@ readonly OWNED=('*.rs' '*.md' '*.js' '*.mjs' '*.sh')
 
 # Files this session touched: anything not yet committed. Renames report as
 # "old -> new", so the last field is the path that exists now.
-mapfile -t touched < <(git status --porcelain -- "${OWNED[@]}" 2>/dev/null | awk '{print $NF}' | sort -u)
+#
+# `vendor/` is somebody else's, and the budgets here are about what a person
+# here wrote and has to maintain. Reporting that a copied crate has a
+# 3,000-line file says nothing anybody may act on — the whole point of keeping
+# it unchanged is that it can still be diffed against what was published.
+mapfile -t touched < <(git status --porcelain -- "${OWNED[@]}" 2>/dev/null |
+  awk '{print $NF}' | grep -v '^vendor/' | sort -u)
 [ "${#touched[@]}" -eq 0 ] && exit 0
 
 # finding lines are "kind<TAB>path<TAB>detail"

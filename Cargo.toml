@@ -7,6 +7,10 @@ members = [
     "crates/cli",
     "crates/tui",
     "crates/e2e",
+    # Somebody else's, kept here rather than pulled from crates.io. See
+    # `vendor/README.md` for what was taken, from what, and what was changed.
+    "vendor/blitz-dom",
+    "vendor/blitz-html",
 ]
 resolver = "3"
 # Which package a bare `cargo run` means. There are two binaries in this
