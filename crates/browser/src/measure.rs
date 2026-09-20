@@ -210,6 +210,14 @@ pub(crate) fn relayout_with(
     //
     // Comparing a megabyte of text is a memcmp; laying it out again is ninety
     // milliseconds. The comparison is the whole trick.
+    //
+    // One slot, and it stays one slot. Keeping several looks obviously better —
+    // a page that opens a menu and closes it again asks twice about a document
+    // one slot cannot hold both of — and measured over that page's 300 calls it
+    // is worth a single extra hit, because the document *grows* rather than
+    // alternating and no state is ever asked about twice.
+    // `docs/measuring-again.md` has the sequence. What would pay is a digest
+    // per subtree, which is a different thing in a different place.
     let held: std::cell::RefCell<Option<(String, Tables)>> = std::cell::RefCell::new(None);
     std::rc::Rc::new(move |html: &str| {
         if let Some((was, answer)) = held.borrow().as_ref()

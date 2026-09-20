@@ -1,5 +1,8 @@
 # The layers
 
+What may name what. `docs/pipeline.md` is the other view of the same thing —
+what happens and in what order.
+
 ```
 crates/cli         CLI, CDP and WebDriver         deps: browser
 crates/tui         the browser in a terminal      deps: browser

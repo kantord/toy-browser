@@ -117,7 +117,15 @@ impl Browser {
         viewport: Viewport,
     ) -> Result<crate::blitz::Composed> {
         let session = self.session(page)?;
+        let clock = std::time::Instant::now();
         let html = self.engine.html(&session, Keyed::Yes)?;
+        if std::env::var_os("TOY_BROWSER_TRACE_FRAME").is_some() {
+            eprintln!(
+                "compose serialise {:>7.1}ms  {} bytes of html",
+                clock.elapsed().as_secs_f32() * 1000.0,
+                html.len(),
+            );
+        }
         let base = self
             .base_url(page)
             .map(|url| url.to_string())
