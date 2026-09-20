@@ -31,6 +31,17 @@ pub fn serve(socket: &std::path::Path) -> Result<()> {
     let listening =
         UnixListener::bind(socket).with_context(|| format!("listening on {}", socket.display()))?;
     only_ours(socket)?;
+    // Bound first, indexed second, accepting third. Reading and hashing every
+    // public typeface takes long enough to matter, and on the first *request's*
+    // path it is time the first client waits for — measured at 180ms there.
+    // Between the bind and the accept it is free: the socket exists, so a
+    // client connects and the kernel holds it until this is done.
+    let began = std::time::Instant::now();
+    println!(
+        "{} typefaces this machine already has, indexed in {:.0}ms",
+        super::public::faces_found(),
+        began.elapsed().as_secs_f32() * 1000.0,
+    );
     // One store for the process, so a typeface ten windows use is held once.
     // What keeps them apart is not the store but who may name what is in it —
     // see `store.rs`.
@@ -91,7 +102,17 @@ impl Talking {
                 Ok(()) => self.pending.take().map(|scene| drawn(scene, &self.proved)),
                 Err(why) => Some(Answered::Failed(why)),
             },
-            Ok(Asked::Draw(scene)) => Some(self.draw(*scene)),
+            Ok(Asked::Draw(scene)) => {
+                let answer = self.draw(*scene);
+                if std::env::var_os("TOY_BROWSER_TRACE_FRAME").is_some() {
+                    let (decodes, composes) = crate::pictures_done();
+                    eprintln!(
+                        "drew    glyphs filled {}  pictures decoded {decodes}  patches composed {composes}",
+                        crate::filled_so_far(),
+                    );
+                }
+                Some(answer)
+            }
             Err(error) => Some(Answered::Failed(format!("unreadable request: {error}"))),
         }
     }

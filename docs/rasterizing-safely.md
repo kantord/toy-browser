@@ -91,6 +91,52 @@ name a resolver interprets; it is the bytes, stated. Two resolutions cannot
 disagree when there is one possible answer. What was forbidden was ambiguity,
 and a content address has none.
 
+### What is actually shared
+
+Five caches. Which of them are shared is not obvious from the outside, and twice
+this was claimed before it was true, so it is written down:
+
+| held | scope | what it is |
+| --- | --- | --- |
+| bytes a client sent | process, refcounted | `wire/store.rs` |
+| filled glyphs | process | `draw/atlas.rs` |
+| decoded pictures | process, LRU under 128MB | `draw/images.rs` |
+| composed patches | process, LRU under 128MB | `draw/images.rs` |
+| public typefaces | process, by path and then by bytes | `wire/public.rs` |
+
+Everything is keyed by content, so none of it needs a permission of its own.
+The pictures and the patches were `thread_local!` — one copy per connection, and
+a decoded photograph is megabytes — for the same reason the atlas was, which is
+that nothing had been shared before and nobody had looked.
+
+The public typefaces are two caches on purpose. The **index** is paths only, so
+an unusually fonted machine costs nothing for the 1250 faces nobody asks for. A
+face that *is* asked for is then held, because a page names the same seven on
+every frame and re-reading and re-hashing three and a half megabytes per frame
+is not a saving.
+
+**In bytes, and least-wanted-first.** Both picture tables held sixty-four
+*items* and emptied themselves wholesale when full, which was defensible while
+each connection had its own and indefensible once they were shared: a limit
+sized for one page became the limit for every window on the machine. Measured,
+alternating two articles of 46 pictures each through one rasterizer:
+
+| | decoded | composed |
+| --- | --- | --- |
+| first article | 46 | 46 |
+| second | 111 | 115 |
+| first again | **135** | **141** |
+
+Twenty-four pictures decoded a second time, because the second article's
+pictures had emptied the table. Under a byte budget and least-recently-wanted
+eviction the same run reaches 66 and 68, and nothing is decoded twice. A
+sixteen-pixel icon and a two-thousand-pixel photograph are not one thing each,
+which is why the budget is not a count — `draw/kept.rs`.
+
+The index is built between the `bind` and the first `accept`: the socket exists,
+so a client connects and the kernel holds it, and the 175ms is nobody's wait.
+On the first request's path it was measured at 180ms of one.
+
 ### Access to a derived thing is access to what it was derived from
 
 There is no trusted client and no untrusted one here, and no reason to

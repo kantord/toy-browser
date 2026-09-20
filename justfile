@@ -12,7 +12,7 @@ default:
 
 # The Rust workspace.
 build:
-    cargo build
+    cargo build --workspace
 
 # Render every fixture to out/. Extra flags pass through: `just render --no-scripts`
 render *ARGS:

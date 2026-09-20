@@ -228,3 +228,63 @@ test was about.
 `blitz-dom 0.2` pins. That is not a bug — `blitz-dom 0.3` added both behind its
 `floats` feature, which is why this browser is on 0.3 at all. See
 `docs/wikipedia.md`.
+
+---
+
+## blitz-dom: every image is fully decoded when only its size is wanted
+
+**Version.** `blitz-dom 0.3.0-beta.2`, `src/net.rs`, `ImageHandler::parse`.
+
+**What happens.** A resource handler for an image decodes it in full, clones the
+decoded image, converts the clone to RGBA8, and stores the raw pixels:
+
+```rust
+.decode()
+{
+    Ok(image) => {
+        let raw_rgba8_data = image.clone().into_rgba8().into_raw();
+        return Ok(Resource::Image(
+            self.kind, image.width(), image.height(), Arc::new(raw_rgba8_data),
+        ));
+    }
+```
+
+**What layout needs from it is `width` and `height`.** The pixels are needed by
+whoever paints — and an embedder that paints from the original bytes, as this
+one does, never reads them at all.
+
+**What it costs.** Measured on one real article with 46 pictures, 689kB
+compressed:
+
+| | |
+| --- | --- |
+| full decode of all 46 | 28.4 ms |
+| reading their dimensions | 1.2 ms |
+| decoded RGBA8 retained | 4.6 MB |
+
+Twenty-four times the work and four and a half megabytes, for two integers. It
+is paid once per URL per document — and a document is rebuilt whenever an
+embedder lays the page out again, so a page whose script mutates the DOM pays it
+on every pass.
+
+**Two fixes, and the first is one line.**
+
+The `image.clone()` is gratuitous. It exists only because `image.width()` is
+read after the conversion, so capturing the two integers first removes a whole
+second copy of the decoded image:
+
+```rust
+let (width, height) = (image.width(), image.height());
+let raw_rgba8_data = image.into_rgba8().into_raw();
+```
+
+The larger one is not to decode at all until somebody wants pixels.
+`ImageReader::into_dimensions()` reads the header and stops, which is the 1.2ms
+column above. A `Resource::Image` could carry the size eagerly and the pixels
+lazily, so an embedder that paints for itself never pays for a decode it throws
+away.
+
+**Why it is worth reporting rather than working around.** An embedder supplies
+the *bytes* through `NetProvider` and blitz supplies the handler, so there is no
+seam on the embedder's side to put this behind. It is the handler's decision or
+nobody's.

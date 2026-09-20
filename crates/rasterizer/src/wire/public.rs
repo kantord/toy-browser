@@ -31,7 +31,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::{Digest, Face};
 
@@ -92,20 +92,37 @@ fn walk(at: &Path, depth: usize, found: &mut HashMap<Digest, PathBuf>) {
     }
 }
 
+/// The typefaces that have actually been asked for, held.
+///
+/// The index keeps paths so that an unusually fonted machine costs no memory
+/// for the ones nobody wants. But a page names the same seven faces on every
+/// frame, and re-reading and re-hashing three and a half megabytes per frame is
+/// not a saving — so what has been asked for once is kept.
+fn opened() -> &'static Mutex<HashMap<Digest, Face>> {
+    static OPENED: OnceLock<Mutex<HashMap<Digest, Face>>> = OnceLock::new();
+    OPENED.get_or_init(Mutex::default)
+}
+
 /// The typeface with this digest, if this machine has it where anyone could
 /// read it.
-///
-/// Re-read rather than held: the index keeps paths, not contents, so an
-/// unusually fonted machine costs a hash of each file once and no memory after
-/// that. What the store holds is what has actually been asked for.
 pub(super) fn face(digest: Digest) -> Option<Face> {
-    let bytes = std::fs::read(index().get(&digest)?).ok()?;
+    // A poisoned lock is taken anyway, for the reason `atlas.rs` gives.
+    let mut opened = opened()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(known) = opened.get(&digest) {
+        return Some(known.clone());
+    }
+    let bytes: Arc<[u8]> = std::fs::read(index().get(&digest)?).ok()?.into();
     // Checked again, because the file may have changed since it was indexed and
     // the one thing this must never do is answer with bytes that are not what
     // was asked for.
-    (Digest::of(&bytes) == digest).then(|| Face {
-        bytes: bytes.into(),
-    })
+    if Digest::of(&bytes) != digest {
+        return None;
+    }
+    let face = Face { bytes };
+    opened.insert(digest, face.clone());
+    Some(face)
 }
 
 /// How many public typefaces this machine has. For saying so at startup.

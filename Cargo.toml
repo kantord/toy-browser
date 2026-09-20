@@ -9,6 +9,12 @@ members = [
     "crates/e2e",
 ]
 resolver = "3"
+# Which package a bare `cargo run` means. There are two binaries in this
+# workspace now — the browser and the TUI — and without this every `cargo run`
+# in the justfile, the Playwright harness and the README stops with "could not
+# determine which binary to run". `just tui` names its package, and `just build`
+# says `--workspace`, so this narrows nothing anybody asked for.
+default-members = ["crates/cli"]
 
 [workspace.package]
 version = "0.1.0"

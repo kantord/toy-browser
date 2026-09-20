@@ -19,8 +19,18 @@
 //! [`glyphs`], [`fills`] and [`blur`] each draw one kind.
 
 mod atlas;
+mod kept;
 
 pub use atlas::filled_so_far;
+
+/// How much work the picture caches have had to redo. See `images.rs`.
+pub fn pictures_done() -> (usize, usize) {
+    use std::sync::atomic::Ordering;
+    (
+        images::DECODES.load(Ordering::Relaxed),
+        images::COMPOSES.load(Ordering::Relaxed),
+    )
+}
 mod blur;
 mod fills;
 mod glyphs;

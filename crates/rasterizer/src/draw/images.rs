@@ -11,9 +11,10 @@
 //! the resample were being paid again each time: 100ms of a 120ms frame on the
 //! bands of one article that have photographs in them.
 
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use super::kept::{Kept, Weighs};
 
 use resvg::tiny_skia::{self, Pixmap, Transform};
 
@@ -21,12 +22,45 @@ use super::{Area, Hand, Onto};
 use crate::raster::decoded_pixmap;
 use crate::{Digest, Tiles};
 
-/// How many prepared pictures to keep before starting again.
+/// How many bytes of decoded pictures to keep, and how many of composed
+/// patches.
 ///
-/// A page that swaps its pictures out — a gallery, a slideshow — would
-/// otherwise keep every one it had ever shown, and a decoded photograph is
-/// megabytes.
-const MOST: usize = 64;
+/// In bytes rather than in pictures, because a sixteen-pixel icon and a
+/// two-thousand-pixel photograph are not one thing each — see `kept.rs`. This
+/// was sixty-four *items* and shared between every client on the machine, which
+/// meant two pages drawn in turn evicted each other wholesale.
+///
+/// A hundred and twenty-eight megabytes is about thirty articles' worth of
+/// pictures and a fraction of what the machine has.
+const BUDGET: usize = 128 * 1024 * 1024;
+
+/// Every picture this process has decoded, and every patch it has composed.
+///
+/// Shared between clients, like the glyph atlas and for the same reasons. Both
+/// are keyed by content — a [`Digest`] names the bytes, and a [`Laid`] is that
+/// digest plus the size it is drawn at — so the same photograph at the same
+/// size is one entry whoever asked for it. Ten windows showing one picture
+/// decode it once between them, and a decoded photograph is megabytes.
+///
+/// It needs no permission of its own: reaching an entry means naming a Digest,
+/// and naming a Digest means having sent those bytes. Access to a derived thing
+/// is access to what it was derived from — `wire/store.rs`.
+static DECODED: Kept<Digest, Option<Arc<Pixmap>>> = Kept::under(BUDGET);
+static PATCHES: Kept<Laid, Option<Arc<Pixmap>>> = Kept::under(BUDGET);
+
+/// Four bytes a pixel, which is what a pixmap is.
+impl Weighs for Arc<Pixmap> {
+    fn weighs(&self) -> usize {
+        self.width() as usize * self.height() as usize * 4
+    }
+}
+
+/// How many pictures have been decoded, and how many patches composed.
+///
+/// The only way to see a cache thrashing from outside: a page whose pictures
+/// keep being recomputed does not look any different, it is only slower.
+pub(crate) static DECODES: AtomicUsize = AtomicUsize::new(0);
+pub(crate) static COMPOSES: AtomicUsize = AtomicUsize::new(0);
 
 /// A picture ready to be put down.
 ///
@@ -90,7 +124,7 @@ impl Hand<'_> {
     /// draws one copy and the rest of the cell is empty. That is the same trick
     /// the SVG writing plays with `<pattern>`, and doing it the same way is
     /// what keeps the two writings of one Scene agreeing.
-    pub(super) fn tile(&mut self, tiles: &Tiles, area: &Area) -> Option<Rc<Pixmap>> {
+    pub(super) fn tile(&mut self, tiles: &Tiles, area: &Area) -> Option<Arc<Pixmap>> {
         let (across, down) = tiles.tile;
         if across <= 0.0 || down <= 0.0 {
             return None;
@@ -119,22 +153,16 @@ impl Hand<'_> {
     }
 
     /// The patch this asks for, composed the first time it is asked for.
-    fn patch(&mut self, laid: Laid) -> Option<Rc<Pixmap>> {
-        thread_local! {
-            static PATCHES: RefCell<HashMap<Laid, Option<Rc<Pixmap>>>> =
-                RefCell::new(HashMap::new());
-        }
-        if let Some(known) = PATCHES.with(|kept| kept.borrow().get(&laid).cloned()) {
+    fn patch(&mut self, laid: Laid) -> Option<Arc<Pixmap>> {
+        if let Some(known) = PATCHES.get(&laid) {
             return known;
         }
-        let made = self.composed(laid).map(Rc::new);
-        PATCHES.with(|kept| {
-            let mut kept = kept.borrow_mut();
-            if kept.len() >= MOST {
-                kept.clear();
-            }
-            kept.insert(laid, made.clone());
-        });
+        // Outside the lock, for the reason the atlas gives: composing a patch is
+        // the expensive part and holding the table while it happens would make
+        // every other client wait for a picture it is not drawing.
+        COMPOSES.fetch_add(1, Ordering::Relaxed);
+        let made = self.composed(laid).map(Arc::new);
+        PATCHES.put(laid, made.clone());
         made
     }
 
@@ -166,27 +194,18 @@ impl Hand<'_> {
     ///
     /// Keyed by Digest, which names the bytes, so what comes back can only ever
     /// be a picture of the same file.
-    fn picture(&mut self, digest: &Digest) -> Option<Rc<Pixmap>> {
-        thread_local! {
-            static DECODED: RefCell<HashMap<Digest, Option<Rc<Pixmap>>>> =
-                RefCell::new(HashMap::new());
-        }
-        if let Some(known) = DECODED.with(|kept| kept.borrow().get(digest).cloned()) {
+    fn picture(&mut self, digest: &Digest) -> Option<Arc<Pixmap>> {
+        if let Some(known) = DECODED.get(digest) {
             return known;
         }
-        let decoded = self
+        DECODES.fetch_add(1, Ordering::Relaxed);
+        let made = self
             .scene
             .pictures
             .get(digest)
             .and_then(decoded_pixmap)
-            .map(Rc::new);
-        DECODED.with(|kept| {
-            let mut kept = kept.borrow_mut();
-            if kept.len() >= MOST {
-                kept.clear();
-            }
-            kept.insert(*digest, decoded.clone());
-        });
-        decoded
+            .map(Arc::new);
+        DECODED.put(*digest, made.clone());
+        made
     }
 }
