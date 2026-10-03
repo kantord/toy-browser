@@ -220,6 +220,12 @@ pub(crate) fn relayout_with(
     // per subtree, which is a different thing in a different place.
     let held: std::cell::RefCell<Option<(String, Tables)>> = std::cell::RefCell::new(None);
     std::rc::Rc::new(move |html: &str| {
+        if let Some(into) = std::env::var_os("TOY_BROWSER_DUMP_RELAYOUT") {
+            let into = std::path::PathBuf::from(into);
+            let _ = std::fs::create_dir_all(&into);
+            let n = std::fs::read_dir(&into).map(|it| it.count()).unwrap_or(0);
+            let _ = std::fs::write(into.join(format!("{n:04}.html")), html);
+        }
         if let Some((was, answer)) = held.borrow().as_ref()
             && was == html
         {

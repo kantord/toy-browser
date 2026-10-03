@@ -99,12 +99,84 @@ subtree, which is what `docs/pipeline.md` describes the two DOMs as standing in
 the way of. This is the first evidence for that from a real page rather than
 from argument.
 
+## What it would cost to stop rebuilding
+
+The section above says the key is at the wrong granularity. This is the
+measurement of what the right granularity is worth, and it is larger than
+expected.
+
+Twenty-three distinct documents reached that page's layout. Dumped and compared
+line by line, with the `__tb-key-` classes stripped so that renumbering does not
+read as a change:
+
+| | |
+| --- | --- |
+| of each new document, already present in the one before | **90.5%** |
+| steps that are 99% or more line-identical | 12 of 22 |
+| steps that are a single line | 6 of 22 |
+| the three big steps | exactly 1,112 lines inserted, nothing deleted |
+
+So the page appends a screen of stories, then adjusts one line at a time. We
+re-parse and re-cascade all of it, every time, to absorb that.
+
+### What the caches do when the document survives
+
+One document, laid out once, then mutated in place and resolved again — a
+megabyte of page, 13,880 nodes:
+
+| what changed | resolve |
+| --- | --- |
+| **a full rebuild, which is what happens today** | **85–90 ms** |
+| nothing | 0.2 ms |
+| one text node, deep in the tree | **0.2–0.3 ms** |
+| a `<div>` appended to the root | 21 ms |
+| a class on the root element | 21 ms |
+
+The rebuild figure is a median of six samples on a machine doing other things;
+it ranged 85–172 ms and the three fast rows did not move at all between runs,
+which is itself worth knowing — the cheap paths are cheap reliably.
+
+**Three hundred times cheaper for the change this page actually makes most
+often.** taffy's per-node cache and Stylo's sharing cache do exactly what they
+are for, as soon as they are allowed to live longer than one composition.
+
+The two 21 ms rows are the honest other half. A class on the root can match any
+descendant selector and an append to the root moves every sibling, so both
+invalidate the whole tree — and 21 ms is still four times better than a rebuild,
+because the parse and the cascade are skipped even when the layout is not.
+
+### What this settles
+
+The materialise step in a content-addressed DOM **has to be incremental**. A
+design that rebuilds the slab from the immutable tree on every compose pays the
+whole 85 ms and gains nothing; one that diffs and applies pays a fifth of a
+millisecond for a text change. That was the open question in `docs/pipeline.md`'s two-DOM table, and
+it now has a number rather than an argument.
+
+It also names the biggest win available before any of that work: **stop
+building a fresh document for every composition.** The forced layouts at the top
+of this document cost 85 ms each, and a fifth of a millisecond of that is the
+layout.
+
 ## How the numbers above were taken
 
-The hit rates are a six-line trace in `relayout_with` — the hash and length of
-every document it is asked about — replayed through an LRU of each size. It is
-not in the tree, because a probe that answers one question once is cheaper to
-write again than to carry.
+The hit rates were a six-line trace in `relayout_with`, replayed through an LRU
+of each size. That one is gone: it answered its question once.
+
+The rest is in the tree, because it is evidence for a decision that has not
+been taken yet and a measurement nobody can run is worth nothing.
+
+```sh
+# dump every document the page's forced layouts asked about
+TOY_BROWSER_DUMP_RELAYOUT=/tmp/states toy-browser render https://hcker.news/
+
+# what the caches do when the document survives
+TOY_BROWSER_STATES=/tmp/states cargo test --release -p toy-browser \
+    --test slab -- --ignored --nocapture
+```
+
+`crates/browser/tests/slab.rs` is ignored by default: it wants that megabyte of
+dumped page and it prints numbers rather than asserting them.
 
 ```sh
 toy-browser render https://hcker.news/   # loading vs drawing, forced layouts
