@@ -160,6 +160,10 @@ per-node layout cache and blitz's damage tracking every time. The benefit is
 that there is no second tree to keep in step, which is a class of bug rather
 than a cost. `measure.rs` buys most of it back by remembering the last answer.
 
+What it would cost to stop re-parsing is measured in `docs/measuring-again.md`,
+and what the engine would have to say for that to be possible is
+`docs/what-changed.md`.
+
 ## Where it is measured
 
 Every number above is printed by something.

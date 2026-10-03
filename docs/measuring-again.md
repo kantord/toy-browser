@@ -153,6 +153,9 @@ whole 85 ms and gains nothing; one that diffs and applies pays a fifth of a
 millisecond for a text change. That was the open question in `docs/pipeline.md`'s two-DOM table, and
 it now has a number rather than an argument.
 
+What it would take is `docs/what-changed.md`: the engine says only *that*
+something changed, and applying a mutation needs it to say *what*.
+
 It also names the biggest win available before any of that work: **stop
 building a fresh document for every composition.** The forced layouts at the top
 of this document cost 85 ms each, and a fifth of a millisecond of that is the
