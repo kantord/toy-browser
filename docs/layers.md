@@ -11,7 +11,18 @@ crates/browser     pages, elements, measuring,    deps: engine, fetch, rasterize
 crates/engine      the door                       deps: fetch
 crates/rasterizer  a picture, and pixels of it    deps: resvg, skrifa, image
 crates/fetch       shared remembered bytes        deps: ureq
+
+vendor/blitz-dom   somebody else's, copied        MIT OR Apache-2.0
+vendor/blitz-html  somebody else's, copied        MIT OR Apache-2.0
 ```
+
+**`vendor/` is not ours, and code that leaves it keeps saying so.** Every file
+there opens with an SPDX line naming the licence and where it came from. Moving
+a piece of it into `crates/` does not make it this project's: it arrives fenced
+between `// vendored+++` and `// vendored---`, and the opening line carries the
+licence, because the file it lands in does not. `vendor/README.md` has the rule
+and the reason. This matters most in the direction nobody expects — out of
+`vendor/`, into a file whose own header says nothing about Blitz.
 
 Each crate can only name what its dependency list allows. `cli` cannot say
 `Engine`, `Realm` or `Resources`; `engine` cannot say `Scene`; `rasterizer`

@@ -95,6 +95,20 @@ for file in "${touched[@]}"; do
   fi
 done
 
+# Every file under `vendor/` has to say whose it is. The budgets above skip
+# that directory because it is somebody else's code; this does not, because the
+# one thing a copy owes its author is an attribution that survives being moved,
+# pasted and split. Checked over the whole directory rather than over what
+# changed, since the failure worth catching is a file arriving without one.
+#
+# The other direction — a piece of `vendor/` moved into `crates/` — cannot be
+# checked mechanically, which is why `vendor/README.md` and `docs/layers.md`
+# both spell out the `vendored+++` fence that marks it.
+while IFS= read -r file; do
+  head -n 3 "$file" | grep -q 'SPDX-License-Identifier' && continue
+  findings+="vendor-unattributed	$file	no SPDX line; see vendor/README.md rule 1"$'\n'
+done < <(find vendor -name '*.rs' 2>/dev/null)
+
 # Lessons are an Open Knowledge Format bundle, and the only thing that makes a
 # document conformant is YAML frontmatter carrying a `type`. Checking it here is
 # what keeps "valid OKF" automatic rather than remembered.
