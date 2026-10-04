@@ -129,6 +129,10 @@ because a page that overlaps itself is drawn wrong otherwise.
 Everything a Mark needs travels with it. A picture and a typeface are carried in
 full and referred to by `Digest`, so nothing downstream resolves anything.
 
+A Scene is already a tree — `Clip` and `Moved` are marks holding marks — which
+is what a cacheable group would be a third of. `docs/caching-a-group.md`
+measures whether one would hit.
+
 ## 7. Rasterize — `crates/rasterizer`
 
 Scene in, pixels out. Glyphs are filled once and stamped; pictures are decoded
