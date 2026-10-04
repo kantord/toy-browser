@@ -140,6 +140,9 @@ fn walk(marks: &[Mark], at: (f32, f32), bounds: Bounds, cell: (f32, f32), grid: 
                 };
                 glyphs(&run, at, bounds, cell, grid);
             }
+            // A grid of characters draws nothing twice, so there is nothing
+            // for a group that exists to be kept to mean here: walk into it.
+            Mark::Kept { marks, .. } => walk(marks, at, bounds, cell, grid),
             Mark::Clip { to, marks, .. } => {
                 let inside = shifted(*to, at);
                 walk(marks, at, bounds.cut_to(inside, cell), cell, grid);

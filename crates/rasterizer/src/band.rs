@@ -59,6 +59,13 @@ fn kept(marks: &[Mark], zone: &Area) -> Vec<Mark> {
             // A matrix can put its contents anywhere, so what is inside one is
             // not judged by where it started. Whole or not at all.
             Mark::Moved { .. } => Some(mark.clone()),
+            // Whole or not at all for a different reason: what a kept group is
+            // keyed by *is* its marks, so banding one down to the part that
+            // shows would give every band its own key and every scroll a miss.
+            // Drawing the whole of it once is what the keeping is for.
+            Mark::Kept { marks, .. } => {
+                (!kept(marks, zone).is_empty()).then(|| mark.clone())
+            }
             _ => within(mark, zone).then(|| mark.clone()),
         })
         .collect()
@@ -105,6 +112,10 @@ fn within(mark: &Mark, zone: &Area) -> bool {
         }
         Mark::Clip { to, .. } => overlaps(to, zone),
         Mark::Moved { .. } => true,
+        // Judged by what is inside it, because a kept group imposes nothing of
+        // its own: it is the same marks with a note that they are worth
+        // drawing once.
+        Mark::Kept { marks, .. } => marks.iter().any(|mark| within(mark, zone)),
     }
 }
 

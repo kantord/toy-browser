@@ -28,7 +28,9 @@ use toy_browser_rasterizer::{Mark, Scene};
 fn by_node(marks: &[Mark], into: &mut HashMap<usize, Vec<Mark>>) {
     for mark in marks {
         match mark {
-            Mark::Clip { marks, .. } | Mark::Moved { marks, .. } => by_node(marks, into),
+            Mark::Clip { marks, .. } | Mark::Moved { marks, .. } | Mark::Kept { marks, .. } => {
+                by_node(marks, into)
+            }
             other => {
                 if let Some(from) = owner(other) {
                     into.entry(from).or_default().push(other.clone());
@@ -44,7 +46,8 @@ fn owner(mark: &Mark) -> Option<usize> {
         | Mark::Glyphs { from, .. }
         | Mark::Image { from, .. }
         | Mark::Clip { from, .. }
-        | Mark::Moved { from, .. } => *from,
+        | Mark::Moved { from, .. }
+        | Mark::Kept { from, .. } => *from,
     }
 }
 
@@ -59,7 +62,9 @@ fn owner(mark: &Mark) -> Option<usize> {
 /// that do.
 fn write_mark(mark: &Mark, with_position: bool, out: &mut String) {
     match mark {
-        Mark::Clip { .. } | Mark::Moved { .. } => write_group(mark, with_position, out),
+        Mark::Clip { .. } | Mark::Moved { .. } | Mark::Kept { .. } => {
+            write_group(mark, with_position, out)
+        }
         leaf => write_leaf(leaf, with_position, out),
     }
 }
@@ -97,7 +102,7 @@ fn write_leaf(mark: &Mark, with_position: bool, out: &mut String) {
             let _ = write!(out, "I{picture:?}");
             write_area(area, with_position, out);
         }
-        Mark::Clip { .. } | Mark::Moved { .. } => {}
+        Mark::Clip { .. } | Mark::Moved { .. } | Mark::Kept { .. } => {}
     }
 }
 
@@ -108,6 +113,10 @@ fn write_group(mark: &Mark, with_position: bool, out: &mut String) {
         Mark::Clip { to, marks, .. } => {
             out.push('C');
             write_area(to, with_position, out);
+            marks
+        }
+        Mark::Kept { marks, .. } => {
+            out.push('K');
             marks
         }
         Mark::Moved {

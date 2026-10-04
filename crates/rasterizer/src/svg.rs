@@ -93,6 +93,9 @@ fn write_mark(scene: &Scene, mark: &Mark, refer: Refer, out: &mut String) {
             from,
         } => image(scene, area, picture, *from, refer, out),
         Mark::Clip { to, marks, from } => clip(scene, to, marks, *from, refer, out),
+        // Nothing to write but what is inside: being worth keeping is a fact
+        // about drawing it, and a reader of the SVG is not drawing it twice.
+        Mark::Kept { marks, from } => kept(scene, marks, *from, refer, out),
         Mark::Moved {
             by,
             about,
@@ -162,6 +165,19 @@ fn image(
 /// Written as three transforms because SVG applies a matrix about the origin of
 /// the coordinate system and CSS applies it about a point in the box: move that
 /// point to the origin, turn, and move it back.
+/// A group that is only a group so that a rasterizer may keep it.
+///
+/// Nothing to write but what is inside, and a `<g>` to hold it: being worth
+/// keeping is a fact about drawing the marks, and a reader of the SVG is not
+/// drawing them twice.
+fn kept(scene: &Scene, marks: &[Mark], from: Option<usize>, refer: Refer, out: &mut String) {
+    let _ = writeln!(out, "<g{}>", named(from));
+    for mark in marks {
+        write_mark(scene, mark, refer, out);
+    }
+    let _ = writeln!(out, "</g>");
+}
+
 fn moved(
     scene: &Scene,
     by: [f32; 6],

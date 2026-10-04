@@ -106,7 +106,7 @@ fn dimmed(mut mark: Mark, by: f32) -> Mark {
         Mark::Glyphs { paint, .. } => paint.alpha *= by,
         // A group is faded by fading what is in it, which is the approximation
         // this whole file is: see [`faded`].
-        Mark::Clip { marks, .. } | Mark::Moved { marks, .. } => {
+        Mark::Clip { marks, .. } | Mark::Moved { marks, .. } | Mark::Kept { marks, .. } => {
             let inside = std::mem::take(marks);
             *marks = inside.into_iter().map(|it| dimmed(it, by)).collect();
         }

@@ -40,7 +40,7 @@ mod svg;
 mod values;
 pub mod wire;
 
-pub use draw::{draw, filled_so_far, pictures_done};
+pub use draw::{draw, filled_so_far, groups_done, pictures_done};
 pub use named::{Digest, Face, Format, Picture};
 pub use raster::{Rendered, pixels, render, written};
 pub use svg::{export, family, normal_form};
@@ -101,6 +101,26 @@ pub enum Mark {
     /// page in the unit shares one coordinate space.
     Clip {
         to: Area,
+        marks: Vec<Mark>,
+        from: Option<usize>,
+    },
+    /// Marks that may be drawn once and stamped, rather than drawn again.
+    ///
+    /// A hint and never a promise: a rasterizer that ignores every one of these
+    /// draws the same picture, only slower. What it buys is that a subtree
+    /// whose marks have not changed need not be drawn again — measured at 98.2%
+    /// of drawn nodes between one state of a real page and the next, which is
+    /// `docs/caching-a-group.md`.
+    ///
+    /// The key is derived from the marks themselves rather than carried, so it
+    /// cannot be wrong and cannot be forged: a client that names somebody
+    /// else's group has to hold the marks that make it, and holding them is
+    /// what the answer was going to be.
+    ///
+    /// Only where the subtree paints as a unit. A positioned descendant can
+    /// paint outside the subtree it belongs to, so what may be wrapped in one
+    /// of these is a stacking context and not any node — see the painter.
+    Kept {
         marks: Vec<Mark>,
         from: Option<usize>,
     },

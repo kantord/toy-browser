@@ -209,7 +209,9 @@ fn named(scene: &Scene) -> BTreeSet<Digest> {
                 crate::Mark::Image { picture, .. } => {
                     found.insert(*picture);
                 }
-                crate::Mark::Clip { marks, .. } | crate::Mark::Moved { marks, .. } => {
+                crate::Mark::Clip { marks, .. }
+                | crate::Mark::Moved { marks, .. }
+                | crate::Mark::Kept { marks, .. } => {
                     into(marks, found);
                 }
                 crate::Mark::Fill { .. } => {}

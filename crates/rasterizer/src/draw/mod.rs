@@ -24,6 +24,16 @@ mod kept;
 pub use atlas::filled_so_far;
 
 /// How much work the picture caches have had to redo. See `images.rs`.
+/// How many groups have been drawn apart, and how many stamped from one
+/// already drawn. For a test, and for saying so.
+pub fn groups_done() -> (usize, usize) {
+    use std::sync::atomic::Ordering;
+    (
+        groups::DRAWN.load(Ordering::Relaxed),
+        groups::STAMPED.load(Ordering::Relaxed),
+    )
+}
+
 pub fn pictures_done() -> (usize, usize) {
     use std::sync::atomic::Ordering;
     (
@@ -34,6 +44,7 @@ pub fn pictures_done() -> (usize, usize) {
 mod blur;
 mod fills;
 mod glyphs;
+mod groups;
 mod images;
 
 use std::collections::HashMap;
@@ -123,6 +134,7 @@ impl Hand<'_> {
                     onto.clip = outer;
                 }
             },
+            Mark::Kept { marks, .. } => self.kept(onto, marks),
             Mark::Moved {
                 by, about, marks, ..
             } => {
@@ -181,7 +193,7 @@ fn narrowed(onto: &Onto<'_, '_>, to: &Area, marks: &[Mark]) -> Option<tiny_skia:
 /// Generous where it is unsure, because the answer decides whether a clip is
 /// skipped: reaching too far keeps a clip that was not needed, and reaching too
 /// short would drop one that was.
-fn reach(marks: &[Mark]) -> Option<Area> {
+pub(super) fn reach(marks: &[Mark]) -> Option<Area> {
     marks.iter().try_fold(None, |so_far: Option<Area>, mark| {
         let one = extent(mark)?;
         Some(Some(so_far.map_or(one, |area| joined(&area, &one))))
@@ -228,6 +240,9 @@ fn extent(mark: &Mark) -> Option<Area> {
         }
         // Everything inside is already cut to this.
         Mark::Clip { to, .. } => Some(*to),
+        // As far as what is inside reaches, and no further: a kept group adds
+        // nothing to the picture, which is what makes it safe to leave out.
+        Mark::Kept { marks, .. } => reach(marks),
         // A matrix can put its contents anywhere.
         Mark::Moved { .. } => None,
     }
