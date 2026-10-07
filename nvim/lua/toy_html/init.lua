@@ -61,6 +61,8 @@ local function handle(view, line)
   elseif event.ev == "log" then
     local text = event.line:gsub("^%[log%] ", "")
     view.on_event(text)
+  elseif event.ev == "target" then
+    view.target = { href = event.href }
   elseif event.ev == "error" then
     vim.notify("toy_html: " .. event.message, vim.log.levels.ERROR)
   end
@@ -88,13 +90,43 @@ local function size(win)
   return info.width - info.textoff, info.height
 end
 
+local ENTRY = [[PopUp.Open\ in\ new\ tab]]
+local pending_href
+
+-- Neovim's ordinary right-click menu, with "Open in new tab" added to it for
+-- as long as the click was on a link. The engine only says what is under the
+-- cell; that there are tabs, and a menu, is entirely this file's business.
+--
+-- The answer is waited for (a few ms) before the menu opens, rather than
+-- opening it from the reply: a menu that appears after the button has already
+-- come up is dismissed by the release that follows.
+local NATIVE = [[PopUp.Open\ in\ web\ browser]]
+
+-- `inside` is whether the click was in a page buffer. Neovim's own "Open in
+-- web browser" opens the word under the cursor, which on a page is link text,
+-- not the link: xdg-open "concept". So it is greyed out while a page has focus.
+local function set_menu_entry(href, inside)
+  pcall(vim.cmd, "silent aunmenu " .. ENTRY)
+  pcall(vim.cmd, (inside and "amenu disable " or "amenu enable ") .. NATIVE)
+  pending_href = href
+  if href then
+    vim.cmd("anoremenu 1 " .. ENTRY .. " <Cmd>lua require('toy_html').open_pending()<CR>")
+  end
+end
+
+function M.open_pending()
+  if pending_href then
+    M.open({ url = pending_href, tab = true })
+  end
+end
+
 -- Opens a view in a vertical split to the right of the current window, so an
 -- ordinary file can stay open on the left.
 --   opts.url   a page to load, or
 --   opts.html  markup to show
 function M.open(opts)
   opts = opts or {}
-  vim.cmd("rightbelow vsplit")
+  vim.cmd(opts.tab and "tabnew" or "rightbelow vsplit")
   local win = vim.api.nvim_get_current_win()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_win_set_buf(win, buf)
@@ -156,7 +188,14 @@ function M.open(opts)
   -- Everything else is Neovim's own: the page is real buffer text, so cursor
   -- motion, search, visual mode, yank and the mouse all work as usual. Only a
   -- click (a release in normal mode, so a drag is left to select) and <CR>
-  -- reach the page.
+  -- reach the page. A right click asks the engine what is under it first.
+  -- The menu is global; the entry must not follow the user into other buffers.
+  vim.api.nvim_create_autocmd("BufLeave", {
+    buffer = buf,
+    callback = function()
+      set_menu_entry(nil, false)
+    end,
+  })
   local function map(lhs, fn)
     vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true })
   end
@@ -165,6 +204,25 @@ function M.open(opts)
     if vim.fn.mode() == "n" then
       click_cursor(view)
     end
+  end)
+  map("<RightMouse>", function()
+    local pos = vim.fn.getmousepos()
+    local target
+    if pos.winid == win then
+      local row, byte = pos.line, math.max(pos.column - 1, 0)
+      local line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ""
+      view.target = nil
+      send(view, { op = "inspect", col = vim.fn.strdisplaywidth(line:sub(1, byte)), row = row - 1 })
+      vim.wait(300, function() return view.target ~= nil end, 1)
+      target = view.target
+    end
+    set_menu_entry(target and target.href, true)
+    -- Then what Neovim would have done anyway ('mousemodel' popup_setpos):
+    -- put the cursor there and open the menu.
+    if pos.winid == win then
+      vim.api.nvim_win_set_cursor(win, { pos.line, math.max(pos.column - 1, 0) })
+    end
+    vim.cmd("popup PopUp")
   end)
   map("q", function() vim.api.nvim_win_close(win, true) end)
 

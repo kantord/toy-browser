@@ -4,7 +4,7 @@
 //! Split from `mod.rs`, which keeps what a page *is* and how it is shown; this
 //! changes when the input vocabulary does.
 
-use toy_browser::{CursorIcon, Held, Point};
+use toy_browser::{CursorIcon, Held, NodeId, Point, Remote, Url};
 
 use super::App;
 
@@ -110,5 +110,35 @@ impl App {
             self.logged.extend(emitted.console);
         }
         self.changed();
+    }
+
+    /// Where the link under this cell goes, as an absolute URL — `None` where
+    /// the cell is not inside an `<a href>`. What a host needs to offer "open
+    /// in a new tab" without the engine knowing what a tab is.
+    pub fn link_at(&mut self, col: u16, row: u16) -> Option<String> {
+        let at = self.at(col, row);
+        let mut node = self.browser.hit_test(&self.page, at).ok()??;
+        loop {
+            if let Some(href) = self.href_of(node) {
+                return Url::parse(self.url())
+                    .ok()?
+                    .join(&href)
+                    .ok()
+                    .map(String::from);
+            }
+            node = self.browser.parent(&self.page, node).ok()??;
+        }
+    }
+
+    /// The `href` of this node if it is an `<a>`. Text has no tag, and is what
+    /// a cell usually lands on, so most nodes answer `None` and the caller
+    /// walks up.
+    fn href_of(&mut self, node: NodeId) -> Option<String> {
+        let element = Remote::Element(node);
+        let tag = self.browser.tag_name(&self.page, &element).ok()??;
+        if tag != "a" {
+            return None;
+        }
+        self.browser.attribute(&self.page, &element, "href").ok()?
     }
 }

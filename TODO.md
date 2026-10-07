@@ -25,6 +25,8 @@ engine gives:  dirty cell regions + events for the host to handle
 - [ ] Route keys and mouse back to the engine, map hit map → node
 - [ ] Demo: a small HTML picker or help page in a float
 
+- [x] POC: host op `inspect` (cell → link href) drives a native right-click menu entry "Open in new tab"
+
 ## Target 2: Neovim client rendered via HTML (hardest)
 
 - [x] POC: `nvim/client/nvim_html.py` attaches with `ext_linegrid`, keeps the grid

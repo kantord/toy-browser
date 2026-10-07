@@ -11,11 +11,13 @@
 //!      {"op":"navigate","url":"https://en.wikipedia.org/wiki/Neovim"}
 //!      {"op":"resize","cols":80,"rows":24}
 //!      {"op":"click","col":3,"row":1}
+//!      {"op":"inspect","col":3,"row":1}   what is under a cell: answered with a target
 //!      {"op":"move","col":3,"row":1}
 //!      {"op":"key","key":"a","code":"KeyA"}
 //!      {"op":"scroll","rows":3}
 //!      {"op":"whole","on":true}   frames are as tall as the page; the host scrolls
 //! out  {"ev":"frame","cols":80,"rows":24,"lines":[[["text","#fg","#bg"],..],..]}
+//!      {"ev":"target","col":3,"row":1,"href":"https://…"|null}
 //!      {"ev":"log","line":"whatever the page logged"}
 //!      {"ev":"error","message":"..."}
 //! ```
@@ -38,11 +40,13 @@ fn main() -> Result<()> {
     let mut out = io::stdout().lock();
     for line in io::stdin().lock().lines() {
         let reply = match serde_json::from_str::<Value>(&line?) {
-            Ok(command) => obey(&mut app, &command),
+            Ok(command) => obey(&mut app, &command, &mut out).map(|()| command),
             Err(error) => Err(anyhow::anyhow!("not JSON: {error}")),
         };
         match reply {
-            Ok(()) => answer(&mut app, &mut out)?,
+            // Looking at the page changes nothing, so there is no new frame.
+            Ok(command) if command["op"] == "inspect" => {}
+            Ok(_) => answer(&mut app, &mut out)?,
             Err(error) => emit(
                 &mut out,
                 &json!({"ev": "error", "message": error.to_string()}),
@@ -56,7 +60,7 @@ fn number(command: &Value, name: &str) -> u16 {
     command[name].as_u64().unwrap_or(0).min(u64::from(u16::MAX)) as u16
 }
 
-fn obey(app: &mut App, command: &Value) -> Result<()> {
+fn obey(app: &mut App, command: &Value, out: &mut impl Write) -> Result<()> {
     match command["op"].as_str().unwrap_or_default() {
         "navigate" => app.navigate(command["url"].as_str().unwrap_or_default())?,
         "markup" => app.load_markup(command["html"].as_str().unwrap_or_default(), BASE)?,
@@ -76,6 +80,14 @@ fn obey(app: &mut App, command: &Value) -> Result<()> {
             app.keyed(false, key, code, held);
         }
         "whole" => app.show_whole(command["on"].as_bool().unwrap_or(true)),
+        "inspect" => {
+            let (col, row) = (number(command, "col"), number(command, "row"));
+            let href = app.link_at(col, row);
+            emit(
+                out,
+                &json!({"ev": "target", "col": col, "row": row, "href": href}),
+            )?;
+        }
         "scroll" => app.scroll(0.0, command["rows"].as_f64().unwrap_or(0.0) as f32),
         other => anyhow::bail!("unknown op {other:?}"),
     }

@@ -17,7 +17,7 @@ add `nvim/` to the runtimepath instead (e.g. a local plugin spec).
 
 The whole page is real buffer text, so Neovim's own motions, `/` search, visual mode,
 yank and mouse selection all work. A click (release in normal mode) or `<CR>` clicks the page;
-`q` closes. `:ToyHtmlDemo` shows a page that reports clicks
+`q` closes. Right-clicking a link adds "Open in new tab" to Neovim's own right-click menu; it opens the link in a new Neovim tab page. `:ToyHtmlDemo` shows a page that reports clicks
 through `console.log`, which reaches `on_event`.
 
 ## 2. Neovim drawn as HTML — `client/nvim_html.py`

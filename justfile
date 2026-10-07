@@ -70,7 +70,7 @@ term url="https://news.ycombinator.com/" *ARGS:
 # loads the plugin from nvim/ and runs :ToyHtml. `q` in the page closes it.
 nvim url="https://en.wikipedia.org/wiki/Neovim" file="README.md":
     cargo build -p toy-browser-tui
-    nvim -u NONE --cmd 'set rtp+=nvim' --cmd 'set mouse=a' -c 'runtime plugin/toy_html.lua' -c 'ToyHtml {{ url }}' {{ file }}
+    nvim -u NONE --cmd 'set rtp+=nvim' --cmd 'set mouse=a showtabline=2' -c 'runtime plugin/toy_html.lua' -c 'ToyHtml {{ url }}' {{ file }}
 
 # Neovim drawn as HTML: the engine shows it here, and /tmp/nvim.html holds the
 # same page for a web browser.
