@@ -71,6 +71,10 @@ pub struct App {
     /// How far the page reaches, kept until something that could change it
     /// does. Costs a Scene to work out; see `window/acts.rs::settle`.
     reaches: Option<(f32, f32)>,
+    /// The page's Scene, kept across scrolling: moving the window over a page
+    /// does not change what the page looks like, only which part is painted.
+    /// Costs ~20ms to rebuild on a long page, which was most of a scroll.
+    scene: Option<toy_browser::Scene>,
     /// The grid last painted, kept until the page or the scroll changes.
     grid: Option<Grid>,
     /// Where the pointer last moved to, and which shape the cascade asked
@@ -79,6 +83,9 @@ pub struct App {
     /// no longer mean what it did.
     hover: Option<(u16, u16, Hover)>,
     scheme: Scheme,
+    /// What the page's scripts logged since the host last took it — the
+    /// channel a host hears about clicks and keys through.
+    logged: Vec<String>,
     /// Set once something here decides the loop should stop.
     pub quit: bool,
 }
@@ -87,6 +94,15 @@ impl App {
     /// Opens `url` in a fresh page, laid out for a screen of `cols` by `rows`
     /// cells.
     pub fn open(url: &str, cols: u16, rows: u16, scripts: bool, scheme: Scheme) -> Result<Self> {
+        let mut app = Self::blank(cols, rows, scripts, scheme)?;
+        app.browser
+            .navigate(&app.page, url)
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+        Ok(app)
+    }
+
+    /// A page with nothing in it yet, for a host that will supply the markup.
+    pub fn blank(cols: u16, rows: u16, scripts: bool, scheme: Scheme) -> Result<Self> {
         let mut browser = Browser::new(Resources::new())?;
         browser.set_scripts(scripts);
         let cell = calibrate::cell(&mut browser, GRID)?;
@@ -99,16 +115,40 @@ impl App {
             rows,
             scrolled: (0.0, 0.0),
             reaches: None,
+            scene: None,
             grid: None,
             hover: None,
             scheme,
+            logged: Vec::new(),
             quit: false,
         };
         app.browser.set_viewport(&app.page, app.viewport());
-        app.browser
-            .navigate(&app.page, url)
-            .map_err(|error| anyhow::anyhow!("{error}"))?;
         Ok(app)
+    }
+
+    /// Replaces the page with this markup, scrolled back to the top.
+    pub fn load_markup(&mut self, markup: &str, base: &str) -> Result<()> {
+        self.browser
+            .load_markup(&self.page, markup, base)
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+        self.scrolled = (0.0, 0.0);
+        self.changed();
+        Ok(())
+    }
+
+    /// Loads this URL into the page, scrolled back to the top.
+    pub fn navigate(&mut self, url: &str) -> Result<()> {
+        self.browser
+            .navigate(&self.page, url)
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+        self.scrolled = (0.0, 0.0);
+        self.changed();
+        Ok(())
+    }
+
+    /// Everything the page's scripts logged since the last call.
+    pub fn take_logged(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.logged)
     }
 
     /// The page's title bar, such as it is: whatever it is now showing.
@@ -175,6 +215,7 @@ impl App {
 
     /// Whatever last happened may have moved on the page, on screen, or both.
     fn changed(&mut self) {
+        self.scene = None;
         self.grid = None;
         self.reaches = None;
         self.hover = None;
@@ -220,9 +261,12 @@ impl App {
         let Ok(hovering) = self.browser.hover(&self.page, at) else {
             return;
         };
-        let _ = self.browser.pointer_move(&self.page, at);
+        if let Ok(emitted) = self.browser.pointer_move(&self.page, at) {
+            self.logged.extend(emitted.console);
+        }
         self.hover = Hover::of(hovering.cursor).map(|shape| (col, row, shape));
         if hovering.moved {
+            self.scene = None;
             self.grid = None;
         }
     }
@@ -236,18 +280,24 @@ impl App {
 
     pub fn clicked(&mut self, down: bool, col: u16, row: u16) {
         let at = self.at(col, row);
-        let _ = match down {
+        let emitted = match down {
             true => self.browser.pointer_down(&self.page, at),
             false => self.browser.pointer_up(&self.page, at),
         };
+        if let Ok(emitted) = emitted {
+            self.logged.extend(emitted.console);
+        }
         self.changed();
     }
 
     pub fn keyed(&mut self, down: bool, key: &str, code: &str, held: Held) {
-        let _ = match down {
+        let emitted = match down {
             true => self.browser.key_down(&self.page, key, code, held),
             false => self.browser.key_up(&self.page, key, code, held),
         };
+        if let Ok(emitted) = emitted {
+            self.logged.extend(emitted.console);
+        }
         self.changed();
     }
 
@@ -255,8 +305,11 @@ impl App {
     /// scrolling, a click or a key has left the last one stale.
     pub fn render(&mut self) -> Result<&Grid> {
         if self.grid.is_none() {
-            let scene = self.browser.scene_for(&self.page)?;
-            let painted = grid::paint(&scene, self.cell, self.scrolled, self.cols, self.rows);
+            if self.scene.is_none() {
+                self.scene = Some(self.browser.scene_for(&self.page)?);
+            }
+            let scene = self.scene.as_ref().expect("just built");
+            let painted = grid::paint(scene, self.cell, self.scrolled, self.cols, self.rows);
             self.grid = Some(painted);
         }
         Ok(self.grid.as_ref().expect("just painted"))

@@ -5748,6 +5748,7 @@ dependencies = [
  "anyhow",
  "clap",
  "crossterm",
+ "serde_json",
  "toy-browser",
  "toy-browser-fetch",
 ]

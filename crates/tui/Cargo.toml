@@ -13,12 +13,17 @@ path = "src/lib.rs"
 name = "toy-browser-tui"
 path = "src/main.rs"
 
+[[bin]]
+name = "toy-browser-host"
+path = "src/bin/host.rs"
+
 [dependencies]
 anyhow.workspace = true
 toy-browser.workspace = true
 toy-browser-fetch.workspace = true
 clap = { version = "4.6.6", features = ["derive"] }
 crossterm = "0.28"
+serde_json.workspace = true
 
 [lints]
 workspace = true
