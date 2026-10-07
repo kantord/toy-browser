@@ -23,3 +23,10 @@ html5ever = "0.39"
 
 [lints]
 workspace = true
+
+# A build for the web has no operating system to ask for randomness, so the two
+# `getrandom` versions in this tree both need their browser backend turned on.
+# Target-gated: a native build is untouched.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }

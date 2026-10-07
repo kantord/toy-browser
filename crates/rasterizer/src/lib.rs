@@ -38,6 +38,13 @@ mod raster;
 mod shapes;
 mod svg;
 mod values;
+/// Serving other processes over a Unix socket.
+///
+/// Behind a feature because it is the one part of this crate that is about an
+/// operating system rather than about pixels: socket permissions, directory
+/// modes, `SCM_RIGHTS`. A build for the web keeps the drawing and leaves this
+/// out — see `docs/in-a-browser.md`.
+#[cfg(feature = "daemon")]
 pub mod wire;
 
 pub use draw::{draw, filled_so_far, groups_done, pictures_done};

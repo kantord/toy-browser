@@ -5,6 +5,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = ["daemon"]
+# Serving other processes over a Unix socket. Off for a build that has no
+# operating system under it.
+daemon = []
+
 [dependencies]
 anyhow.workspace = true
 # A Scene has to be writable down before it can be handed to a rasterizer in

@@ -219,3 +219,11 @@ all = { level = "allow", priority = -1 }
 
 [lints.rust]
 warnings = "allow"
+
+# tb+++ a build for the web has no operating system to ask for randomness, so
+# both `getrandom` versions in this tree need their browser backend. Target
+# gated, so a native build is untouched. `docs/in-a-browser.md`.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+# tb---
