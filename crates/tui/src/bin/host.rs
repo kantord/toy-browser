@@ -14,6 +14,7 @@
 //!      {"op":"move","col":3,"row":1}
 //!      {"op":"key","key":"a","code":"KeyA"}
 //!      {"op":"scroll","rows":3}
+//!      {"op":"whole","on":true}   frames are as tall as the page; the host scrolls
 //! out  {"ev":"frame","cols":80,"rows":24,"lines":[[["text","#fg","#bg"],..],..]}
 //!      {"ev":"log","line":"whatever the page logged"}
 //!      {"ev":"error","message":"..."}
@@ -42,7 +43,10 @@ fn main() -> Result<()> {
         };
         match reply {
             Ok(()) => answer(&mut app, &mut out)?,
-            Err(error) => emit(&mut out, &json!({"ev": "error", "message": error.to_string()}))?,
+            Err(error) => emit(
+                &mut out,
+                &json!({"ev": "error", "message": error.to_string()}),
+            )?,
         }
     }
     Ok(())
@@ -71,6 +75,7 @@ fn obey(app: &mut App, command: &Value) -> Result<()> {
             app.keyed(true, key, code, held);
             app.keyed(false, key, code, held);
         }
+        "whole" => app.show_whole(command["on"].as_bool().unwrap_or(true)),
         "scroll" => app.scroll(0.0, command["rows"].as_f64().unwrap_or(0.0) as f32),
         other => anyhow::bail!("unknown op {other:?}"),
     }

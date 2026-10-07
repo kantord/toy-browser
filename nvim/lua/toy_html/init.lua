@@ -83,16 +83,6 @@ local function click_cursor(view)
   send(view, { op = "click", col = col, row = row })
 end
 
-local function click_mouse(view)
-  local pos = vim.fn.getmousepos()
-  if pos.winid ~= view.win then
-    return
-  end
-  local line = vim.api.nvim_buf_get_lines(view.buf, pos.line - 1, pos.line, false)[1] or ""
-  local col = vim.fn.strdisplaywidth(line:sub(1, pos.column - 1))
-  send(view, { op = "click", col = col, row = pos.line - 1 })
-end
-
 local function size(win)
   local info = vim.fn.getwininfo(win)[1]
   return info.width - info.textoff, info.height
@@ -163,30 +153,22 @@ function M.open(opts)
     end,
   })
 
-  local function scroll(rows)
-    return function() send(view, { op = "scroll", rows = rows }) end
-  end
+  -- Everything else is Neovim's own: the page is real buffer text, so cursor
+  -- motion, search, visual mode, yank and the mouse all work as usual. Only a
+  -- click (a release in normal mode, so a drag is left to select) and <CR>
+  -- reach the page.
   local function map(lhs, fn)
     vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true })
   end
-  local _, rows = size(win)
   map("<CR>", function() click_cursor(view) end)
-  map("<LeftMouse>", function() click_mouse(view) end)
-  map("j", scroll(1))
-  map("k", scroll(-1))
-  map("<Down>", scroll(1))
-  map("<Up>", scroll(-1))
-  map("<ScrollWheelDown>", scroll(3))
-  map("<ScrollWheelUp>", scroll(-3))
-  map("<C-d>", scroll(math.floor(rows / 2)))
-  map("<C-u>", scroll(-math.floor(rows / 2)))
-  map("<Space>", scroll(rows - 1))
-  map("<C-f>", scroll(rows - 1))
-  map("<C-b>", scroll(-(rows - 1)))
-  map("gg", scroll(-1000000))
-  map("G", scroll(1000000))
+  map("<LeftRelease>", function()
+    if vim.fn.mode() == "n" then
+      click_cursor(view)
+    end
+  end)
   map("q", function() vim.api.nvim_win_close(win, true) end)
 
+  send(view, { op = "whole", on = true })
   resize()
   if opts.url then
     send(view, { op = "navigate", url = opts.url })

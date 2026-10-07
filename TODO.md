@@ -65,6 +65,6 @@ DOM** (what is laid out and drawn): `displayed = view(state, logical)`.
 
 ## Neovim buffer feel (known issues in the POC)
 
-- [ ] Whole page in the buffer so Neovim scrolls, searches and folds natively
-- [ ] Leave `<LeftMouse>` alone; click the page on `<LeftRelease>` in normal mode
+- [x] Whole page in the buffer so Neovim scrolls, searches and folds natively (host op `whole`)
+- [x] Leave `<LeftMouse>` alone; click the page on `<LeftRelease>` in normal mode
 - [ ] Scrolling is slow, and a release build did not help: profile host vs Lua `draw`

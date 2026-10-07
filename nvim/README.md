@@ -15,8 +15,9 @@ nvim -u NONE --cmd 'set rtp+=nvim' -c 'runtime plugin/toy_html.lua' -c ToyHtml R
 Neovim article), so the file on the left stays an ordinary buffer. In your own config,
 add `nvim/` to the runtimepath instead (e.g. a local plugin spec).
 
-Keys in the page: `j`/`k`, wheel, `<C-d>`/`<C-u>`, `<Space>`, `gg`/`G` scroll;
-`<CR>` or the mouse clicks; `q` closes. `:ToyHtmlDemo` shows a page that reports clicks
+The whole page is real buffer text, so Neovim's own motions, `/` search, visual mode,
+yank and mouse selection all work. A click (release in normal mode) or `<CR>` clicks the page;
+`q` closes. `:ToyHtmlDemo` shows a page that reports clicks
 through `console.log`, which reaches `on_event`.
 
 ## 2. Neovim drawn as HTML — `client/nvim_html.py`
