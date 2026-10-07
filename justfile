@@ -66,6 +66,18 @@ split:
 term url="https://news.ycombinator.com/" *ARGS:
     cargo run --release -p toy-browser-tui -- {{ url }} {{ ARGS }}
 
+# Neovim with a page in a split beside an ordinary file: builds the host,
+# loads the plugin from nvim/ and runs :ToyHtml. `q` in the page closes it.
+nvim url="https://en.wikipedia.org/wiki/Neovim" file="README.md":
+    cargo build -p toy-browser-tui
+    nvim -u NONE --cmd 'set rtp+=nvim' --cmd 'set mouse=a' -c 'runtime plugin/toy_html.lua' -c 'ToyHtml {{ url }}' {{ file }}
+
+# Neovim drawn as HTML: the engine shows it here, and /tmp/nvim.html holds the
+# same page for a web browser.
+nvim-html *ARGS:
+    cargo build -p toy-browser-tui
+    python3 nvim/client/nvim_html.py {{ ARGS }}
+
 # The same protocol without a test runner in the way.
 smoke:
     pnpm test:smoke
