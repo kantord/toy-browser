@@ -1,7 +1,10 @@
 //! `toy-browser-host`: the engine with no terminal, for a program that wants
 //! HTML drawn as cells and will do the drawing itself.
 //!
-//! One JSON object per line in, one per line out. The host sends markup,
+//! One JSON object per line in, one per line out. Every object may carry a
+//! `"page"` number (default 0) naming one of several pages the host keeps, made
+//! the first time it is named and sharing one fetch cache; replies carry it
+//! back. `{"op":"close","page":3}` forgets one. The host sends markup,
 //! clicks, keys and a size; the engine answers every one with the frame it
 //! now comes to, and with whatever the page's scripts logged in the meantime —
 //! `console.log` is how a page tells its host something happened.
@@ -30,46 +33,81 @@
 //! A frame is whole every time, as runs of equal colour and underline per row. Sending only
 //! what changed is the obvious next step; see `TODO.md`.
 
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::io::{self, BufRead, Write};
 
 use anyhow::Result;
 use serde_json::{Value, json};
-use toy_browser::{Held, Images, Scheme};
+use toy_browser::{Held, Images, Resources, Scheme};
 use toy_browser_tui::app::App;
 use toy_browser_tui::grid::{Grid, Rgb, Style};
 
 const BASE: &str = "file:///toy-browser-host/";
 
+/// What the host holds for one page the client has named.
+struct Page {
+    app: App,
+    transparent: bool,
+}
+
+/// Every page the client has opened, reading through one cache.
+struct Host {
+    pages: HashMap<u64, Page>,
+    resources: Resources,
+}
+
 fn main() -> Result<()> {
-    let mut app = App::blank(80, 24, true, Scheme::Light)?;
+    let mut host = Host {
+        pages: HashMap::new(),
+        resources: Resources::new(),
+    };
     let mut out = io::stdout().lock();
-    let mut transparent = false;
-    app.leave_navigation(true);
     for line in io::stdin().lock().lines() {
-        serve(&mut app, &line?, &mut transparent, &mut out)?;
+        serve(&mut host, &line?, &mut out)?;
     }
     Ok(())
 }
 
 /// One line in: what it asks, and the reply to it.
-fn serve(app: &mut App, line: &str, transparent: &mut bool, out: &mut impl Write) -> Result<()> {
-    let command = serde_json::from_str::<Value>(line);
-    let op = command.as_ref().map_or(Value::Null, |c| c["op"].clone());
-    if op == "transparent" {
-        *transparent = command
-            .as_ref()
-            .is_ok_and(|c| c["on"].as_bool().unwrap_or(true));
-    }
-    let reply = match command {
-        Ok(command) => obey(app, &command, out),
-        Err(error) => Err(anyhow::anyhow!("not JSON: {error}")),
+fn serve(host: &mut Host, line: &str, out: &mut impl Write) -> Result<()> {
+    let command = match serde_json::from_str::<Value>(line) {
+        Ok(command) => command,
+        Err(error) => {
+            return emit(
+                out,
+                0,
+                &json!({"ev": "error", "message": format!("not JSON: {error}")}),
+            );
+        }
     };
-    match reply {
+    let id = command["page"].as_u64().unwrap_or(0);
+    let op = command["op"].clone();
+    if op == "close" {
+        host.pages.remove(&id);
+        return Ok(());
+    }
+    let page = match host.pages.entry(id) {
+        Entry::Occupied(page) => page.into_mut(),
+        Entry::Vacant(slot) => {
+            let mut app = App::blank_sharing(host.resources.clone(), 80, 24, true, Scheme::Light)?;
+            app.leave_navigation(true);
+            slot.insert(Page {
+                app,
+                transparent: false,
+            })
+        }
+    };
+    if op == "transparent" {
+        page.transparent = command["on"].as_bool().unwrap_or(true);
+    }
+    match obey(&mut page.app, id, &command, out) {
         // Looking at the page changes nothing, so there is no new frame.
         Ok(()) if op == "inspect" => Ok(()),
-        Ok(()) => answer(app, out, *transparent),
+        Ok(()) => answer(page, id, out),
         Err(error) => emit(
             out,
+            id,
             &json!({"ev": "error", "op": op, "message": error.to_string()}),
         ),
     }
@@ -79,7 +117,7 @@ fn number(command: &Value, name: &str) -> u16 {
     command[name].as_u64().unwrap_or(0).min(u64::from(u16::MAX)) as u16
 }
 
-fn obey(app: &mut App, command: &Value, out: &mut impl Write) -> Result<()> {
+fn obey(app: &mut App, id: u64, command: &Value, out: &mut impl Write) -> Result<()> {
     match command["op"].as_str().unwrap_or_default() {
         "navigate" => app.navigate(command["url"].as_str().unwrap_or_default())?,
         "markup" => app.load_markup(command["html"].as_str().unwrap_or_default(), BASE)?,
@@ -104,6 +142,7 @@ fn obey(app: &mut App, command: &Value, out: &mut impl Write) -> Result<()> {
             let href = app.link_at(col, row);
             emit(
                 out,
+                id,
                 &json!({"ev": "target", "col": col, "row": row, "href": href}),
             )?;
         }
@@ -118,18 +157,21 @@ fn obey(app: &mut App, command: &Value, out: &mut impl Write) -> Result<()> {
     Ok(())
 }
 
-fn answer(app: &mut App, out: &mut impl Write, transparent: bool) -> Result<()> {
-    if let Some(url) = app.take_navigation() {
-        emit(out, &json!({"ev": "navigate", "url": url}))?;
+fn answer(page: &mut Page, id: u64, out: &mut impl Write) -> Result<()> {
+    if let Some(url) = page.app.take_navigation() {
+        emit(out, id, &json!({"ev": "navigate", "url": url}))?;
     }
-    for line in app.take_logged() {
-        emit(out, &json!({"ev": "log", "line": line}))?;
+    for line in page.app.take_logged() {
+        emit(out, id, &json!({"ev": "log", "line": line}))?;
     }
-    let frame = frame(app.render()?, transparent);
-    emit(out, &frame)
+    let frame = frame(page.app.render()?, page.transparent);
+    emit(out, id, &frame)
 }
 
-fn emit(out: &mut impl Write, value: &Value) -> Result<()> {
+/// Writes one event, tagged with the page it is about.
+fn emit(out: &mut impl Write, page: u64, value: &Value) -> Result<()> {
+    let mut value = value.clone();
+    value["page"] = json!(page);
     writeln!(out, "{value}")?;
     out.flush()?;
     Ok(())

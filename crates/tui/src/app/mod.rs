@@ -85,7 +85,19 @@ impl App {
 
     /// A page with nothing in it yet, for a host that will supply the markup.
     pub fn blank(cols: u16, rows: u16, scripts: bool, scheme: Scheme) -> Result<Self> {
-        let mut browser = Browser::new(Resources::new())?;
+        Self::blank_sharing(Resources::new(), cols, rows, scripts, scheme)
+    }
+
+    /// As [`Self::blank`], reading through this cache: pages that share one
+    /// fetch a thing once between them.
+    pub fn blank_sharing(
+        resources: Resources,
+        cols: u16,
+        rows: u16,
+        scripts: bool,
+        scheme: Scheme,
+    ) -> Result<Self> {
+        let mut browser = Browser::new(resources)?;
         browser.set_scripts(scripts);
         // A grid cannot show a picture, so what it says it is stands in.
         browser.set_images(Images::AltText);

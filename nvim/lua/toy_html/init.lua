@@ -122,18 +122,64 @@ local function say(view, text)
   vim.bo[view.buf].modifiable = false
 end
 
-local function send(view, command)
-  vim.fn.chansend(view.job, vim.json.encode(command) .. "\n")
+-- The window showing this view, or nil: a page left behind in the jumplist is
+-- a buffer no window is showing.
+local function window(view)
+  local win = vim.fn.bufwinid(view.buf)
+  return win ~= -1 and win or nil
 end
 
-local function handle(view, line)
-  local ok, event = pcall(vim.json.decode, line)
-  if not ok then
-    return
+-- One host process serves every page: they share its fetch cache, and the
+-- views are told apart by the number each of their commands and replies carries.
+local handle
+local host = { job = nil, views = {}, last = 0 }
+
+local function start_job()
+  local pending = ""
+  host.job = vim.fn.jobstart({ M.host }, {
+    on_stdout = function(_, data)
+      -- jobstart splits on newlines; the first and last pieces may be partial.
+      data[1] = pending .. data[1]
+      pending = table.remove(data)
+      for _, line in ipairs(data) do
+        if line ~= "" then
+          vim.schedule(function()
+            local ok, event = pcall(vim.json.decode, line)
+            local view = ok and host.views[event.page]
+            if view and vim.api.nvim_buf_is_valid(view.buf) then
+              handle(view, event)
+            end
+          end)
+        end
+      end
+    end,
+    on_exit = function()
+      host.job = nil
+      -- Pages the host held are gone with it; each is loaded again as it is shown.
+      for _, view in pairs(host.views) do
+        view.gone = true
+      end
+    end,
+  })
+end
+
+local function send(view, command)
+  if not host.job then
+    start_job()
   end
+  command.page = view.page
+  vim.fn.chansend(host.job, vim.json.encode(command) .. "\n")
+end
+
+
+function handle(view, event)
   if event.ev == "frame" then
     status(view)
     draw(view, event)
+    if view.cursor and window(view) then
+      pcall(vim.api.nvim_win_set_cursor, window(view), view.cursor)
+      view.cursor = nil
+    end
   elseif event.ev == "log" then
     local text = event.line:gsub("^%[log%] ", "")
     view.on_event(text)
@@ -158,12 +204,6 @@ local function handle(view, line)
   end
 end
 
--- The window showing this view, or nil: a page left behind in the jumplist is
--- a buffer no window is showing.
-local function window(view)
-  local win = vim.fn.bufwinid(view.buf)
-  return win ~= -1 and win or nil
-end
 
 -- A position in the buffer as a cell: row is the line, col counts display
 -- cells, not bytes, which differ on any non-ASCII text.
@@ -303,35 +343,32 @@ function M.open(opts)
   vim.bo[buf].bufhidden = "hide"
   pcall(vim.api.nvim_buf_set_name, buf, "toy-html://" .. (opts.url or "markup"))
 
+  host.last = host.last + 1
   local view = {
     buf = buf,
+    page = host.last,
     url = opts.url,
+    html = opts.html,
+    -- A fetched page is drawn on white, as a browser would: it was designed for
+    -- it, and sets its own text colours (usually dark) without setting a
+    -- background, so a dark theme showing through would leave it unreadable.
+    -- Markup a plugin supplies is its own, and takes the colorscheme.
+    transparent = opts.transparent,
+    images = opts.images or vim.g.toy_html_images,
     on_event = opts.on_event or function(text)
       vim.notify(text)
     end,
   }
-  local pending = ""
-  view.job = vim.fn.jobstart({ M.host }, {
-    on_stdout = function(_, data)
-      -- jobstart splits on newlines; the first and last pieces may be partial.
-      data[1] = pending .. data[1]
-      pending = table.remove(data)
-      for _, line in ipairs(data) do
-        if line ~= "" then
-          vim.schedule(function()
-            if vim.api.nvim_buf_is_valid(buf) then
-              handle(view, line)
-            end
-          end)
-        end
-      end
-    end,
-  })
+  if view.transparent == nil then
+    view.transparent = opts.html ~= nil
+  end
+  host.views[view.page] = view
   vim.api.nvim_create_autocmd("BufWipeout", {
     buffer = buf,
     once = true,
     callback = function()
-      vim.fn.jobstop(view.job)
+      send(view, { op = "close" })
+      host.views[view.page] = nil
     end,
   })
 
@@ -342,17 +379,53 @@ function M.open(opts)
       send(view, { op = "resize", cols = cols, rows = rows })
     end
   end
+  -- What the host needs to hold the page: sent once, and again if the host
+  -- has forgotten the page. `quiet` keeps the buffer's text (the snapshot)
+  -- while the page loads again behind it.
+  local function load(quiet)
+    view.closed, view.gone = false, false
+    send(view, { op = "transparent", on = view.transparent })
+    if view.images then
+      send(view, { op = "images", mode = view.images })
+    end
+    send(view, { op = "whole", on = true })
+    resize()
+    if view.url then
+      if not quiet then
+        say(view, "Loading " .. view.url .. " …")
+      end
+      send(view, { op = "navigate", url = view.url })
+    else
+      send(view, { op = "markup", html = view.html or "" })
+    end
+  end
   vim.api.nvim_create_autocmd("BufWinEnter", {
     buffer = buf,
     callback = function()
       set_window(vim.api.nvim_get_current_win())
-      resize()
+      if view.closed or view.gone then
+        status(view, "loading")
+        load(true)
+      else
+        resize()
+      end
     end,
   })
+  -- A page no window shows is not kept in the host: its text stays in the
+  -- buffer, and it is loaded again if it is shown again. Markup has no address
+  -- to load it from, so it stays.
   vim.api.nvim_create_autocmd("BufWinLeave", {
     buffer = buf,
     callback = function()
-      restore_window(vim.api.nvim_get_current_win())
+      local win = vim.api.nvim_get_current_win()
+      view.cursor = vim.api.nvim_win_get_cursor(win)
+      restore_window(win)
+      vim.schedule(function()
+        if view.url and vim.api.nvim_buf_is_valid(buf) and not window(view) and not view.closed then
+          view.closed = true
+          send(view, { op = "close" })
+        end
+      end)
     end,
   })
   vim.api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
@@ -422,29 +495,9 @@ function M.open(opts)
     end
   end)
 
-  -- A fetched page is drawn on white, as a browser would: it was designed for
-  -- it, and sets its own text colours (usually dark) without setting a
-  -- background, so a dark theme showing through would leave it unreadable.
-  -- Markup a plugin supplies is its own, and takes the colorscheme.
-  local transparent = opts.transparent
-  if transparent == nil then
-    transparent = opts.html ~= nil
-  end
   status(view, opts.url and "loading")
   set_window(vim.api.nvim_get_current_win())
-  send(view, { op = "transparent", on = transparent })
-  local images = opts.images or vim.g.toy_html_images
-  if images then
-    send(view, { op = "images", mode = images })
-  end
-  send(view, { op = "whole", on = true })
-  resize()
-  if opts.url then
-    say(view, "Loading " .. opts.url .. " …")
-    send(view, { op = "navigate", url = opts.url })
-  else
-    send(view, { op = "markup", html = opts.html or "" })
-  end
+  load(false)
   return view
 end
 
