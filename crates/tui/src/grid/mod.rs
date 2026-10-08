@@ -14,6 +14,10 @@
 //! `crates/rasterizer`: this moves when a cell gains a new thing to hold,
 //! that when a new kind of Mark needs painting.
 
+use std::collections::BTreeMap;
+
+use toy_browser::rasterizer::Digest;
+
 mod marks;
 
 pub use marks::paint;
@@ -43,8 +47,16 @@ pub struct Cell {
     /// it, or a font whose hinting nudges a glyph by a fraction of a pixel, is
     /// what this is the insurance against.
     pub hit: Option<(f32, f32)>,
-    /// Whether a thin horizontal line was drawn under this character: a link's
-    /// or `text-decoration`'s underline, which a cell can only keep as a flag.
+    pub style: Style,
+}
+
+/// How a character is set, beyond its colours. All a cell can keep of a font.
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+pub struct Style {
+    pub bold: bool,
+    pub italic: bool,
+    /// A thin horizontal line was drawn under it: a link's or
+    /// `text-decoration`'s underline.
     pub underline: bool,
 }
 
@@ -57,6 +69,8 @@ pub struct Grid {
     /// Resolved onto characters once everything is painted, since a line can
     /// be drawn before or after the text it sits under.
     rules: Vec<(u16, u16, u16)>,
+    /// How each face the Scene holds is set, worked out once before painting.
+    looks: BTreeMap<Digest, Style>,
 }
 
 /// What the page is painted on. See `window/blit.rs`'s own `PAPER` for the
@@ -75,13 +89,14 @@ impl Grid {
             fg: INK,
             bg: PAPER,
             hit: None,
-            underline: false,
+            style: Style::default(),
         };
         Self {
             cols,
             rows,
             cells: vec![cell; usize::from(cols) * usize::from(rows)],
             rules: Vec::new(),
+            looks: BTreeMap::new(),
         }
     }
 
@@ -109,7 +124,7 @@ impl Grid {
             let Some(text_row) = text_row else { continue };
             for col in from..to {
                 if let Some(cell) = self.at_mut(col, text_row).filter(|c| c.ch != ' ') {
-                    cell.underline = true;
+                    cell.style.underline = true;
                 }
             }
         }

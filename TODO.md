@@ -29,8 +29,9 @@ engine gives:  dirty cell regions + events for the host to handle
 
 - [x] POC: link click opens a new page buffer in the same window; back/forward are the jumplist (`<C-o>`/`<C-i>`) plus `<A-Left>`/`<A-Right>` for page-level jumps; trailing padding trimmed from lines
 - [x] POC: loading/failed text in the buffer, address in the statusline, `r` reloads, `:ToyHtmlGo {url}`
-- [x] POC: underlined text (links, `text-decoration`): thin horizontal fills are noted by the grid and put on the characters above them; page default paper/ink go out as "" so Neovim's colorscheme shows (`transparent` op)
-- [ ] Bold and italic: `Mark::Glyphs` only carries a font-face digest, so the engine must say weight/style per run before cells and the wire can
+- [x] POC: underlined text (links, `text-decoration`): thin horizontal fills are noted by the grid and put on the characters above them; with the `transparent` op the page's default paper/ink go out as "" so the colorscheme shows; used for plugin-supplied `html` only, because fetched pages (Wikipedia) set dark text without a background and become unreadable on a dark theme
+- [x] POC: bold and italic, read from the font face of each text run (skrifa); frame runs carry flags `biu`
+- [ ] Italic shows only if the monospace font has an italic file: a synthesised oblique leaves the face unchanged, so the engine would have to say `font-style` per run. Same for a variable font's bold.
 - [ ] Images: `Mark::Image` is left undrawn. Idea: slice every image into strips one character row tall, one per buffer line (Kitty/Sixel placement per strip, or a placeholder with the `alt` text first). Neovim then crops, hides and scrolls them with the line like any text, and the host never has to track window clipping.
 - [ ] History step 2: one host process for all pages (`page` id on every op), close and lazily reload pages that are not shown
 - [ ] History step 3: `history.pushState` makes a new buffer; check how the new URL reaches the host

@@ -16,9 +16,10 @@
 //!      {"op":"key","key":"a","code":"KeyA"}
 //!      {"op":"scroll","rows":3}
 //!      {"op":"whole","on":true}   frames are as tall as the page; the host scrolls
+//!      "flags" is any of b (bold) i (italic) u (underline), or ""
 //!      {"op":"transparent","on":true}   the page's own white paper and black ink
 //!                                       are sent as "" (no colour), for the host's theme
-//! out  {"ev":"frame","cols":80,"rows":24,"lines":[[["text","#fg","#bg",underlined],..],..]}
+//! out  {"ev":"frame","cols":80,"rows":24,"lines":[[["text","#fg","#bg","flags"],..],..]}
 //!      {"ev":"target","col":3,"row":1,"href":"https://…"|null}
 //!      {"ev":"log","line":"whatever the page logged"}
 //!      {"ev":"error","op":"navigate","message":"..."}   op is the command that failed
@@ -33,7 +34,7 @@ use anyhow::Result;
 use serde_json::{Value, json};
 use toy_browser::{Held, Scheme};
 use toy_browser_tui::app::App;
-use toy_browser_tui::grid::{Grid, Rgb};
+use toy_browser_tui::grid::{Grid, Rgb, Style};
 
 const BASE: &str = "file:///toy-browser-host/";
 
@@ -134,22 +135,29 @@ fn hex(rgb: Rgb, default: Rgb, transparent: bool) -> String {
     format!("#{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b)
 }
 
+fn flags(style: Style) -> String {
+    [(style.bold, 'b'), (style.italic, 'i'), (style.underline, 'u')]
+        .into_iter()
+        .filter_map(|(on, flag)| on.then_some(flag))
+        .collect()
+}
+
 /// Each row as runs of cells that share both colours and underline.
 fn frame(grid: &Grid, transparent: bool) -> Value {
     let lines: Vec<Value> = (0..grid.rows)
         .map(|row| {
-            let mut runs: Vec<(String, Rgb, Rgb, bool)> = Vec::new();
+            let mut runs: Vec<(String, Rgb, Rgb, Style)> = Vec::new();
             for col in 0..grid.cols {
                 let cell = grid.cell(col, row);
-                let key = (cell.fg, cell.bg, cell.underline);
+                let key = (cell.fg, cell.bg, cell.style);
                 match runs.last_mut() {
-                    Some((text, fg, bg, line)) if (*fg, *bg, *line) == key => text.push(cell.ch),
+                    Some((text, fg, bg, style)) if (*fg, *bg, *style) == key => text.push(cell.ch),
                     _ => runs.push((cell.ch.to_string(), key.0, key.1, key.2)),
                 }
             }
             runs.into_iter()
-                .map(|(text, fg, bg, line)| {
-                    json!([text, hex(fg, INK, transparent), hex(bg, PAPER, transparent), line])
+                .map(|(text, fg, bg, style)| {
+                    json!([text, hex(fg, INK, transparent), hex(bg, PAPER, transparent), flags(style)])
                 })
                 .collect()
         })

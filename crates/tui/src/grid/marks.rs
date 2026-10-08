@@ -16,7 +16,7 @@
 use toy_browser::rasterizer::Paint;
 use toy_browser::{Area, Ink, Mark, Scene};
 
-use super::{Grid, Rgb};
+use super::{Grid, Rgb, Style};
 
 /// Where a glyph's baseline sits within its cell, as a fraction of the font
 /// size counted up from the top. Real ascent varies by face; one number for
@@ -96,6 +96,11 @@ fn axis_index(value: f32, cell: f32, bounds: (u16, u16)) -> Option<u16> {
 /// Scene apart the way a pixel band does.
 pub fn paint(scene: &Scene, cell: (f32, f32), scroll: (f32, f32), cols: u16, rows: u16) -> Grid {
     let mut grid = Grid::blank(cols, rows);
+    grid.looks = scene
+        .faces
+        .iter()
+        .map(|(digest, face)| (*digest, look_of(&face.bytes)))
+        .collect();
     let bounds = Bounds::whole(&grid);
     walk(
         &scene.marks,
@@ -108,6 +113,21 @@ pub fn paint(scene: &Scene, cell: (f32, f32), scroll: (f32, f32), cols: u16, row
     grid
 }
 
+/// Whether a font file is a bold one, an italic one. A file that cannot be read
+/// is plain.
+fn look_of(bytes: &[u8]) -> Style {
+    use skrifa::MetadataProvider;
+    let Ok(font) = skrifa::FontRef::new(bytes) else {
+        return Style::default();
+    };
+    let attributes = font.attributes();
+    Style {
+        bold: attributes.weight.value() >= 600.0,
+        italic: attributes.style != skrifa::attribute::Style::Normal,
+        underline: false,
+    }
+}
+
 /// One text run, carrying only what painting it needs — see
 /// `too-many-arguments.md`: this is `Mark::Glyphs`'s own fields, named rather
 /// than passed one by one.
@@ -117,6 +137,7 @@ struct GlyphRun<'a> {
     baseline: f32,
     size: f32,
     paint: &'a Paint,
+    look: Style,
 }
 
 /// Paints one list of marks, each shifted by `at` and kept inside `bounds`.
@@ -130,6 +151,7 @@ fn walk(marks: &[Mark], at: (f32, f32), bounds: Bounds, cell: (f32, f32), grid: 
                 baseline,
                 size,
                 paint,
+                face,
                 ..
             } => {
                 let run = GlyphRun {
@@ -138,6 +160,7 @@ fn walk(marks: &[Mark], at: (f32, f32), bounds: Bounds, cell: (f32, f32), grid: 
                     baseline: *baseline,
                     size: *size,
                     paint,
+                    look: grid.looks.get(face).copied().unwrap_or_default(),
                 };
                 glyphs(&run, at, bounds, cell, grid);
             }
@@ -265,13 +288,13 @@ fn glyphs(run: &GlyphRun, at: (f32, f32), bounds: Bounds, cell: (f32, f32), grid
         let Some(col) = axis_index(x, cell.0, bounds.cols) else {
             continue;
         };
-        place_glyph(grid, ch, col, row, colour, (x, top));
+        place_glyph(grid, ch, col, row, colour, (x, top), run.look);
     }
 }
 
 /// Puts one printable character into the grid, remembering `hit`, its real
 /// screen-relative position, for a click on this cell to answer to.
-fn place_glyph(grid: &mut Grid, ch: char, col: u16, row: u16, colour: Rgb, hit: (f32, f32)) {
+fn place_glyph(grid: &mut Grid, ch: char, col: u16, row: u16, colour: Rgb, hit: (f32, f32), look: Style) {
     if ch.is_control() {
         return;
     }
@@ -281,4 +304,5 @@ fn place_glyph(grid: &mut Grid, ch: char, col: u16, row: u16, colour: Rgb, hit: 
     cell.ch = ch;
     cell.fg = colour;
     cell.hit = Some(hit);
+    cell.style = look;
 }

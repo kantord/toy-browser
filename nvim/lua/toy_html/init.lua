@@ -18,13 +18,15 @@ M.host = vim.env.TOY_BROWSER_HOST
 
 -- An empty colour is the page's default one, left to the colorscheme: the
 -- page is asked for it (`transparent`) so it takes on Neovim's own look.
-local function group(fg, bg, underline)
-  local name = "ToyHtml_" .. fg:sub(2) .. "_" .. bg:sub(2) .. (underline and "_u" or "")
+local function group(fg, bg, flags)
+  local name = "ToyHtml_" .. fg:sub(2) .. "_" .. bg:sub(2) .. "_" .. flags
   if not groups[name] then
     vim.api.nvim_set_hl(0, name, {
       fg = fg ~= "" and fg or nil,
       bg = bg ~= "" and bg or nil,
-      underline = underline or nil,
+      bold = flags:find("b") ~= nil or nil,
+      italic = flags:find("i") ~= nil or nil,
+      underline = flags:find("u") ~= nil or nil,
     })
     groups[name] = true
   end
@@ -276,6 +278,8 @@ end
 --              the jump recorded so <C-o> comes back; otherwise a vertical
 --              split to the right, so an ordinary file can stay open beside it
 --   opts.tab   show it in a new tab page
+--   opts.transparent  leave the page's default white and black to the
+--              colorscheme (default: only for `html`, not for a fetched `url`)
 function M.open(opts)
   opts = opts or {}
   if opts.here then
@@ -416,9 +420,17 @@ function M.open(opts)
     end
   end)
 
+  -- A fetched page is drawn on white, as a browser would: it was designed for
+  -- it, and sets its own text colours (usually dark) without setting a
+  -- background, so a dark theme showing through would leave it unreadable.
+  -- Markup a plugin supplies is its own, and takes the colorscheme.
+  local transparent = opts.transparent
+  if transparent == nil then
+    transparent = opts.html ~= nil
+  end
   status(view, opts.url and "loading")
   set_window(vim.api.nvim_get_current_win())
-  send(view, { op = "transparent", on = true })
+  send(view, { op = "transparent", on = transparent })
   send(view, { op = "whole", on = true })
   resize()
   if opts.url then
