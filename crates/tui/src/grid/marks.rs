@@ -26,9 +26,9 @@ const ASCENT: f32 = 0.8;
 /// One rectangle of cells a mark may be painted into, columns and rows both
 /// half-open. What a `Clip` narrows and every write is kept inside.
 #[derive(Clone, Copy)]
-struct Bounds {
-    cols: (u16, u16),
-    rows: (u16, u16),
+pub(super) struct Bounds {
+    pub(super) cols: (u16, u16),
+    pub(super) rows: (u16, u16),
 }
 
 impl Bounds {
@@ -40,7 +40,7 @@ impl Bounds {
     }
 
     /// Cut down to an Area given in document pixels, already offset.
-    fn cut_to(self, area: Area, cell: (f32, f32)) -> Self {
+    pub(super) fn cut_to(self, area: Area, cell: (f32, f32)) -> Self {
         let cols = cell_span(area.x, area.width, cell.0);
         let rows = cell_span(area.y, area.height, cell.1);
         Self {
@@ -177,7 +177,10 @@ fn walk(marks: &[Mark], at: (f32, f32), bounds: Bounds, cell: (f32, f32), grid: 
             Mark::Moved { by, marks, .. } => {
                 walk(marks, (at.0 + by[4], at.1 + by[5]), bounds, cell, grid);
             }
-            Mark::Image { .. } => {}
+            Mark::Image { area, from, .. } => {
+                let shown = bounds.cut_to(shifted(*area, at), cell);
+                super::images::note(grid, shown, *from);
+            }
         }
     }
 }
@@ -294,7 +297,15 @@ fn glyphs(run: &GlyphRun, at: (f32, f32), bounds: Bounds, cell: (f32, f32), grid
 
 /// Puts one printable character into the grid, remembering `hit`, its real
 /// screen-relative position, for a click on this cell to answer to.
-fn place_glyph(grid: &mut Grid, ch: char, col: u16, row: u16, colour: Rgb, hit: (f32, f32), look: Style) {
+fn place_glyph(
+    grid: &mut Grid,
+    ch: char,
+    col: u16,
+    row: u16,
+    colour: Rgb,
+    hit: (f32, f32),
+    look: Style,
+) {
     if ch.is_control() {
         return;
     }

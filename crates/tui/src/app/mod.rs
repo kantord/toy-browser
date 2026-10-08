@@ -233,9 +233,19 @@ impl App {
                 self.scene = Some(self.browser.scene_for(&self.page)?);
             }
             let scene = self.scene.as_ref().expect("just built");
-            let painted = grid::paint(scene, self.cell, self.scrolled, self.cols, rows);
+            let mut painted = grid::paint(scene, self.cell, self.scrolled, self.cols, rows);
+            for image in painted.images().to_vec() {
+                let label = self.alt_of(image.node).filter(|alt| !alt.is_empty());
+                painted.label_image(image, label.as_deref().unwrap_or("image"));
+            }
             self.grid = Some(painted);
         }
         Ok(self.grid.as_ref().expect("just painted"))
+    }
+
+    /// The `alt` text of a picture's `<img>`.
+    fn alt_of(&mut self, node: toy_browser::NodeId) -> Option<String> {
+        let element = toy_browser::Remote::Element(node);
+        self.browser.attribute(&self.page, &element, "alt").ok()?
     }
 }

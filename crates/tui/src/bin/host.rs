@@ -53,7 +53,9 @@ fn serve(app: &mut App, line: &str, transparent: &mut bool, out: &mut impl Write
     let command = serde_json::from_str::<Value>(line);
     let op = command.as_ref().map_or(Value::Null, |c| c["op"].clone());
     if op == "transparent" {
-        *transparent = command.as_ref().is_ok_and(|c| c["on"].as_bool().unwrap_or(true));
+        *transparent = command
+            .as_ref()
+            .is_ok_and(|c| c["on"].as_bool().unwrap_or(true));
     }
     let reply = match command {
         Ok(command) => obey(app, &command, out),
@@ -123,7 +125,11 @@ fn emit(out: &mut impl Write, value: &Value) -> Result<()> {
     Ok(())
 }
 
-const PAPER: Rgb = Rgb { r: 255, g: 255, b: 255 };
+const PAPER: Rgb = Rgb {
+    r: 255,
+    g: 255,
+    b: 255,
+};
 const INK: Rgb = Rgb { r: 0, g: 0, b: 0 };
 
 /// A colour as `#rrggbb`, or "" for the page's default one when the host
@@ -136,10 +142,14 @@ fn hex(rgb: Rgb, default: Rgb, transparent: bool) -> String {
 }
 
 fn flags(style: Style) -> String {
-    [(style.bold, 'b'), (style.italic, 'i'), (style.underline, 'u')]
-        .into_iter()
-        .filter_map(|(on, flag)| on.then_some(flag))
-        .collect()
+    [
+        (style.bold, 'b'),
+        (style.italic, 'i'),
+        (style.underline, 'u'),
+    ]
+    .into_iter()
+    .filter_map(|(on, flag)| on.then_some(flag))
+    .collect()
 }
 
 /// Each row as runs of cells that share both colours and underline.
@@ -157,7 +167,12 @@ fn frame(grid: &Grid, transparent: bool) -> Value {
             }
             runs.into_iter()
                 .map(|(text, fg, bg, style)| {
-                    json!([text, hex(fg, INK, transparent), hex(bg, PAPER, transparent), flags(style)])
+                    json!([
+                        text,
+                        hex(fg, INK, transparent),
+                        hex(bg, PAPER, transparent),
+                        flags(style)
+                    ])
                 })
                 .collect()
         })
