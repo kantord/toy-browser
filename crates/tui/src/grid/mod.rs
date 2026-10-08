@@ -43,6 +43,9 @@ pub struct Cell {
     /// it, or a font whose hinting nudges a glyph by a fraction of a pixel, is
     /// what this is the insurance against.
     pub hit: Option<(f32, f32)>,
+    /// Whether a thin horizontal line was drawn under this character: a link's
+    /// or `text-decoration`'s underline, which a cell can only keep as a flag.
+    pub underline: bool,
 }
 
 /// The picture, as characters rather than pixels.
@@ -50,6 +53,10 @@ pub struct Grid {
     pub cols: u16,
     pub rows: u16,
     cells: Vec<Cell>,
+    /// Thin horizontal lines seen while painting, as `(first col, end col, row)`.
+    /// Resolved onto characters once everything is painted, since a line can
+    /// be drawn before or after the text it sits under.
+    rules: Vec<(u16, u16, u16)>,
 }
 
 /// What the page is painted on. See `window/blit.rs`'s own `PAPER` for the
@@ -68,11 +75,13 @@ impl Grid {
             fg: INK,
             bg: PAPER,
             hit: None,
+            underline: false,
         };
         Self {
             cols,
             rows,
             cells: vec![cell; usize::from(cols) * usize::from(rows)],
+            rules: Vec::new(),
         }
     }
 
@@ -87,6 +96,23 @@ impl Grid {
             return None;
         }
         self.cell(col, row).hit
+    }
+
+    /// Puts each noted line on the characters it lies under: in its own row, or
+    /// the one above, since an underline sits near the baseline and can round
+    /// either way. Cells with nothing to underline are left alone.
+    fn underline_text(&mut self) {
+        for (from, to, row) in std::mem::take(&mut self.rules) {
+            let text_row = [row, row.saturating_sub(1)]
+                .into_iter()
+                .find(|&r| (from..to).any(|c| self.at_mut(c, r).is_some_and(|x| x.ch != ' ')));
+            let Some(text_row) = text_row else { continue };
+            for col in from..to {
+                if let Some(cell) = self.at_mut(col, text_row).filter(|c| c.ch != ' ') {
+                    cell.underline = true;
+                }
+            }
+        }
     }
 
     fn at_mut(&mut self, col: u16, row: u16) -> Option<&mut Cell> {

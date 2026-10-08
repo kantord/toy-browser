@@ -104,6 +104,7 @@ pub fn paint(scene: &Scene, cell: (f32, f32), scroll: (f32, f32), cols: u16, row
         cell,
         &mut grid,
     );
+    grid.underline_text();
     grid
 }
 
@@ -199,6 +200,9 @@ fn rgb(paint: &Paint) -> Rgb {
 const HAIRLINE: f32 = 2.0;
 
 fn fill(area: Area, ink: &Ink, at: (f32, f32), bounds: Bounds, cell: (f32, f32), grid: &mut Grid) {
+    if area.height < HAIRLINE && area.width >= cell.0 {
+        rule(area, at, bounds, cell, grid);
+    }
     if area.width < HAIRLINE || area.height < HAIRLINE {
         return;
     }
@@ -207,6 +211,15 @@ fn fill(area: Area, ink: &Ink, at: (f32, f32), bounds: Bounds, cell: (f32, f32),
     };
     let Bounds { cols, rows } = bounds.cut_to(shifted(area, at), cell);
     paint_rect(grid, cols, rows, colour);
+}
+
+/// Notes a thin horizontal line, to be put on the text it lies under.
+fn rule(area: Area, at: (f32, f32), bounds: Bounds, cell: (f32, f32), grid: &mut Grid) {
+    let shown = shifted(area, at);
+    let cols = bounds.cut_to(shown, cell).cols;
+    if let Some(row) = axis_index(shown.y, cell.1, bounds.rows) {
+        grid.rules.push((cols.0, cols.1, row));
+    }
 }
 
 fn paint_rect(grid: &mut Grid, cols: (u16, u16), rows: (u16, u16), colour: Rgb) {

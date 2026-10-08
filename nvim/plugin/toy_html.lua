@@ -4,6 +4,11 @@ vim.api.nvim_create_user_command("ToyHtml", function(args)
   require("toy_html").open({ url = url })
 end, { nargs = "?" })
 
+-- :ToyHtmlGo {url}   load a page in this window; <C-o> comes back, like following a link
+vim.api.nvim_create_user_command("ToyHtmlGo", function(args)
+  require("toy_html").open({ url = args.args, here = true })
+end, { nargs = 1 })
+
 -- :ToyHtmlDemo   a small page that reports clicks through console.log
 vim.api.nvim_create_user_command("ToyHtmlDemo", function()
   require("toy_html").open({

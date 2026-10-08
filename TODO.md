@@ -27,6 +27,15 @@ engine gives:  dirty cell regions + events for the host to handle
 
 - [x] POC: host op `inspect` (cell → link href) drives a native right-click menu entry "Open in new tab"
 
+- [x] POC: link click opens a new page buffer in the same window; back/forward are the jumplist (`<C-o>`/`<C-i>`) plus `<A-Left>`/`<A-Right>` for page-level jumps; trailing padding trimmed from lines
+- [x] POC: loading/failed text in the buffer, address in the statusline, `r` reloads, `:ToyHtmlGo {url}`
+- [x] POC: underlined text (links, `text-decoration`): thin horizontal fills are noted by the grid and put on the characters above them; page default paper/ink go out as "" so Neovim's colorscheme shows (`transparent` op)
+- [ ] Bold and italic: `Mark::Glyphs` only carries a font-face digest, so the engine must say weight/style per run before cells and the wire can
+- [ ] Images: `Mark::Image` is left undrawn. Idea: slice every image into strips one character row tall, one per buffer line (Kitty/Sixel placement per strip, or a placeholder with the `alt` text first). Neovim then crops, hides and scrolls them with the line like any text, and the host never has to track window clipping.
+- [ ] History step 2: one host process for all pages (`page` id on every op), close and lazily reload pages that are not shown
+- [ ] History step 3: `history.pushState` makes a new buffer; check how the new URL reaches the host
+- [ ] Links with click handlers: a click on a link is currently a navigation and skips the page's own handlers
+
 ## Target 2: Neovim client rendered via HTML (hardest)
 
 - [x] POC: `nvim/client/nvim_html.py` attaches with `ext_linegrid`, keeps the grid
@@ -70,3 +79,19 @@ DOM** (what is laid out and drawn): `displayed = view(state, logical)`.
 - [x] Whole page in the buffer so Neovim scrolls, searches and folds natively (host op `whole`)
 - [x] Leave `<LeftMouse>` alone; click the page on `<LeftRelease>` in normal mode
 - [ ] Scrolling is slow, and a release build did not help: profile host vs Lua `draw`
+
+## Parked: buffer as structured source (decided too complex for now)
+
+Explored and set aside. Kept here so it is not re-derived.
+
+- Layout can't be interleaved with source in one buffer: source order (DOM) and
+  view order (rows) disagree on any multi-column page. Neovim can hide text
+  (conceal, `conceal_lines`; 80k marks set in ~46 ms) but cannot reorder it.
+- The core structure, if ever built: a **fragment table**
+  `{node, src_start, src_end, row, col, len}` indexed by source offset and by
+  `(row, col)`; the host keeps it, buffers only receive finished extmarks.
+- Two buffers (source: lossless Pug-like or Markdown, editable; view: the grid,
+  read-only) swapped by one key, cursor carried across by the table.
+- Candidate source for the DOM-ordered side: the engine's `reading/` tree.
+- Only worth it for editing static documents; scripted pages mutate the DOM
+  under the user's edits.
