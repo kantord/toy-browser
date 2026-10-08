@@ -15,7 +15,7 @@ mod pointer;
 pub use pointer::Hover;
 
 use anyhow::Result;
-use toy_browser::{Browser, Monospace, PageId, Resources, Scheme, Viewport};
+use toy_browser::{Browser, Images, Monospace, PageId, Resources, Scheme, Viewport};
 
 use crate::calibrate;
 use crate::grid::{self, Grid};
@@ -85,6 +85,8 @@ impl App {
     pub fn blank(cols: u16, rows: u16, scripts: bool, scheme: Scheme) -> Result<Self> {
         let mut browser = Browser::new(Resources::new())?;
         browser.set_scripts(scripts);
+        // A grid cannot show a picture, so what it says it is stands in.
+        browser.set_images(Images::AltText);
         let cell = calibrate::cell(&mut browser, GRID)?;
         let page = browser.new_page()?;
         let mut app = Self {
@@ -125,6 +127,12 @@ impl App {
         self.scrolled = (0.0, 0.0);
         self.changed();
         Ok(())
+    }
+
+    /// How pictures are shown: as their alt text, or not at all.
+    pub fn set_images(&mut self, images: Images) {
+        self.browser.set_images(images);
+        self.changed();
     }
 
     /// Makes the grid as tall as the page, so the host can scroll it itself.
@@ -233,19 +241,9 @@ impl App {
                 self.scene = Some(self.browser.scene_for(&self.page)?);
             }
             let scene = self.scene.as_ref().expect("just built");
-            let mut painted = grid::paint(scene, self.cell, self.scrolled, self.cols, rows);
-            for image in painted.images().to_vec() {
-                let label = self.alt_of(image.node).filter(|alt| !alt.is_empty());
-                painted.label_image(image, label.as_deref().unwrap_or("image"));
-            }
+            let painted = grid::paint(scene, self.cell, self.scrolled, self.cols, rows);
             self.grid = Some(painted);
         }
         Ok(self.grid.as_ref().expect("just painted"))
-    }
-
-    /// The `alt` text of a picture's `<img>`.
-    fn alt_of(&mut self, node: toy_browser::NodeId) -> Option<String> {
-        let element = toy_browser::Remote::Element(node);
-        self.browser.attribute(&self.page, &element, "alt").ok()?
     }
 }

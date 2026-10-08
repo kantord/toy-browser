@@ -182,6 +182,16 @@ impl Engine {
         Ok(self.realm(session)?.html(keyed))
     }
 
+    /// As [`html`](Self::html) keyed, drawn as `rules` say it should be: what a
+    /// renderer is shown, while the DOM stays what the page made it.
+    pub fn html_projected(
+        &mut self,
+        session: &SessionId,
+        rules: &[crate::rewrite::Rewrite],
+    ) -> Result<String> {
+        Ok(self.realm(session)?.html_projected(rules))
+    }
+
     /// How many times the Session's DOM has changed. Anything computed from an
     /// earlier revision describes a document that no longer exists.
     pub fn revision(&mut self, session: &SessionId) -> Result<u64> {

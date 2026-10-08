@@ -19,7 +19,6 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use toy_browser_engine::Keyed;
 
 use crate::blitz::{Kind, Source};
 use crate::{Browser, PageId, Viewport};
@@ -118,7 +117,9 @@ impl Browser {
     ) -> Result<crate::blitz::Composed> {
         let session = self.session(page)?;
         let clock = std::time::Instant::now();
-        let html = self.engine.html(&session, Keyed::Yes)?;
+        let html = self
+            .engine
+            .html_projected(&session, &self.images.rewrites())?;
         if std::env::var_os("TOY_BROWSER_TRACE_FRAME").is_some() {
             eprintln!(
                 "compose serialise {:>7.1}ms  {} bytes of html",

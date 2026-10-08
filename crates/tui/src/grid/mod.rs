@@ -18,10 +18,8 @@ use std::collections::BTreeMap;
 
 use toy_browser::rasterizer::Digest;
 
-mod images;
 mod marks;
 
-pub use images::Image;
 pub use marks::paint;
 
 /// A colour a cell is painted with.
@@ -73,8 +71,6 @@ pub struct Grid {
     rules: Vec<(u16, u16, u16)>,
     /// How each face the Scene holds is set, worked out once before painting.
     looks: BTreeMap<Digest, Style>,
-    /// Pictures seen while painting, for a label to be written on each.
-    images: Vec<Image>,
 }
 
 /// What the page is painted on. See `window/blit.rs`'s own `PAPER` for the
@@ -101,7 +97,6 @@ impl Grid {
             cells: vec![cell; usize::from(cols) * usize::from(rows)],
             rules: Vec::new(),
             looks: BTreeMap::new(),
-            images: Vec::new(),
         }
     }
 
@@ -135,7 +130,7 @@ impl Grid {
         }
     }
 
-    pub(super) fn at_mut(&mut self, col: u16, row: u16) -> Option<&mut Cell> {
+    fn at_mut(&mut self, col: u16, row: u16) -> Option<&mut Cell> {
         if col >= self.cols || row >= self.rows {
             return None;
         }

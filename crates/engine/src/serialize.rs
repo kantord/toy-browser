@@ -5,6 +5,7 @@
 //! so re-parsing that output turns the next siblings into children. This walk
 //! emits `<div></div>` instead, which survives a round trip.
 
+use crate::rewrite::Replacement;
 use blitz_dom::{
     BaseDocument, Node,
     node::{ElementData, NodeData},
@@ -48,9 +49,14 @@ pub fn document_to_keyed_html(doc: &BaseDocument) -> String {
 /// answer is a constant, so the branch reading it compiles away and only
 /// `Keys` pays for it. See
 /// `.claude/skills/code-style/lints/cognitive-complexity/over-parametric.md`.
-trait Annotate {
+pub(crate) trait Annotate {
     /// A class token this element should also carry, if any.
     fn extra_class(&self, _node: &Node) -> Option<String> {
+        None
+    }
+
+    /// What to write in this element's place, if anything.
+    fn replacement(&self, _node: &Node) -> Option<crate::rewrite::Replacement> {
         None
     }
 }
@@ -60,7 +66,7 @@ struct Plain;
 impl Annotate for Plain {}
 
 /// Every element tagged with its node id.
-struct Keys;
+pub(crate) struct Keys;
 impl Annotate for Keys {
     fn extra_class(&self, node: &Node) -> Option<String> {
         // The raw integer, not the `NodeId`'s own `Display` — that prints
@@ -86,7 +92,7 @@ pub fn node_to_html(doc: &BaseDocument, node: &Node) -> String {
     out
 }
 
-fn write_node<A: Annotate>(
+pub(crate) fn write_node<A: Annotate>(
     doc: &BaseDocument,
     node: &Node,
     raw_text: bool,
@@ -120,6 +126,23 @@ fn write_element<A: Annotate>(
     out: &mut String,
 ) {
     let tag = element.name.local.as_ref();
+
+    match ann.replacement(node) {
+        Some(Replacement::Hide) => return,
+        Some(Replacement::Span { text, style }) => {
+            out.push_str("<span style=\"");
+            escape_attribute(&style, out);
+            out.push('"');
+            if let Some(class) = ann.extra_class(node) {
+                out.push_str(&format!(" class=\"{class}\""));
+            }
+            out.push('>');
+            escape_text(&text, out);
+            out.push_str("</span>");
+            return;
+        }
+        None => {}
+    }
 
     out.push('<');
     out.push_str(tag);

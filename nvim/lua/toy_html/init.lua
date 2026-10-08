@@ -278,6 +278,7 @@ end
 --              the jump recorded so <C-o> comes back; otherwise a vertical
 --              split to the right, so an ordinary file can stay open beside it
 --   opts.tab   show it in a new tab page
+--   opts.images  "alt" (default): pictures as [their alt text]; "none": left out
 --   opts.transparent  leave the page's default white and black to the
 --              colorscheme (default: only for `html`, not for a fetched `url`)
 function M.open(opts)
@@ -431,6 +432,10 @@ function M.open(opts)
   status(view, opts.url and "loading")
   set_window(vim.api.nvim_get_current_win())
   send(view, { op = "transparent", on = transparent })
+  local images = opts.images or vim.g.toy_html_images
+  if images then
+    send(view, { op = "images", mode = images })
+  end
   send(view, { op = "whole", on = true })
   resize()
   if opts.url then

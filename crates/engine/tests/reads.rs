@@ -213,3 +213,51 @@ fn json(outcome: &toy_browser_engine::Outcome<toy_browser_engine::Evaluated>) ->
         other => panic!("expected a value, got {other:?}"),
     }
 }
+
+const PICTURES: &str = r#"<!DOCTYPE html><html><body>
+  <p>a <img src="x.png" alt="A <cat>"> b <img src="y.png" alt=""> c <img src="z.png"> d</p>
+</body></html>"#;
+
+fn img_rule(action: toy_browser_engine::Action) -> toy_browser_engine::Rewrite {
+    toy_browser_engine::Rewrite {
+        selector: "img".to_owned(),
+        action,
+    }
+}
+
+#[test]
+fn a_text_rewrite_writes_the_attribute_and_drops_pictures_without_one() {
+    use toy_browser_engine::Action;
+    let (mut engine, session) = loaded(PICTURES);
+    let alt = img_rule(Action::Text {
+        attribute: "alt".to_owned(),
+        before: "[".to_owned(),
+        after: "]".to_owned(),
+        style: "color:grey".to_owned(),
+    });
+
+    let shown = engine.html_projected(&session, &[alt]).unwrap();
+    assert!(shown.contains("[A &lt;cat&gt;]"), "{shown}");
+    assert!(!shown.contains("<img"), "{shown}");
+    assert_eq!(shown.matches("<span").count(), 1, "{shown}");
+}
+
+#[test]
+fn a_hide_rewrite_leaves_the_element_out() {
+    use toy_browser_engine::Action;
+    let (mut engine, session) = loaded(PICTURES);
+    let shown = engine
+        .html_projected(&session, &[img_rule(Action::Hide)])
+        .unwrap();
+    assert!(!shown.contains("img"), "{shown}");
+}
+
+#[test]
+fn rewrites_leave_the_dom_as_the_page_made_it() {
+    use toy_browser_engine::Action;
+    let (mut engine, session) = loaded(PICTURES);
+    engine
+        .html_projected(&session, &[img_rule(Action::Hide)])
+        .unwrap();
+    assert_eq!(engine.query(&session, "img").unwrap().len(), 3);
+}

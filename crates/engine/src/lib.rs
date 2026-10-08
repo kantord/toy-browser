@@ -17,6 +17,7 @@ pub mod ids;
 mod input;
 mod loader;
 mod realm;
+mod rewrite;
 mod scripts;
 mod serialize;
 
@@ -28,6 +29,7 @@ pub use dom::parse_document;
 pub use engine::Engine;
 pub use input::{Activated, Key, Mouse, Point, Typed};
 pub use realm::{Argument, Evaluated, Handle, Relayout};
+pub use rewrite::{Action, Rewrite};
 pub use scripts::{EntryKind, EntryPoint, Fetch, Payload, ScriptSurvey, Timing};
 pub use serialize::{KEY_CLASS_PREFIX, key_of};
 

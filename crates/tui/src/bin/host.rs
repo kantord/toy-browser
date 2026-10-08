@@ -17,6 +17,7 @@
 //!      {"op":"scroll","rows":3}
 //!      {"op":"whole","on":true}   frames are as tall as the page; the host scrolls
 //!      "flags" is any of b (bold) i (italic) u (underline), or ""
+//!      {"op":"images","mode":"alt"}   pictures as their alt text (default), or "none"
 //!      {"op":"transparent","on":true}   the page's own white paper and black ink
 //!                                       are sent as "" (no colour), for the host's theme
 //! out  {"ev":"frame","cols":80,"rows":24,"lines":[[["text","#fg","#bg","flags"],..],..]}
@@ -32,7 +33,7 @@ use std::io::{self, BufRead, Write};
 
 use anyhow::Result;
 use serde_json::{Value, json};
-use toy_browser::{Held, Scheme};
+use toy_browser::{Held, Images, Scheme};
 use toy_browser_tui::app::App;
 use toy_browser_tui::grid::{Grid, Rgb, Style};
 
@@ -105,6 +106,10 @@ fn obey(app: &mut App, command: &Value, out: &mut impl Write) -> Result<()> {
             )?;
         }
         "scroll" => app.scroll(0.0, command["rows"].as_f64().unwrap_or(0.0) as f32),
+        "images" => app.set_images(match command["mode"].as_str() {
+            Some("none") => Images::None,
+            _ => Images::AltText,
+        }),
         "transparent" => {}
         other => anyhow::bail!("unknown op {other:?}"),
     }

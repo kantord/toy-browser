@@ -146,6 +146,12 @@ impl Realm {
         })
     }
 
+    /// As [`html`](Self::html) keyed, with these rewrites applied.
+    pub fn html_projected(&self, rules: &[crate::rewrite::Rewrite]) -> String {
+        self.dom
+            .with_document(|doc| crate::rewrite::document_to_projected_html(doc, rules))
+    }
+
     /// Raises one mouse event at `node`, and reports what the element then did
     /// that only the browser can carry out.
     ///

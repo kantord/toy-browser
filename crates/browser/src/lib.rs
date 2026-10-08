@@ -15,6 +15,7 @@ mod dom;
 mod drawing;
 mod frames;
 mod hovering;
+mod images;
 mod keyboard;
 mod navigate;
 mod pointer;
@@ -50,6 +51,7 @@ pub use blitz::{LaidOut, lay_out};
 pub use cursor_icon::CursorIcon;
 pub use drawing::{Drawn, Waker};
 pub use hovering::Hovering;
+pub use images::Images;
 pub use keyboard::Held;
 pub use navigate::{Loaded, NavigationError};
 pub use reading::Reading;
@@ -122,6 +124,8 @@ pub struct Browser {
     /// CDP or WebDriver client opens its own, and a front end told to keep
     /// scripts off has to be able to say so once rather than on each.
     scripts: bool,
+    /// How pictures are shown; see [`Images`].
+    images: Images,
     /// Where this browser's pixels come from: here, or a rasterizer on a
     /// socket. Here unless something asks otherwise — see
     /// [`Self::draw_elsewhere`].
@@ -140,6 +144,7 @@ impl Browser {
             laid: 0,
             forced: std::rc::Rc::new(std::cell::Cell::new(0)),
             scripts: true,
+            images: Images::default(),
             drawing: crate::drawing::Drawing::default(),
         })
     }
@@ -208,6 +213,14 @@ impl Browser {
             .get(page)
             .map(|page| page.viewport)
             .unwrap_or_default()
+    }
+
+    /// How pictures are shown, from the next frame on.
+    pub fn set_images(&mut self, images: Images) {
+        self.images = images;
+        for page in self.pages.values_mut() {
+            page.composed = None;
+        }
     }
 
     pub fn set_viewport(&mut self, page: &PageId, viewport: Viewport) {
