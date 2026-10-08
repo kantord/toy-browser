@@ -86,6 +86,10 @@ pub enum Remote {
 pub struct Emitted {
     pub console: Vec<String>,
     pub errors: Vec<String>,
+    /// A link the page let be followed, as an absolute URL, when the browser
+    /// was told to leave following it to the caller: see
+    /// [`Browser::set_leave_navigation`].
+    pub navigation: Option<String>,
 }
 
 /// Names one open page.
@@ -126,6 +130,8 @@ pub struct Browser {
     scripts: bool,
     /// How pictures are shown; see [`Images`].
     images: Images,
+    /// Whether a followed link is reported to the caller instead of loaded.
+    leave_navigation: bool,
     /// Where this browser's pixels come from: here, or a rasterizer on a
     /// socket. Here unless something asks otherwise — see
     /// [`Self::draw_elsewhere`].
@@ -145,6 +151,7 @@ impl Browser {
             forced: std::rc::Rc::new(std::cell::Cell::new(0)),
             scripts: true,
             images: Images::default(),
+            leave_navigation: false,
             drawing: crate::drawing::Drawing::default(),
         })
     }
@@ -213,6 +220,13 @@ impl Browser {
             .get(page)
             .map(|page| page.viewport)
             .unwrap_or_default()
+    }
+
+    /// Reports a link the page lets be followed (the click was not
+    /// `preventDefault`ed) in [`Emitted::navigation`] instead of loading it. For
+    /// a caller that decides where a navigation goes, such as into a new tab.
+    pub fn set_leave_navigation(&mut self, leave: bool) {
+        self.leave_navigation = leave;
     }
 
     /// How pictures are shown, from the next frame on.

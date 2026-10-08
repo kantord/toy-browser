@@ -20,6 +20,8 @@ yank and mouse selection all work. A click (release in normal mode) or `<CR>` cl
 `q` closes. Clicking a link opens it as a new page in the same window and records the jump:
 `<C-o>`/`<C-i>` go back and forward like any jump, and `<A-Left>`/`<A-Right>` do the same
 but skip jumps within a page (scrolling, search) and go to the previous or next *page or file*.
+A click reaches the page first, so its own click handlers run; a link they leave alone opens as a new page.
+
 Every page stays in the buffer list (`:ls`) as a snapshot. Right-clicking a link adds "Open in new tab" to Neovim's own right-click menu; it opens the link in a new Neovim tab page. Bold, italic (when the monospace font has one) and underlined text, links included, are styled; pictures show as `[alt text]` in grey (pictures without alt text are left out; `vim.g.toy_html_images = "none"` drops them all); pages you pass as `html` take Neovim's colours for their default background and text; fetched pages stay on white, since they set text colours but often no background (`transparent = true` in `open` overrides). `:ToyHtmlGo {url}` loads a page in the current window (`<C-o>` returns, as after a link). The statusline shows the address and whether it is loading or failed; a failed load says so in the buffer, and `r` reloads. `:ToyHtmlDemo` shows a page that reports clicks
 through `console.log`, which reaches `on_event`.
 

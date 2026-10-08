@@ -122,6 +122,10 @@ local function say(view, text)
   vim.bo[view.buf].modifiable = false
 end
 
+local function send(view, command)
+  vim.fn.chansend(view.job, vim.json.encode(command) .. "\n")
+end
+
 local function handle(view, line)
   local ok, event = pcall(vim.json.decode, line)
   if not ok then
@@ -133,6 +137,14 @@ local function handle(view, line)
   elseif event.ev == "log" then
     local text = event.line:gsub("^%[log%] ", "")
     view.on_event(text)
+  elseif event.ev == "navigate" then
+    local here = (view.url or ""):gsub("#.*", "")
+    if event.url:gsub("#.*", "") ~= here and event.url:match("^[%w+.-]+:") then
+      M.open({ url = event.url, here = true })
+    else
+      -- The same document: a fragment, which the page itself scrolls to.
+      send(view, { op = "navigate", url = event.url })
+    end
   elseif event.ev == "target" then
     -- JSON null decodes to vim.NIL, which is truthy.
     view.target = { href = event.href ~= vim.NIL and event.href or nil }
@@ -144,10 +156,6 @@ local function handle(view, line)
       say(view, "Could not load " .. (view.url or "the page") .. ": " .. event.message .. "  (r to retry)")
     end
   end
-end
-
-local function send(view, command)
-  vim.fn.chansend(view.job, vim.json.encode(command) .. "\n")
 end
 
 -- The window showing this view, or nil: a page left behind in the jumplist is
@@ -367,20 +375,13 @@ function M.open(opts)
     end,
   })
 
-  -- A click on a link is a navigation, and navigations are the jumplist's: the
-  -- link opens as a new page beside the old one in it, so <C-o> returns. That
-  -- means the page's own click handlers on a link are skipped; every other
-  -- click still reaches the page.
+  -- A click goes to the page first, so its own handlers run. If the page then
+  -- lets the link be followed, the host reports a `navigate` instead of
+  -- loading it (see `handle`): navigations are the jumplist's, so the link
+  -- opens as a new page beside the old one in it and <C-o> returns.
   local function activate(row, byte)
     local col, line = cell_at(view, row, byte)
-    local target = inspect(view, col, line)
-    local href = target and target.href
-    local here = (view.url or ""):gsub("#.*", "")
-    if href and href:match("^[%w+.-]+:") and href:gsub("#.*", "") ~= here then
-      M.open({ url = href, here = true })
-    else
-      send(view, { op = "click", col = col, row = line })
-    end
+    send(view, { op = "click", col = col, row = line })
   end
   local function map(lhs, fn)
     vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true })

@@ -66,6 +66,8 @@ pub struct App {
     /// What the page's scripts logged since the host last took it — the
     /// channel a host hears about clicks and keys through.
     logged: Vec<String>,
+    /// A link the page let be followed, waiting for the host to take it.
+    navigation: Option<String>,
     /// Set once something here decides the loop should stop.
     pub quit: bool,
 }
@@ -103,6 +105,7 @@ impl App {
             scheme,
             whole: false,
             logged: Vec::new(),
+            navigation: None,
             quit: false,
         };
         app.browser.set_viewport(&app.page, app.viewport());
@@ -133,6 +136,17 @@ impl App {
     pub fn set_images(&mut self, images: Images) {
         self.browser.set_images(images);
         self.changed();
+    }
+
+    /// Has links the page lets be followed reported (see [`Self::take_navigation`])
+    /// instead of loaded, for a host that decides where they go.
+    pub fn leave_navigation(&mut self, leave: bool) {
+        self.browser.set_leave_navigation(leave);
+    }
+
+    /// The link a click set off, as an absolute URL, once.
+    pub fn take_navigation(&mut self) -> Option<String> {
+        self.navigation.take()
     }
 
     /// Makes the grid as tall as the page, so the host can scroll it itself.

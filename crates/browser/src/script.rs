@@ -75,6 +75,7 @@ impl Browser {
         Ok(Emitted {
             console: outcome.console,
             errors: outcome.errors,
+            ..Default::default()
         })
     }
 

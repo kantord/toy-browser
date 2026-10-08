@@ -36,7 +36,8 @@ engine gives:  dirty cell regions + events for the host to handle
 - [ ] Real images: `Mark::Image` is left undrawn. Idea: slice every image into strips one character row tall, one per buffer line (Kitty/Sixel placement per strip, or a placeholder with the `alt` text first). Neovim then crops, hides and scrolls them with the line like any text, and the host never has to track window clipping.
 - [ ] History step 2: one host process for all pages (`page` id on every op), close and lazily reload pages that are not shown
 - [ ] History step 3: `history.pushState` makes a new buffer; check how the new URL reaches the host
-- [ ] Links with click handlers: a click on a link is currently a navigation and skips the page's own handlers
+- [x] Links with click handlers: the click goes to the page first; the host answers a followed link as a `navigate` event (`Browser::set_leave_navigation`) and the plugin opens it as a new page. `event.preventDefault()` in a handler stops it.
+- [ ] Inline `onclick="…; return false"` does not cancel a link in the engine (only `preventDefault()` does)
 
 ## Target 2: Neovim client rendered via HTML (hardest)
 

@@ -44,11 +44,19 @@ impl App {
     /// one — the real position of whatever character was actually painted
     /// here, which for a wide or a narrow font is not the cell's own centre —
     /// and that centre otherwise, for a cell nothing more precise painted.
-    fn at(&self, col: u16, row: u16) -> Point {
+    fn at(&mut self, col: u16, row: u16) -> Point {
+        // Painted if it is not, so a cell is mapped by where its glyph really
+        // is: any change drops the grid, and the middle of a cell can be
+        // outside the text that was drawn in it.
+        let _ = self.render();
         let (x, y) = self
             .grid
             .as_ref()
             .and_then(|grid| grid.hit(col, row))
+            // A glyph's recorded position is its top-left corner, which sits
+            // exactly on the edge of whatever element starts there and can
+            // fall just outside it: the middle of the cell is safely inside.
+            .map(|(x, y)| (x + self.cell.0 / 2.0, y + self.cell.1 / 2.0))
             .unwrap_or_else(|| self.cell_centre(col, row));
         Point {
             x: x + self.scrolled.0,
@@ -97,6 +105,7 @@ impl App {
         };
         if let Ok(emitted) = emitted {
             self.logged.extend(emitted.console);
+            self.navigation = self.navigation.take().or(emitted.navigation);
         }
         self.changed();
     }

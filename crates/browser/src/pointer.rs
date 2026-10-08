@@ -148,6 +148,10 @@ impl Browser {
             emitted.errors.push(format!("not a url: {href}"));
             return;
         };
+        if self.leave_navigation {
+            emitted.navigation = Some(target.to_string());
+            return;
+        }
         match self.navigate(page, target.as_str()) {
             Ok(loaded) => {
                 emitted.console.extend(loaded.emitted.console);

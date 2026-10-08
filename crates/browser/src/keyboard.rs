@@ -79,6 +79,7 @@ impl Browser {
         let mut emitted = Emitted {
             console: outcome.console,
             errors: outcome.errors,
+            ..Default::default()
         };
         // Whatever the key set off runs before this answers, for the reason a
         // click's does: a page still in motion has no state to report.

@@ -10,7 +10,7 @@
 //! in   {"op":"markup","html":"<p>hi</p>"}
 //!      {"op":"navigate","url":"https://en.wikipedia.org/wiki/Neovim"}
 //!      {"op":"resize","cols":80,"rows":24}
-//!      {"op":"click","col":3,"row":1}
+//!      {"op":"click","col":3,"row":1}   a link it follows is answered as a navigate, not loaded
 //!      {"op":"inspect","col":3,"row":1}   what is under a cell: answered with a target
 //!      {"op":"move","col":3,"row":1}
 //!      {"op":"key","key":"a","code":"KeyA"}
@@ -22,6 +22,7 @@
 //!                                       are sent as "" (no colour), for the host's theme
 //! out  {"ev":"frame","cols":80,"rows":24,"lines":[[["text","#fg","#bg","flags"],..],..]}
 //!      {"ev":"target","col":3,"row":1,"href":"https://…"|null}
+//!      {"ev":"navigate","url":"https://…"}
 //!      {"ev":"log","line":"whatever the page logged"}
 //!      {"ev":"error","op":"navigate","message":"..."}   op is the command that failed
 //! ```
@@ -43,6 +44,7 @@ fn main() -> Result<()> {
     let mut app = App::blank(80, 24, true, Scheme::Light)?;
     let mut out = io::stdout().lock();
     let mut transparent = false;
+    app.leave_navigation(true);
     for line in io::stdin().lock().lines() {
         serve(&mut app, &line?, &mut transparent, &mut out)?;
     }
@@ -117,6 +119,9 @@ fn obey(app: &mut App, command: &Value, out: &mut impl Write) -> Result<()> {
 }
 
 fn answer(app: &mut App, out: &mut impl Write, transparent: bool) -> Result<()> {
+    if let Some(url) = app.take_navigation() {
+        emit(out, &json!({"ev": "navigate", "url": url}))?;
+    }
     for line in app.take_logged() {
         emit(out, &json!({"ev": "log", "line": line}))?;
     }

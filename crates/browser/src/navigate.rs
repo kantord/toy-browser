@@ -150,6 +150,7 @@ impl Browser {
             emitted: Emitted {
                 console: outcome.console,
                 errors: outcome.errors,
+                ..Default::default()
             },
             scripts: outcome.value.scripts,
             executed: outcome.value.executed,
