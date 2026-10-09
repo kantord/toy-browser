@@ -11,19 +11,22 @@ engine gives:  dirty cell regions + events for the host to handle
 
 ## Step 0: shared core (unblocks all three)
 
-- [ ] Write the TUI CSS profile: which CSS is guaranteed in cells (`docs/`)
-- [x] POC: headless host `toy-browser-host` (`crates/tui/src/bin/host.rs`), ndjson over stdio: markup/resize/click/move/key/scroll in, frame/log out
-- [ ] Promote the host from `crates/tui` into its own crate with a stable API; add a hit map (cell → node) instead of console.log as the only event channel
-- [ ] Incremental update: DOM patches in, dirty regions out
-- [ ] Make QuickJS optional, one host among others
-- [ ] Define the wire protocol properly (POC is ndjson; frames are whole, not dirty regions)
+- [x] Write the TUI CSS profile: which CSS is guaranteed in cells (`docs/tui-css-profile.md`)
+- [x] POC: headless host `toy-browser-host` (`crates/host`), ndjson over stdio: markup/resize/click/move/key/scroll in, frame/log out
+- [x] The host is its own crate (`crates/host`, binary `toy-browser-host`). `inspect` now answers with the node id and tag under a cell, as well as the link.
+- [x] The host says `hello` with a protocol number (`docs/host-protocol.md`), and `target` / `clicked` events name the node, tag, link and nearest `data-key` under a cell, so a client routes clicks to what it drew without console.log
+- [x] Dirty regions out: a frame after the first carries only the rows that changed (`at`); `full` asks for the whole
+- [x] DOM patches in: `patch {key, html}` replaces what is inside the element with that `data-key`; `nvim_html.py` sends only the rows that changed (the engine still lays the page out again, so the saving is the parse and the wire, not the layout)
+- [x] QuickJS is an optional engine feature (`quickjs`, on by default; `cargo build -p toy-browser-host --no-default-features` has no `rquickjs` in its tree). Without it pages are parsed, laid out and acted on (clicks, links, focus, tab order, typing, patches) but their scripts are not run and `evaluate` says so; `behaviour/` holds what the document does by itself. Tests run with the feature on only.
+- [x] Wire protocol: ndjson, versioned (`protocol: 1`), documented in `docs/host-protocol.md` and at the top of `crates/host/src/main.rs`
 
 ## Target 1: Neovim plugin renders HTML (first)
 
 - [x] POC: `nvim/lua/toy_html` spawns the host, draws frames as lines + extmarks, `<CR>`/mouse click, `:ToyHtmlDemo`
-- [ ] Draw the grid into a buffer with extmarks, or into a float
-- [ ] Route keys and mouse back to the engine, map hit map → node
-- [ ] Demo: a small HTML picker or help page in a float
+- [x] `just nvim-test`: headless checks of the plugin against the real host (page, link, history, styling, forms, fragments)
+- [x] Draw the grid into a buffer with extmarks (a split, a tab or here), or into a float (`open{float=true}`)
+- [x] Mouse reaches the engine as a click at a cell; `inspect` maps a cell to node, tag and link. Keys are Neovim's own on purpose (the page is buffer text); the engine's `key` op exists for clients that want to send them.
+- [x] Demo: `:ToyHtmlHelp` is a help page in a float; `:ToyHtmlDemo` is the picker
 
 - [x] POC: host op `inspect` (cell → link href) drives a native right-click menu entry "Open in new tab"
 
@@ -31,34 +34,38 @@ engine gives:  dirty cell regions + events for the host to handle
 - [x] POC: loading/failed text in the buffer, address in the statusline, `r` reloads, `:ToyHtmlGo {url}`
 - [x] POC: underlined text (links, `text-decoration`): thin horizontal fills are noted by the grid and put on the characters above them; with the `transparent` op the page's default paper/ink go out as "" so the colorscheme shows; used for plugin-supplied `html` only, because fetched pages (Wikipedia) set dark text without a background and become unreadable on a dark theme
 - [x] POC: bold and italic, read from the font face of each text run (skrifa); frame runs carry flags `biu`
-- [ ] Italic shows only if the monospace font has an italic file: a synthesised oblique leaves the face unchanged, so the engine would have to say `font-style` per run. Same for a variable font's bold.
+- [x] Italic: `Mark::Glyphs.slanted` says when layout leant the face over (synthesised oblique), so italic shows without an italic font file. A variable font's bold is still unseen.
+- [x] `prefers-color-scheme`: host op `scheme`, plugin `opts.scheme` / `vim.g.toy_html_scheme` (`"dark"` asks pages for their dark side)
+- [x] Wide characters: the blank the layout leaves after a CJK or emoji glyph is dropped, so rows stay aligned (wide glyphs with no blank after them are still a cell off)
+- [x] `#fragment` links move the cursor to the element (host op `anchor`)
 - [x] Image modes `Real` / `AltText` (default in the grid) / `None`: a small built-in rewrite engine (`engine::Rewrite {selector, action}`, applied while serialising the DOM for layout, so the page's own DOM is untouched). AltText writes `[alt]` in grey, an empty or missing alt is dropped. Host op `images`, plugin `opts.images` / `vim.g.toy_html_images`. Next rules to add: `svg`, `picture`, `canvas`; the same engine is the first cut of the host-owned projection below.
-- [ ] Real images: `Mark::Image` is left undrawn. Idea: slice every image into strips one character row tall, one per buffer line (Kitty/Sixel placement per strip, or a placeholder with the `alt` text first). Neovim then crops, hides and scrolls them with the line like any text, and the host never has to track window clipping.
+- [x] Real images: `images = "real"` draws pictures in terminals that speak kitty's graphics protocol (kitty, ghostty): the grid notes which cells a picture covers and which slice of it each is, the host sends each picture once as a PNG scaled to its cells (`image` event) and fills the cells with kitty's unicode placeholders coloured with the picture's number, and the plugin writes the image to the terminal. Because the picture is text in the buffer, Neovim scrolls, clips and hides it. Checked in kitty under Xvfb with a local page and Wikipedia's Neovim article (logo, screenshot, icons). Checked in kitty, in ghostty, and in tmux (`allow-passthrough on`) inside kitty, each under Xvfb with screenshots; SVG pictures are drawn with resvg at the size of their cells. Animated GIFs show their first frame (an animation is outside what a buffer shows).
 - [x] History step 2: one host process for all pages (`page` id on every op, one shared fetch cache); a page no window shows is closed in the host and loaded again when shown (its buffer text stays as the snapshot, cursor restored). Markup pages have no URL to reload from, so they stay open.
-- [ ] History step 3: `history.pushState` makes a new buffer; check how the new URL reaches the host
+- [x] History step 3: when a click or key makes the page change its own address (`history.pushState`), the host says `pushed`; the old buffer stays as the snapshot and the running page carries on in a new one. Going back reloads the old address; forward reloads the pushed one from the network, so a route that only the page's own JavaScript knows will fail to load (the snapshot stays).
+- [x] Inline `onclick="…; return false"` cancels a link
 - [x] Links with click handlers: the click goes to the page first; the host answers a followed link as a `navigate` event (`Browser::set_leave_navigation`) and the plugin opens it as a new page. `event.preventDefault()` in a handler stops it.
-- [ ] Inline `onclick="…; return false"` does not cancel a link in the engine (only `preventDefault()` does)
 
 ## Target 2: Neovim client rendered via HTML (hardest)
 
 - [x] POC: `nvim/client/nvim_html.py` attaches with `ext_linegrid`, keeps the grid
-- [ ] Map grid cells to an HTML/DOM tree with a stable structure across frames (POC: one `<pre>` of spans, rebuilt every flush)
+- [x] Stable structure across frames: `#screen` with one `div#r<N>` per row (the document is still rebuilt each flush)
 - [x] POC: same HTML drawn by the engine in the terminal and written to a self-refreshing file for a web browser
-- [ ] Cursor, highlights and input round trip
-- [ ] Check update speed on scroll and large redraws
+- [x] Cursor (reverse video), highlights, keys and mouse (SGR) go to Neovim and the picture comes back; a pty test types text and clicks
+- [x] Update speed: a worst-case change of a whole 200x50 screen costs about 75 ms per flush in a release build (325 ms in debug), because the document is sent whole and laid out again. Fine for typing; DOM patches in (above) are the way down. Use `TOY_BROWSER_HOST=target/release/toy-browser-host`.
 
 ## Target 3: minimal TUI browser via happy-dom (last)
 
-- [ ] Node host runs happy-dom and streams HTML snapshots or mutation patches to the core
-- [ ] Fetch and navigate: URL bar, links, back/forward
-- [ ] Forms and focus: input, click, tab order
-- [ ] Smoke-test on 3 real pages, e.g. Wikipedia
+- [x] Node host runs happy-dom and sends HTML snapshots to the core (`hosts/happy-dom`, speaks the host protocol; scripts opt-in)
+- [x] Fetch and navigate: links, back/forward and `:ToyHtmlGo` through the Neovim plugin work against it (a URL bar is `:ToyHtmlGo`)
+- [x] Click handlers run on the happy-dom node (via `data-key`); the document is sent again afterwards
+- [x] Typing, focus and tab order on the happy-dom host: `type`, `key` and `focus` ops; Enter presses a focused button (also in the engine). Appending and Backspace only; no caret movement, `select` or submit.
+- [x] Smoke-test: Wikipedia's Neovim article loads through happy-dom into a Neovim buffer (302 lines); two more pages untested
 
 ## Cross-cutting (later)
 
-- [ ] Wide chars, emoji and ligatures in the grid
-- [ ] Decide how to handle the vendored Blitz fork and its licences for release
-- [ ] Crate names, versioning and README for the release
+- [x] Wide characters: the host drops the blank after a wide glyph (own width table, `grid/width.rs`); a run in a non-monospace face (field text) no longer loses letters that land in one cell. Ligatures do not arise: the grid forces a monospace face. Wide glyphs the layout gives no blank after stay a cell off.
+- [x] Vendored Blitz and licences audited (`docs/release.md`): same licence, headers complete, no GPL dependency, MPL-2.0 Stylo crates unmodified. Left for the owner: publish the forks under new names or upstream the change (crates.io rejects path dependencies).
+- [x] Names checked on crates.io (all free) and a proposal written (`docs/release.md`); the choice of stem and the first publish are the owner's
 
 ## Architecture idea: host-owned projection (after the basics work)
 
@@ -81,7 +88,7 @@ DOM** (what is laid out and drawn): `displayed = view(state, logical)`.
 
 - [x] Whole page in the buffer so Neovim scrolls, searches and folds natively (host op `whole`)
 - [x] Leave `<LeftMouse>` alone; click the page on `<LeftRelease>` in normal mode
-- [ ] Scrolling is slow, and a release build did not help: profile host vs Lua `draw`
+- [x] Scrolling was slow: it was the engine rebuilding the Scene on every scroll, now kept (20 ms to 3 ms), and frames after the first carry only the changed rows
 
 ## Parked: buffer as structured source (decided too complex for now)
 

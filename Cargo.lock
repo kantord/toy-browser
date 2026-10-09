@@ -5728,6 +5728,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "toy-browser-host"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "image",
+ "resvg",
+ "serde_json",
+ "toy-browser",
+ "toy-browser-tui",
+]
+
+[[package]]
 name = "toy-browser-rasterizer"
 version = "0.1.0"
 dependencies = [

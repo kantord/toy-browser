@@ -132,7 +132,7 @@ impl Browser {
             .map(|url| url.to_string())
             .unwrap_or_else(|| "about:blank".to_owned());
         let run_scripts = self.pages.get(page).is_none_or(|held| held.run_scripts);
-        let mut sheets = crate::rules::sheets(run_scripts, viewport.monospace);
+        let mut sheets = crate::rules::sheets(run_scripts, viewport.monospace, self.images);
         let typed = self.engine.fields(&session)?;
         let mut measuring =
             crate::blitz::lay_out(&html, &sheets, viewport, &base, &self.resources)?;

@@ -18,7 +18,7 @@ const TOGGLES: [&str; 2] = ["checkbox", "radio"];
 ///
 /// A press on anything else takes focus away, which is what makes clicking the
 /// background dismiss a focused field.
-pub(super) fn focus_on_press(dom: &Rc<Dom>, node: usize) {
+pub(crate) fn focus_on_press(dom: &Rc<Dom>, node: usize) {
     dom.focus(ancestor_where(dom, node, focusable));
 }
 
@@ -26,7 +26,7 @@ pub(super) fn focus_on_press(dom: &Rc<Dom>, node: usize) {
 ///
 /// Walks outward from what was hit, because a click on the text inside a link
 /// is a click on the link — the same reason the event bubbled there.
-pub(super) fn activate(dom: &Rc<Dom>, node: usize) -> Activated {
+pub(crate) fn activate(dom: &Rc<Dom>, node: usize) -> Activated {
     let Some(found) = ancestor_where(dom, node, behaves) else {
         return Activated::Nothing;
     };
@@ -42,7 +42,7 @@ pub(super) fn activate(dom: &Rc<Dom>, node: usize) -> Activated {
 
 /// A checkbox or radio flips, and the DOM records it as the attribute the
 /// serializer will carry into the next render.
-fn flip(dom: &Rc<Dom>, node: usize) {
+pub(crate) fn flip(dom: &Rc<Dom>, node: usize) {
     if dom.attribute(node, "checked").is_some() {
         dom.remove_attribute(node, "checked");
     } else {
@@ -50,28 +50,28 @@ fn flip(dom: &Rc<Dom>, node: usize) {
     }
 }
 
-fn behaves(dom: &Rc<Dom>, node: usize) -> bool {
+pub(crate) fn behaves(dom: &Rc<Dom>, node: usize) -> bool {
     toggles(dom, node) || (is_tag(dom, node, "a") && dom.attribute(node, "href").is_some())
 }
 
-fn toggles(dom: &Rc<Dom>, node: usize) -> bool {
+pub(crate) fn toggles(dom: &Rc<Dom>, node: usize) -> bool {
     is_tag(dom, node, "input")
         && dom
             .attribute(node, "type")
             .is_some_and(|kind| TOGGLES.contains(&kind.to_lowercase().as_str()))
 }
 
-fn focusable(dom: &Rc<Dom>, node: usize) -> bool {
+pub(crate) fn focusable(dom: &Rc<Dom>, node: usize) -> bool {
     let tag = dom.tag_name(node).unwrap_or_default();
     FOCUSABLE.contains(&tag.as_str()) || dom.attribute(node, "tabindex").is_some()
 }
 
-fn is_tag(dom: &Rc<Dom>, node: usize, tag: &str) -> bool {
+pub(crate) fn is_tag(dom: &Rc<Dom>, node: usize, tag: &str) -> bool {
     dom.tag_name(node).is_some_and(|found| found == tag)
 }
 
 /// `node` itself, or the nearest ancestor the test accepts.
-fn ancestor_where(
+pub(crate) fn ancestor_where(
     dom: &Rc<Dom>,
     node: usize,
     accepts: impl Fn(&Rc<Dom>, usize) -> bool,

@@ -96,6 +96,13 @@ pub enum Mark {
         size: f32,
         paint: Paint,
         face: Digest,
+        /// Whether the face is leaned over to make it italic or oblique: the
+        /// face's own bytes say so only when it was designed that way, and
+        /// layout will lean an upright one to fill in a style it does not have.
+        /// For a renderer that has no slant of its own to draw with, such as a
+        /// grid of characters.
+        #[serde(default)]
+        slanted: bool,
         from: Option<usize>,
     },
     /// A Picture, placed.

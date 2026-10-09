@@ -46,5 +46,10 @@ image = { version = "0.25.6", default-features = false, features = ["png", "jpeg
 app_units = "0.7.8"
 euclid = "0.22.14"
 
+[features]
+# Whether pages can run JavaScript: see `toy-browser-engine`.
+default = ["quickjs"]
+quickjs = ["toy-browser-engine/quickjs"]
+
 [lints]
 workspace = true

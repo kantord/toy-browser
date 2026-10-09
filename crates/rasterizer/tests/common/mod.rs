@@ -82,6 +82,7 @@ pub fn lettered(words: &str, bytes: std::sync::Arc<[u8]>) -> toy_browser_rasteri
         size: 16.0,
         paint: red(),
         face: digest,
+        slanted: false,
         from: None,
     });
     scene

@@ -105,6 +105,7 @@ mod between_clients_that_do_not_trust_each_other {
                 size: 10.0,
                 paint: red(),
                 face,
+                slanted: false,
                 from: None,
             }],
             width: 4,

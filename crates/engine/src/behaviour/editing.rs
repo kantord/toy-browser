@@ -16,7 +16,7 @@ use std::rc::Rc;
 use crate::dom::{Dom, Step};
 
 /// What one keypress does to the field it lands in.
-pub(super) enum Edit {
+pub(crate) enum Edit {
     /// Put this in, replacing whatever was selected.
     Insert(String),
     /// Take out the selection, or the character on one side of the caret.
@@ -32,12 +32,12 @@ impl Edit {
     /// it put in. Nothing at all for an edit that does not change the text —
     /// moving the caret is not an input, and a page listening for one must not
     /// be told about it.
-    pub(super) fn reported(&self) -> Option<(&'static str, Option<String>)> {
+    pub(crate) fn reported(&self) -> Option<(&'static str, Option<String>)> {
         Some((self.input_type()?, self.data()))
     }
 
     /// What the DOM calls this in an `InputEvent`.
-    fn input_type(&self) -> Option<&'static str> {
+    pub(crate) fn input_type(&self) -> Option<&'static str> {
         match self {
             Edit::Insert(text) if text == "\n" => Some("insertLineBreak"),
             Edit::Insert(_) => Some("insertText"),
@@ -49,7 +49,7 @@ impl Edit {
 
     /// The text an `InputEvent` reports as `data`: what was put in, and nothing
     /// for anything else.
-    fn data(&self) -> Option<String> {
+    pub(crate) fn data(&self) -> Option<String> {
         match self {
             Edit::Insert(text) => Some(text.clone()),
             _ => None,
@@ -61,7 +61,7 @@ impl Edit {
 ///
 /// `multiline` decides Enter and the vertical arrows: in a one-line field Enter
 /// does not type and there is nowhere above or below to go.
-pub(super) fn meant(key: &crate::Key<'_>, multiline: bool) -> Option<Edit> {
+pub(crate) fn meant(key: &crate::Key<'_>, multiline: bool) -> Option<Edit> {
     // A modifier held with a letter is a command, not a character. Shift is not
     // one of them: it is how a capital is typed.
     if key.ctrl || key.meta {
@@ -72,7 +72,7 @@ pub(super) fn meant(key: &crate::Key<'_>, multiline: bool) -> Option<Edit> {
 
 /// What a key with a modifier held asks for. One so far, and it is the one
 /// everybody reaches for.
-fn commanded(key: &crate::Key<'_>) -> Option<Edit> {
+pub(crate) fn commanded(key: &crate::Key<'_>) -> Option<Edit> {
     match key.key {
         "a" | "A" => Some(Edit::SelectAll),
         _ => None,
@@ -80,7 +80,7 @@ fn commanded(key: &crate::Key<'_>) -> Option<Edit> {
 }
 
 /// The keys that change the text.
-fn written(key: &crate::Key<'_>, multiline: bool) -> Option<Edit> {
+pub(crate) fn written(key: &crate::Key<'_>, multiline: bool) -> Option<Edit> {
     match key.key {
         "Backspace" => Some(Edit::DeleteBack),
         "Delete" => Some(Edit::DeleteForward),
@@ -99,7 +99,7 @@ fn written(key: &crate::Key<'_>, multiline: bool) -> Option<Edit> {
 /// Shift is read here rather than passed in: holding it is what turns a move
 /// into a selection, and that is a fact about the key rather than about the
 /// field it lands in.
-fn moved(key: &crate::Key<'_>, multiline: bool) -> Option<Edit> {
+pub(crate) fn moved(key: &crate::Key<'_>, multiline: bool) -> Option<Edit> {
     let step = match key.key {
         "ArrowLeft" => Step::Back,
         "ArrowRight" => Step::Forward,
@@ -116,7 +116,7 @@ fn moved(key: &crate::Key<'_>, multiline: bool) -> Option<Edit> {
 ///
 /// Nothing to report for a move: the caret went somewhere and the text did not
 /// change, so there was no input.
-pub(super) fn applied(
+pub(crate) fn applied(
     dom: &Rc<Dom>,
     node: usize,
     edit: &Edit,
@@ -140,7 +140,7 @@ pub(super) fn applied(
 /// A field that cannot be typed into is not a field for this purpose: a
 /// disabled or read-only one takes focus and keeps its value, which is exactly
 /// what makes it read-only.
-pub(super) fn editable(dom: &Rc<Dom>, node: usize) -> Option<bool> {
+pub(crate) fn editable(dom: &Rc<Dom>, node: usize) -> Option<bool> {
     if dom.attribute(node, "disabled").is_some() || dom.attribute(node, "readonly").is_some() {
         return None;
     }
@@ -156,7 +156,7 @@ pub(super) fn editable(dom: &Rc<Dom>, node: usize) -> Option<bool> {
 /// The list is the types this browser draws as a text field. A checkbox, a
 /// colour well and a file picker are all `<input>` and none of them takes a
 /// keystroke as a character.
-fn typed(kind: Option<String>) -> bool {
+pub(crate) fn typed(kind: Option<String>) -> bool {
     const TEXTUAL: [&str; 8] = [
         "text", "search", "email", "url", "tel", "password", "number", "",
     ];

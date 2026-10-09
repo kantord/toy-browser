@@ -9,6 +9,7 @@ use blitz_dom::{LocalName, QualName, ns};
 
 /// An unprefixed element name in the HTML namespace, which is all this toy
 /// needs.
+#[cfg(feature = "quickjs")]
 pub(crate) fn html_name(name: &str) -> QualName {
     QualName::new(None, ns!(html), LocalName::from(name))
 }

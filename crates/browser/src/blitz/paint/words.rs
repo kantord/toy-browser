@@ -114,6 +114,7 @@ fn mark(page: &LaidOut, placed: &Placed<'_>, source: &str, scene: &mut Scene) ->
         size: placed.size(),
         paint: colour_of(page, owner),
         face: face(&placed.run, scene),
+        slanted: placed.run.run().synthesis().skew().is_some(),
         from: Some(ids::raw(owner)),
     })
 }

@@ -9,7 +9,9 @@ use blitz_dom::{BaseDocument, DocumentConfig};
 use blitz_html::HtmlProvider;
 use toy_browser_fetch::Url;
 
-use super::{Dom, html_name};
+use super::Dom;
+#[cfg(feature = "quickjs")]
+use super::html_name;
 use crate::ids;
 
 /// Parses `source` into a DOM whose relative references resolve against
@@ -38,6 +40,7 @@ impl Dom {
             .set_inner_html(ids::of(id), html);
     }
 
+    #[cfg(feature = "quickjs")]
     pub fn outer_html(&self, id: usize) -> String {
         let doc = self.doc.borrow();
         doc.get_node(ids::of(id))
@@ -45,6 +48,7 @@ impl Dom {
             .unwrap_or_default()
     }
 
+    #[cfg(feature = "quickjs")]
     pub fn inner_html(&self, id: usize) -> String {
         let doc = self.doc.borrow();
         let Some(node) = doc.get_node(ids::of(id)) else {
@@ -59,6 +63,7 @@ impl Dom {
 
     /// Parses `html` and appends the result to `parent`, which is what
     /// `document.write()` amounts to once parsing has already finished.
+    #[cfg(feature = "quickjs")]
     pub fn append_html(&self, parent: usize, html: &str) {
         self.touched();
         let mut doc = self.doc.borrow_mut();

@@ -23,3 +23,23 @@ vim.api.nvim_create_user_command("ToyHtmlDemo", function()
       </body>]],
   })
 end, {})
+
+-- :ToyHtmlHelp   the keys in a page, as a page in a float
+vim.api.nvim_create_user_command("ToyHtmlHelp", function()
+  require("toy_html").open({
+    float = { width = 56, height = 16 },
+    html = [[
+      <body style="margin:0;padding:8px">
+        <h1>Reading a page</h1>
+        <ul>
+          <li><b>&lt;CR&gt;</b> or click: follow a link</li>
+          <li><b>r</b>: reload</li>
+          <li><b>&lt;C-o&gt; / &lt;C-i&gt;</b>: back and forward</li>
+          <li><b>q</b>: close this window</li>
+        </ul>
+        <p>Everything else is Neovim: search with <u>/</u>, yank with <u>y</u>.
+        Pages follow your colorscheme.</p>
+        <p><a href="https://github.com/neovim/neovim">Neovim on GitHub</a></p>
+      </body>]],
+  })
+end, {})

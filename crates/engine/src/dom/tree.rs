@@ -6,17 +6,21 @@
 //!
 //! Nothing here bumps the revision, because nothing here alters anything.
 
-use blitz_dom::{BaseDocument, NodeData};
+#[cfg(feature = "quickjs")]
+use blitz_dom::BaseDocument;
+use blitz_dom::NodeData;
 
 use crate::ids;
 
 use super::Dom;
 
 impl Dom {
+    #[cfg(feature = "quickjs")]
     pub fn get_element_by_id(&self, id: &str) -> Option<usize> {
         self.doc.borrow().get_element_by_id(id).map(ids::raw)
     }
 
+    #[cfg(feature = "quickjs")]
     pub fn elements_by_tag(&self, tag: &str) -> Vec<usize> {
         let doc = self.doc.borrow();
         let mut found = Vec::new();
@@ -41,6 +45,7 @@ impl Dom {
     /// in no document, so a document-wide query cannot see it, and
     /// `element.querySelector` on it answered nothing. testharness.js builds
     /// its whole results table that way before putting it on the page.
+    #[cfg(feature = "quickjs")]
     pub fn query_all_in(&self, id: usize, selector: &str) -> Vec<usize> {
         self.doc
             .borrow()
@@ -54,6 +59,7 @@ impl Dom {
     /// Asked of the node rather than answered from a document-wide query, for
     /// the reason [`query_all_in`](Self::query_all_in) gives: a node that has
     /// been built and not yet inserted is in no document and matched nothing.
+    #[cfg(feature = "quickjs")]
     pub fn matches(&self, id: usize, selector: &str) -> bool {
         self.doc
             .borrow()
@@ -62,6 +68,7 @@ impl Dom {
     }
 
     /// Every child, text and comments included.
+    #[cfg(feature = "quickjs")]
     pub fn child_nodes(&self, id: usize) -> Vec<usize> {
         let doc = self.doc.borrow();
         doc.get_node(ids::of(id))
@@ -70,6 +77,7 @@ impl Dom {
     }
 
     /// The DOM's own numbering: 1 element, 3 text, 8 comment, 9 document.
+    #[cfg(feature = "quickjs")]
     pub fn node_type(&self, id: usize) -> u8 {
         let doc = self.doc.borrow();
         match doc.get_node(ids::of(id)).map(|node| &node.data) {
@@ -82,6 +90,7 @@ impl Dom {
     }
 
     /// A text node's data. Elements have none, as in the DOM.
+    #[cfg(feature = "quickjs")]
     pub fn node_value(&self, id: usize) -> Option<String> {
         let doc = self.doc.borrow();
         match &doc.get_node(ids::of(id))?.data {
@@ -99,6 +108,7 @@ impl Dom {
     }
 
     /// An element's element children, skipping text and comments.
+    #[cfg(feature = "quickjs")]
     pub fn element_children(&self, id: usize) -> Vec<usize> {
         let doc = self.doc.borrow();
         let Some(node) = doc.get_node(ids::of(id)) else {
@@ -115,14 +125,17 @@ impl Dom {
             .collect()
     }
 
+    #[cfg(feature = "quickjs")]
     pub fn root(&self) -> usize {
         ids::raw(self.doc.borrow().root_element().id)
     }
 
+    #[cfg(feature = "quickjs")]
     pub fn body(&self) -> Option<usize> {
         self.child_of_root("body")
     }
 
+    #[cfg(feature = "quickjs")]
     pub fn head(&self) -> Option<usize> {
         self.child_of_root("head")
     }
@@ -135,6 +148,7 @@ impl Dom {
         }
     }
 
+    #[cfg(feature = "quickjs")]
     fn child_of_root(&self, tag: &str) -> Option<usize> {
         let doc = self.doc.borrow();
         let root = doc.root_element();
@@ -151,6 +165,7 @@ impl Dom {
 }
 
 /// Every element with this tag under `id`, in document order.
+#[cfg(feature = "quickjs")]
 fn collect_by_tag(doc: &BaseDocument, id: blitz_dom::NodeId, tag: &str, found: &mut Vec<usize>) {
     let Some(node) = doc.get_node(id) else {
         return;

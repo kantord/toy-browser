@@ -10,10 +10,14 @@ use crate::Monospace;
 /// Every user-agent rule `compose` owes the cascade that is not about a
 /// `<webview>`: whether this page runs its own scripts, and whether a
 /// [`Monospace`] grid has been forced onto it.
-pub(crate) fn sheets(run_scripts: bool, monospace: Option<Monospace>) -> Vec<String> {
+pub(crate) fn sheets(
+    run_scripts: bool,
+    monospace: Option<Monospace>,
+    images: crate::Images,
+) -> Vec<String> {
     let mut sheets = scripting(run_scripts);
     sheets.extend(text_rule(monospace));
-    sheets.extend(decorative_rule(monospace));
+    sheets.extend(decorative_rule(monospace, images));
     sheets
 }
 
@@ -63,10 +67,16 @@ fn text_rule(monospace: Option<Monospace>) -> Option<String> {
 /// grows to fit it. Nothing is lost by capping what was never going to be
 /// seen: `:empty` reaches only elements with no text or children of their
 /// own to lose, so a real paragraph or heading is untouched.
-fn decorative_rule(monospace: Option<Monospace>) -> Option<String> {
+fn decorative_rule(monospace: Option<Monospace>, images: crate::Images) -> Option<String> {
     let grid = monospace?;
+    // Pictures that are shown (as cells of a picture) keep the size the page
+    // gave them; only when they are not is one an empty box to be capped.
+    let which = match images {
+        crate::Images::Real => ":empty:not(img)",
+        _ => ":empty",
+    };
     Some(format!(
-        ":empty {{ max-height: {}px !important; margin: 0 !important; }}",
+        "{which} {{ max-height: {}px !important; margin: 0 !important; }}",
         grid.line_height,
     ))
 }

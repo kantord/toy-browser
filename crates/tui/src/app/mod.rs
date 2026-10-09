@@ -10,9 +10,11 @@
 //! while it grows, and a character has no sharpness to keep. A terminal that
 //! wants a bigger page is given a bigger [`GRID`] instead.
 
+mod hosting;
 mod pointer;
 
-pub use pointer::Hover;
+pub use hosting::Focused;
+pub use pointer::{Hover, Under};
 
 use anyhow::Result;
 use toy_browser::{Browser, Images, Monospace, PageId, Resources, Scheme, Viewport};
@@ -68,6 +70,10 @@ pub struct App {
     logged: Vec<String>,
     /// A link the page let be followed, waiting for the host to take it.
     navigation: Option<String>,
+    /// Where the page last said it was (`location.href`), and a new address it
+    /// has moved to by itself — `history.pushState` — waiting for the host.
+    address: String,
+    pushed: Option<String>,
     /// Set once something here decides the loop should stop.
     pub quit: bool,
 }
@@ -118,6 +124,8 @@ impl App {
             whole: false,
             logged: Vec::new(),
             navigation: None,
+            address: String::new(),
+            pushed: None,
             quit: false,
         };
         app.browser.set_viewport(&app.page, app.viewport());
@@ -130,6 +138,7 @@ impl App {
             .load_markup(&self.page, markup, base)
             .map_err(|error| anyhow::anyhow!("{error}"))?;
         self.scrolled = (0.0, 0.0);
+        self.watch_address(true);
         self.changed();
         Ok(())
     }
@@ -140,25 +149,9 @@ impl App {
             .navigate(&self.page, url)
             .map_err(|error| anyhow::anyhow!("{error}"))?;
         self.scrolled = (0.0, 0.0);
+        self.watch_address(true);
         self.changed();
         Ok(())
-    }
-
-    /// How pictures are shown: as their alt text, or not at all.
-    pub fn set_images(&mut self, images: Images) {
-        self.browser.set_images(images);
-        self.changed();
-    }
-
-    /// Has links the page lets be followed reported (see [`Self::take_navigation`])
-    /// instead of loaded, for a host that decides where they go.
-    pub fn leave_navigation(&mut self, leave: bool) {
-        self.browser.set_leave_navigation(leave);
-    }
-
-    /// The link a click set off, as an absolute URL, once.
-    pub fn take_navigation(&mut self) -> Option<String> {
-        self.navigation.take()
     }
 
     /// Makes the grid as tall as the page, so the host can scroll it itself.
@@ -256,6 +249,12 @@ impl App {
         self.settle();
         self.grid = None;
         self.hover = None;
+    }
+
+    /// The grid last painted, if nothing has changed since: for a caller that
+    /// needs it and something else of the app at once.
+    pub fn rendered(&self) -> Option<&Grid> {
+        self.grid.as_ref()
     }
 
     /// The screenful of the page as it stands, painting it again only if

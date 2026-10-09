@@ -73,40 +73,97 @@ local function backdrop(bg)
   return name
 end
 
+-- A row's text and runs, ready to be put in the buffer.
+local function prepared(runs)
+  local row, rest = trimmed(runs)
+  local parts = {}
+  for _, run in ipairs(row) do
+    parts[#parts + 1] = run[1]
+  end
+  return table.concat(parts), row, rest
+end
+
+-- The highlights of a row that is already in the buffer: one over each run,
+-- and one behind the whole line for the padding that was trimmed off.
+local function mark_row(view, line, row, rest)
+  vim.api.nvim_buf_clear_namespace(view.buf, ns, line, line + 1)
+  if rest and rest[3] ~= "" then
+    -- Low priority, so the runs' own colours win where there is text.
+    vim.api.nvim_buf_set_extmark(view.buf, ns, line, 0, {
+      line_hl_group = backdrop(rest[3]),
+      priority = 1,
+    })
+  end
+  local byte = 0
+  for _, run in ipairs(row) do
+    local len = #run[1]
+    vim.api.nvim_buf_set_extmark(view.buf, ns, line, byte, {
+      end_col = byte + len,
+      hl_group = group(run[2], run[3], run[4]),
+    })
+    byte = byte + len
+  end
+end
+
+-- A frame is the whole page, or (`at`) only the rows that changed since the last.
 local function draw(view, frame)
-  local rows = {}
-  local rests = {}
-  local lines = {}
-  for i, runs in ipairs(frame.lines) do
-    rows[i], rests[i] = trimmed(runs)
-    local parts = {}
-    for _, run in ipairs(rows[i]) do
-      parts[#parts + 1] = run[1]
-    end
-    lines[i] = table.concat(parts)
+  local first = frame.at
+  local text, rows, rests = {}, {}, {}
+  for n, runs in ipairs(frame.lines) do
+    text[n], rows[n], rests[n] = prepared(runs)
   end
   vim.bo[view.buf].modifiable = true
-  vim.api.nvim_buf_set_lines(view.buf, 0, -1, false, lines)
-  vim.bo[view.buf].modifiable = false
-  vim.api.nvim_buf_clear_namespace(view.buf, ns, 0, -1)
-  for i, runs in ipairs(rows) do
-    if rests[i] and rests[i][3] ~= "" then
-      -- Low priority, so the runs' own colours win where there is text.
-      vim.api.nvim_buf_set_extmark(view.buf, ns, i - 1, 0, {
-        line_hl_group = backdrop(rests[i][3]),
-        priority = 1,
-      })
+  if first then
+    for n, line in ipairs(first) do
+      vim.api.nvim_buf_set_lines(view.buf, line, line + 1, false, { text[n] })
+      mark_row(view, line, rows[n], rests[n])
     end
-    local byte = 0
-    for _, run in ipairs(runs) do
-      local len = #run[1]
-      vim.api.nvim_buf_set_extmark(view.buf, ns, i - 1, byte, {
-        end_col = byte + len,
-        hl_group = group(run[2], run[3], run[4]),
-      })
-      byte = byte + len
+  else
+    vim.api.nvim_buf_set_lines(view.buf, 0, -1, false, text)
+    vim.api.nvim_buf_clear_namespace(view.buf, ns, 0, -1)
+    for n = 1, #rows do
+      mark_row(view, n - 1, rows[n], rests[n])
     end
   end
+  vim.bo[view.buf].modifiable = false
+end
+
+-- Writes to the terminal itself, past Neovim's screen.
+local function terminal(bytes)
+  if vim.env.TMUX then
+    -- tmux passes a sequence through only when it is wrapped, with its escapes doubled.
+    bytes = "\27Ptmux;" .. bytes:gsub("\27", "\27\27") .. "\27\\"
+  end
+  if vim.api.nvim_ui_send then
+    vim.api.nvim_ui_send(bytes)
+  else
+    vim.api.nvim_chan_send(vim.v.stderr, bytes)
+  end
+end
+
+-- A picture to the terminal, by kitty's graphics protocol: transmitted once
+-- under its number, and shown wherever the page's text has its placeholder
+-- cells (the engine puts them in the buffer; this only has to deliver the image).
+local function show_image(view, event)
+  view.pictures[#view.pictures + 1] = event.id
+  local chunk = 4096
+  local data = event.png
+  local first = true
+  for at = 1, #data, chunk do
+    local piece = data:sub(at, at + chunk - 1)
+    local more = at + chunk <= #data and 1 or 0
+    local control = first and ("a=T,U=1,f=100,q=2,i=%d,c=%d,r=%d,m=%d"):format(event.id, event.cols, event.rows, more)
+      or ("m=%d"):format(more)
+    terminal(("\27_G%s;%s\27\\"):format(control, piece))
+    first = false
+  end
+end
+
+local function forget_images(view)
+  for _, id in ipairs(view.pictures) do
+    terminal(("\27_Ga=d,d=I,q=2,i=%d\27\\"):format(id))
+  end
+  view.pictures = {}
 end
 
 -- What the statusline of a page shows: its address, with what it is doing.
@@ -164,6 +221,9 @@ local function start_job()
 end
 
 local function send(view, command)
+  if not view.page then
+    return
+  end
   if not host.job then
     start_job()
   end
@@ -188,9 +248,32 @@ function handle(view, event)
     if event.url:gsub("#.*", "") ~= here and event.url:match("^[%w+.-]+:") then
       M.open({ url = event.url, here = true })
     else
-      -- The same document: a fragment, which the page itself scrolls to.
-      send(view, { op = "navigate", url = event.url })
+      -- The same document: a #fragment, which is a place on the page.
+      local name = event.url:match("#(.*)$")
+      if name and name ~= "" then
+        send(view, { op = "anchor", name = vim.uri_decode(name) })
+      end
     end
+  elseif event.ev == "focused" then
+    local win = window(view)
+    if win and event.row ~= vim.NIL and event.col ~= vim.NIL then
+      pcall(vim.api.nvim_win_set_cursor, win, { event.row + 1, event.col })
+    end
+  elseif event.ev == "anchor" then
+    local win = window(view)
+    if win and event.row ~= vim.NIL then
+      vim.api.nvim_win_call(win, function()
+        vim.cmd("normal! m'")
+      end)
+      vim.api.nvim_win_set_cursor(win, { event.row + 1, 0 })
+    end
+  elseif event.ev == "pushed" then
+    -- The page moved itself (history.pushState): that is a new entry in the
+    -- history. The buffer it leaves is the snapshot of the page as it was; the
+    -- running page carries on in a new one.
+    M.open({ url = event.url, here = true, adopt = view })
+  elseif event.ev == "image" then
+    show_image(view, event)
   elseif event.ev == "target" then
     -- JSON null decodes to vim.NIL, which is truthy.
     view.target = { href = event.href ~= vim.NIL and event.href or nil }
@@ -326,27 +409,51 @@ end
 --              the jump recorded so <C-o> comes back; otherwise a vertical
 --              split to the right, so an ordinary file can stay open beside it
 --   opts.tab   show it in a new tab page
---   opts.images  "alt" (default): pictures as [their alt text]; "none": left out
+--   opts.float show it in a floating window, centred: `true`, or {width=, height=};
+--              the buffer is not listed and goes when the window does
+--   opts.adopt a view whose running page this one takes over: the old buffer
+--              stays as it was and is loaded from its own address if shown again
+--   opts.images  "alt" (default): pictures as [their alt text]; "none": left out;
+--              "real": shown, in a terminal that speaks kitty's graphics protocol
+--              (kitty, ghostty, ...), as text the buffer can scroll and clip
+--   opts.scheme  "light" (default) or "dark": what the page's prefers-color-scheme says
 --   opts.transparent  leave the page's default white and black to the
 --              colorscheme (default: only for `html`, not for a fetched `url`)
 function M.open(opts)
   opts = opts or {}
-  if opts.here then
-    vim.cmd("normal! m'")
+  local buf = vim.api.nvim_create_buf(not opts.float, true)
+  if opts.float then
+    local width = math.min(opts.float.width or 60, vim.o.columns - 4)
+    local height = math.min(opts.float.height or 20, vim.o.lines - 4)
+    vim.api.nvim_open_win(buf, true, {
+      relative = "editor",
+      width = width,
+      height = height,
+      row = math.floor((vim.o.lines - height) / 2),
+      col = math.floor((vim.o.columns - width) / 2),
+      style = "minimal",
+      border = "rounded",
+    })
   else
-    vim.cmd(opts.tab and "tabnew" or "rightbelow vsplit")
+    if opts.here then
+      vim.cmd("normal! m'")
+    else
+      vim.cmd(opts.tab and "tabnew" or "rightbelow vsplit")
+    end
+    vim.api.nvim_win_set_buf(0, buf)
   end
-  local buf = vim.api.nvim_create_buf(true, true)
-  vim.api.nvim_win_set_buf(0, buf)
   -- Kept when no window shows it: that is what makes it a page one can go
   -- back to, and its text is the snapshot of it.
-  vim.bo[buf].bufhidden = "hide"
+  vim.bo[buf].bufhidden = opts.float and "wipe" or "hide"
   pcall(vim.api.nvim_buf_set_name, buf, "toy-html://" .. (opts.url or "markup"))
 
-  host.last = host.last + 1
+  local function newpage()
+    host.last = host.last + 1
+    return host.last
+  end
   local view = {
     buf = buf,
-    page = host.last,
+    page = opts.adopt and opts.adopt.page or newpage(),
     url = opts.url,
     html = opts.html,
     -- A fetched page is drawn on white, as a browser would: it was designed for
@@ -355,6 +462,8 @@ function M.open(opts)
     -- Markup a plugin supplies is its own, and takes the colorscheme.
     transparent = opts.transparent,
     images = opts.images or vim.g.toy_html_images,
+    scheme = opts.scheme or vim.g.toy_html_scheme,
+    pictures = {},
     on_event = opts.on_event or function(text)
       vim.notify(text)
     end,
@@ -363,35 +472,57 @@ function M.open(opts)
     view.transparent = opts.html ~= nil
   end
   host.views[view.page] = view
+  if opts.adopt then
+    opts.adopt.page, opts.adopt.closed = nil, true
+    view.transparent, view.images = opts.adopt.transparent, opts.adopt.images
+  end
   vim.api.nvim_create_autocmd("BufWipeout", {
     buffer = buf,
     once = true,
     callback = function()
       send(view, { op = "close" })
-      host.views[view.page] = nil
+      forget_images(view)
+      if view.page and host.views[view.page] == view then
+        host.views[view.page] = nil
+      end
     end,
   })
 
-  local function resize()
+  -- `fresh`: this buffer has none of the page yet, so the frame must be whole.
+  local function resize(silent, fresh)
     local win = window(view)
     if win then
       local cols, rows = size(win)
-      send(view, { op = "resize", cols = cols, rows = rows })
+      send(view, { op = "resize", cols = cols, rows = rows, silent = silent, full = fresh })
     end
   end
   -- What the host needs to hold the page: sent once, and again if the host
   -- has forgotten the page. `quiet` keeps the buffer's text (the snapshot)
   -- while the page loads again behind it.
   local function load(quiet)
-    view.closed, view.gone = false, false
-    send(view, { op = "transparent", on = view.transparent })
-    if view.images then
-      send(view, { op = "images", mode = view.images })
+    if view.images == "real" then
+      -- Pictures are drawn with true colour: it is how a cell names its picture.
+      vim.o.termguicolors = true
     end
-    send(view, { op = "whole", on = true })
-    resize()
+    if not view.page then
+      view.page = newpage()
+      host.views[view.page] = view
+    end
+    view.closed, view.gone = false, false
+    send(view, { op = "transparent", on = view.transparent, silent = true })
+    if view.images then
+      send(view, { op = "images", mode = view.images, silent = true })
+    end
+    if view.scheme then
+      send(view, { op = "scheme", mode = view.scheme, silent = true })
+    end
+    send(view, { op = "whole", on = true, silent = true })
+    resize(true, true)
     if view.url then
-      if not quiet then
+      if quiet then
+        -- The snapshot stays if the page cannot be had again.
+        view.retried = true
+      else
         say(view, "Loading " .. view.url .. " …")
       end
       send(view, { op = "navigate", url = view.url })
@@ -424,6 +555,7 @@ function M.open(opts)
         if view.url and vim.api.nvim_buf_is_valid(buf) and not window(view) and not view.closed then
           view.closed = true
           send(view, { op = "close" })
+          forget_images(view)
         end
       end)
     end,
@@ -487,6 +619,18 @@ function M.open(opts)
     vim.cmd("popup PopUp")
   end)
   map("q", function() vim.api.nvim_win_close(0, true) end)
+  -- Forms. Focus a field by clicking it (<CR>) or by tabbing to it, then type.
+  map("]f", function() send(view, { op = "focus", dir = "next" }) end)
+  map("[f", function() send(view, { op = "focus", dir = "prev" }) end)
+  map("i", function()
+    vim.ui.input({ prompt = "Type: " }, function(text)
+      if text and text ~= "" then
+        send(view, { op = "type", text = text })
+      end
+    end)
+  end)
+  -- Enter, in the field that has focus: submits a form, presses a button.
+  map("gs", function() send(view, { op = "key", key = "Enter", code = "Enter" }) end)
   map("r", function()
     if view.url then
       view.retried = true
@@ -495,9 +639,14 @@ function M.open(opts)
     end
   end)
 
-  status(view, opts.url and "loading")
   set_window(vim.api.nvim_get_current_win())
-  load(false)
+  if opts.adopt then
+    status(view)
+    resize(false, true)
+  else
+    status(view, opts.url and "loading")
+    load(false)
+  end
   return view
 end
 

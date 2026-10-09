@@ -17,9 +17,16 @@ blitz-dom = { path = "../../vendor/blitz-dom", default-features = false, feature
     "file-input",
 ] }
 blitz-html = { path = "../../vendor/blitz-html" }
-rquickjs = { version = "0.12.2", features = ["macro", "classes", "properties", "loader"] }
+rquickjs = { version = "0.12.2", features = ["macro", "classes", "properties", "loader"], optional = true }
 xml5ever = "0.39"
 html5ever = "0.39"
+
+[features]
+# The JavaScript interpreter. Without it a page is parsed, laid out and acted on
+# (clicks, focus, typing into fields) but its scripts are not run, and
+# `evaluate` answers that there is nothing to run them with.
+default = ["quickjs"]
+quickjs = ["dep:rquickjs"]
 
 [lints]
 workspace = true

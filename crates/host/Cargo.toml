@@ -1,0 +1,26 @@
+[package]
+name = "toy-browser-host"
+description = "The engine as a process: HTML in, a grid of cells out, over newline-delimited JSON on stdio."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+toy-browser.workspace = true
+toy-browser-tui = { path = "../tui", default-features = false }
+serde_json.workspace = true
+# SVG pictures are drawn to pixels here, the same crate the browser draws them with.
+resvg = "0.48.1"
+# To decode a page's pictures and send them again at the size of the cells they
+# cover. The same formats and version the browser's own decoder uses.
+image = { version = "0.25.6", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+
+[features]
+# `--no-default-features` builds a host that draws and acts on pages but runs
+# none of their scripts (no QuickJS).
+default = ["quickjs"]
+quickjs = ["toy-browser-tui/quickjs"]
+
+[lints]
+workspace = true

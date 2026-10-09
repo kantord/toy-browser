@@ -16,19 +16,21 @@
 use toy_browser::rasterizer::Paint;
 use toy_browser::{Area, Ink, Mark, Scene};
 
-use super::{Grid, Rgb, Style};
+use super::faces::look_of;
+use super::glyphs::glyph_mark;
+use super::{Grid, Rgb};
 
 /// Where a glyph's baseline sits within its cell, as a fraction of the font
 /// size counted up from the top. Real ascent varies by face; one number for
 /// every face is the whole of what "totally simplified" buys here.
-const ASCENT: f32 = 0.8;
+pub(super) const ASCENT: f32 = 0.8;
 
 /// One rectangle of cells a mark may be painted into, columns and rows both
 /// half-open. What a `Clip` narrows and every write is kept inside.
 #[derive(Clone, Copy)]
-struct Bounds {
-    cols: (u16, u16),
-    rows: (u16, u16),
+pub(super) struct Bounds {
+    pub(super) cols: (u16, u16),
+    pub(super) rows: (u16, u16),
 }
 
 impl Bounds {
@@ -40,7 +42,7 @@ impl Bounds {
     }
 
     /// Cut down to an Area given in document pixels, already offset.
-    fn cut_to(self, area: Area, cell: (f32, f32)) -> Self {
+    pub(super) fn cut_to(self, area: Area, cell: (f32, f32)) -> Self {
         let cols = cell_span(area.x, area.width, cell.0);
         let rows = cell_span(area.y, area.height, cell.1);
         Self {
@@ -78,7 +80,7 @@ fn cell_span(start: f32, length: f32, cell: f32) -> (u16, u16) {
 
 /// The one cell a document coordinate falls in along an axis, or `None` when
 /// it lands outside `bounds` — off screen, or past whatever a `Clip` allows.
-fn axis_index(value: f32, cell: f32, bounds: (u16, u16)) -> Option<u16> {
+pub(super) fn axis_index(value: f32, cell: f32, bounds: (u16, u16)) -> Option<u16> {
     if value < 0.0 {
         return None;
     }
@@ -113,57 +115,12 @@ pub fn paint(scene: &Scene, cell: (f32, f32), scroll: (f32, f32), cols: u16, row
     grid
 }
 
-/// Whether a font file is a bold one, an italic one. A file that cannot be read
-/// is plain.
-fn look_of(bytes: &[u8]) -> Style {
-    use skrifa::MetadataProvider;
-    let Ok(font) = skrifa::FontRef::new(bytes) else {
-        return Style::default();
-    };
-    let attributes = font.attributes();
-    Style {
-        bold: attributes.weight.value() >= 600.0,
-        italic: attributes.style != skrifa::attribute::Style::Normal,
-        underline: false,
-    }
-}
-
-/// One text run, carrying only what painting it needs — see
-/// `too-many-arguments.md`: this is `Mark::Glyphs`'s own fields, named rather
-/// than passed one by one.
-struct GlyphRun<'a> {
-    places: &'a [f32],
-    text: &'a str,
-    baseline: f32,
-    size: f32,
-    paint: &'a Paint,
-    look: Style,
-}
-
 /// Paints one list of marks, each shifted by `at` and kept inside `bounds`.
 fn walk(marks: &[Mark], at: (f32, f32), bounds: Bounds, cell: (f32, f32), grid: &mut Grid) {
     for mark in marks {
         match mark {
             Mark::Fill { area, ink, .. } => fill(*area, ink, at, bounds, cell, grid),
-            Mark::Glyphs {
-                places,
-                text,
-                baseline,
-                size,
-                paint,
-                face,
-                ..
-            } => {
-                let run = GlyphRun {
-                    places,
-                    text,
-                    baseline: *baseline,
-                    size: *size,
-                    paint,
-                    look: grid.looks.get(face).copied().unwrap_or_default(),
-                };
-                glyphs(&run, at, bounds, cell, grid);
-            }
+            Mark::Glyphs { .. } => glyph_mark(mark, at, bounds, cell, grid),
             // A grid of characters draws nothing twice, so there is nothing
             // for a group that exists to be kept to mean here: walk into it.
             Mark::Kept { marks, .. } => walk(marks, at, bounds, cell, grid),
@@ -177,7 +134,10 @@ fn walk(marks: &[Mark], at: (f32, f32), bounds: Bounds, cell: (f32, f32), grid: 
             Mark::Moved { by, marks, .. } => {
                 walk(marks, (at.0 + by[4], at.1 + by[5]), bounds, cell, grid);
             }
-            Mark::Image { .. } => {}
+            Mark::Image { area, picture, .. } => {
+                let area = shifted(*area, at);
+                super::pictures::place(grid, *picture, area, cell, bounds.cut_to(area, cell));
+            }
         }
     }
 }
@@ -202,7 +162,7 @@ fn flattened(ink: &Ink) -> Option<Rgb> {
     (paint.alpha > 0.0).then(|| rgb(paint))
 }
 
-fn rgb(paint: &Paint) -> Rgb {
+pub(super) fn rgb(paint: &Paint) -> Rgb {
     Rgb {
         r: paint.red,
         g: paint.green,
@@ -218,8 +178,7 @@ fn rgb(paint: &Paint) -> Rgb {
 /// the wrong cell too — an underline's `y` is close to a line's own baseline,
 /// not to the top a `Glyphs` run chose its row from — see [`glyphs`]'s own
 /// comment — so a hairline can round to the row *below* the text it was
-/// meant to sit under. Left undrawn for the same reason `Mark::Image` is:
-/// borders were never in scope for this stage.
+/// meant to sit under. Left undrawn: borders were never in scope here.
 const HAIRLINE: f32 = 2.0;
 
 fn fill(area: Area, ink: &Ink, at: (f32, f32), bounds: Bounds, cell: (f32, f32), grid: &mut Grid) {
@@ -257,60 +216,4 @@ fn paint_row(grid: &mut Grid, cols: (u16, u16), row: u16, colour: Rgb) {
             cell.bg = colour;
         }
     }
-}
-
-/// Paints one run's text a character at a time, each at its own real
-/// position.
-///
-/// Safe only because the caller forced a monospace grid before any of this
-/// ran: two characters, in the same run or in two different ones, are never
-/// less than one cell apart in real pixels, because a correctly laid out
-/// document never draws two pieces of text on top of each other. Before that
-/// was true, this function had to lay every run down one cell per character
-/// in reading order instead, ignoring where a real proportional font had
-/// actually put each one — which is also what broke a click on one, since
-/// the cell a letter was drawn in and the position a proportional font had
-/// given it were no longer the same thing. `hit`, kept per cell rather than
-/// assumed from its centre, is what is left of that: cheap insurance against
-/// whatever a page's own replaced content or a calibration a font's hinting
-/// nudged by a fraction of a pixel might still disagree with.
-fn glyphs(run: &GlyphRun, at: (f32, f32), bounds: Bounds, cell: (f32, f32), grid: &mut Grid) {
-    if run.paint.alpha <= 0.0 {
-        return;
-    }
-    let top = run.baseline - run.size * ASCENT + at.1;
-    let Some(row) = axis_index(top, cell.1, bounds.rows) else {
-        return;
-    };
-    let colour = rgb(run.paint);
-    for (ch, &real_x) in run.text.chars().zip(run.places) {
-        let x = real_x + at.0;
-        let Some(col) = axis_index(x, cell.0, bounds.cols) else {
-            continue;
-        };
-        place_glyph(grid, ch, col, row, colour, (x, top), run.look);
-    }
-}
-
-/// Puts one printable character into the grid, remembering `hit`, its real
-/// screen-relative position, for a click on this cell to answer to.
-fn place_glyph(
-    grid: &mut Grid,
-    ch: char,
-    col: u16,
-    row: u16,
-    colour: Rgb,
-    hit: (f32, f32),
-    look: Style,
-) {
-    if ch.is_control() {
-        return;
-    }
-    let Some(cell) = grid.at_mut(col, row) else {
-        return;
-    };
-    cell.ch = ch;
-    cell.fg = colour;
-    cell.hit = Some(hit);
-    cell.style = look;
 }

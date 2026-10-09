@@ -78,6 +78,7 @@ impl Field {
     /// when the value did not actually change, which is what the equality test
     /// is for: a page that writes the same string back on every keystroke —
     /// and many do — must not send the caret to the end each time.
+    #[cfg(feature = "quickjs")]
     pub fn set_value(&mut self, value: String) {
         if self.value == value {
             return;
@@ -244,6 +245,7 @@ impl Dom {
     /// written between its tags and everything else's is its `value`
     /// attribute. After the first edit it is the field's own, which is the
     /// whole distinction between `value` and `defaultValue`.
+    #[cfg(feature = "quickjs")]
     pub fn field_value(&self, node: usize) -> String {
         if let Some(field) = self.fields.borrow().get(&node) {
             return field.value().to_owned();
@@ -264,6 +266,7 @@ impl Dom {
     /// Nothing for an untouched one, because a field nobody has been in has no
     /// caret anywhere — and inventing one at the end would make
     /// `selectionStart` report a position a browser reports as 0.
+    #[cfg(feature = "quickjs")]
     pub fn field_range(&self, node: usize) -> Option<(usize, usize)> {
         self.fields.borrow().get(&node).map(Field::range)
     }

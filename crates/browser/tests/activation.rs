@@ -168,3 +168,24 @@ fn a_page_can_move_focus_itself() {
         "BODY"
     );
 }
+
+#[test]
+fn enter_on_a_focused_button_presses_it() {
+    let mut browser = browser();
+    let page = browser.new_page().unwrap();
+    browser
+        .load_markup(
+            &page,
+            "<button id=b onclick=\"document.title='pressed'\">go</button>",
+            "https://example.org/",
+        )
+        .unwrap();
+    click(&mut browser, &page, "#b");
+    browser
+        .evaluate(&page, "document.title = ''", true)
+        .unwrap();
+    browser
+        .key_down(&page, "Enter", "Enter", toy_browser::Held::default())
+        .unwrap();
+    assert_eq!(text_of(&mut browser, &page, "document.title"), "pressed");
+}

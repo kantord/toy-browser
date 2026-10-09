@@ -34,10 +34,25 @@ pub(in crate::realm) fn raise_key(ctx: &Ctx<'_>, key: crate::Key<'_>) -> rquickj
         return Ok(false);
     };
     let prevented = tell_the_page_key(ctx, node, key)?;
-    match key.kind == "keydown" && !prevented {
-        true => edited(ctx, &dom, node, key),
-        false => Ok(false),
+    if key.kind != "keydown" || prevented {
+        return Ok(false);
     }
+    if presses_button(&dom, node, &key) {
+        press(ctx, node)?;
+        return Ok(true);
+    }
+    edited(ctx, &dom, node, key)
+}
+
+/// Whether this key, with the focus on a button, is a press of it: Enter or
+/// Space, the way a keyboard activates one.
+fn presses_button(dom: &std::rc::Rc<crate::dom::Dom>, node: usize, key: &crate::Key<'_>) -> bool {
+    matches!(key.key, "Enter" | " ") && dom.tag_name(node).as_deref() == Some("button")
+}
+
+/// A click the page gives itself, on the same path a real one takes.
+fn press(ctx: &Ctx<'_>, node: usize) -> rquickjs::Result<()> {
+    ctx.eval::<(), _>(format!("globalThis.__tb.wrap({node}).click()"))
 }
 
 /// What the key does by default, once the page has not stopped it.

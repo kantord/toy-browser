@@ -11,15 +11,19 @@
 //!
 //! [`Session`]: Engine::create_session
 
+mod behaviour;
 mod dom;
 mod engine;
 pub mod ids;
 mod input;
+#[cfg(feature = "quickjs")]
 mod loader;
+mod measure;
 mod realm;
 mod rewrite;
 mod scripts;
 mod serialize;
+mod values;
 
 use std::collections::HashMap;
 
@@ -28,10 +32,11 @@ use toy_browser_fetch::Url;
 pub use dom::parse_document;
 pub use engine::Engine;
 pub use input::{Activated, Key, Mouse, Point, Typed};
-pub use realm::{Argument, Evaluated, Handle, Relayout};
+pub use measure::Relayout;
 pub use rewrite::{Action, Rewrite};
 pub use scripts::{EntryKind, EntryPoint, Fetch, Payload, ScriptSurvey, Timing};
 pub use serialize::{KEY_CLASS_PREFIX, key_of};
+pub use values::{Argument, Evaluated, Handle};
 
 /// A node's identity within a Session's DOM. Stable while the Realm lives, and
 /// meaningless once it is replaced.

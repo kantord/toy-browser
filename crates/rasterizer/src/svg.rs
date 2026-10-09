@@ -115,6 +115,7 @@ fn glyphs(mark: &Mark, out: &mut String) {
         size,
         paint,
         face,
+        slanted: _,
         from,
     } = mark
     else {

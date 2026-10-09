@@ -4,8 +4,8 @@
 //! every other one, so where a Mark lands is a division and a floor rather
 //! than anything a rasterizer would call measuring. What a cell holds is
 //! exactly what the goal asked for and nothing past it — a character, an
-//! ink, a paper — so `Mark::Image` is left undrawn and a `Fill`'s corners are
-//! always square.
+//! ink, a paper — so a picture is only noted (which cells, which slice of it:
+//! see `pictures.rs`) and a `Fill`'s corners are always square.
 //!
 //! This file is the grid itself: what a cell is, and what the whole of one
 //! holds before anything has been painted onto it. `marks.rs` is where a
@@ -18,9 +18,16 @@ use std::collections::BTreeMap;
 
 use toy_browser::rasterizer::Digest;
 
+mod faces;
+mod glyphs;
 mod marks;
+mod pictures;
+pub mod placeholder;
+mod width;
 
 pub use marks::paint;
+pub use pictures::{Placed, Slice};
+pub use width::is_wide;
 
 /// A colour a cell is painted with.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -48,6 +55,8 @@ pub struct Cell {
     /// what this is the insurance against.
     pub hit: Option<(f32, f32)>,
     pub style: Style,
+    /// Set where a picture was drawn: which slice of it this cell shows.
+    pub pic: Option<Slice>,
 }
 
 /// How a character is set, beyond its colours. All a cell can keep of a font.
@@ -71,6 +80,7 @@ pub struct Grid {
     rules: Vec<(u16, u16, u16)>,
     /// How each face the Scene holds is set, worked out once before painting.
     looks: BTreeMap<Digest, Style>,
+    pictures: Vec<Placed>,
 }
 
 /// What the page is painted on. See `window/blit.rs`'s own `PAPER` for the
@@ -90,6 +100,7 @@ impl Grid {
             bg: PAPER,
             hit: None,
             style: Style::default(),
+            pic: None,
         };
         Self {
             cols,
@@ -97,7 +108,13 @@ impl Grid {
             cells: vec![cell; usize::from(cols) * usize::from(rows)],
             rules: Vec::new(),
             looks: BTreeMap::new(),
+            pictures: Vec::new(),
         }
+    }
+
+    /// The pictures drawn on this grid, in paint order.
+    pub fn pictures(&self) -> &[Placed] {
+        &self.pictures
     }
 
     pub fn cell(&self, col: u16, row: u16) -> Cell {
@@ -130,7 +147,7 @@ impl Grid {
         }
     }
 
-    fn at_mut(&mut self, col: u16, row: u16) -> Option<&mut Cell> {
+    pub(super) fn at_mut(&mut self, col: u16, row: u16) -> Option<&mut Cell> {
         if col >= self.cols || row >= self.rows {
             return None;
         }

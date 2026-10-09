@@ -83,6 +83,24 @@ impl Browser {
         self.engine.contains(&session, ancestor, node)
     }
 
+    /// What has focus.
+    pub fn focused(&mut self, page: &PageId) -> Result<Option<NodeId>> {
+        let session = self.session(page)?;
+        self.engine.focused(&session)
+    }
+
+    /// Moves focus to an element, or takes it away. Runs no JavaScript.
+    pub fn focus(&mut self, page: &PageId, node: Option<NodeId>) -> Result<()> {
+        let session = self.session(page)?;
+        self.engine.focus(&session, node)
+    }
+
+    /// Replaces what is inside an element with this markup.
+    pub fn set_inner_html(&mut self, page: &PageId, node: NodeId, html: &str) -> Result<()> {
+        let session = self.session(page)?;
+        self.engine.set_inner_html(&session, node, html)
+    }
+
     /// The page's current markup.
     pub fn html(&mut self, page: &PageId) -> Result<String> {
         let session = self.session(page)?;

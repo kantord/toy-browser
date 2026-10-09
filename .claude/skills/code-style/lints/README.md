@@ -66,3 +66,6 @@ Lessons are held to the same line budget as the code they describe. A lesson
 cannot grow into a manual; when it wants to, it splits and links. That is the
 point — knowledge here is allowed to be as specific as it likes, as long as the
 specificity lives in its own small file that something else points at.
+- [dead-code](/.claude/skills/code-style/lints/dead-code.md) — a function
+  nothing uses. Shared test helpers are exempt (each test binary uses a
+  different subset); anything else is deleted.

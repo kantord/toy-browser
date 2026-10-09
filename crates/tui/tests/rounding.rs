@@ -36,6 +36,7 @@ fn a_run_placed_at_exact_cell_multiples_loses_no_character() {
                 alpha: 1.0,
             },
             face: Digest::of(b"test-face"),
+            slanted: false,
             from: None,
         }],
         ..Scene::default()

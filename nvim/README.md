@@ -1,6 +1,6 @@
 # Neovim and the engine (proof of concept)
 
-Needs `cargo build -p toy-browser-tui` first: both use `target/debug/toy-browser-host`
+Needs `cargo build -p toy-browser-host` first: both use `target/debug/toy-browser-host`
 (override with `TOY_BROWSER_HOST`).
 
 ## 1. HTML inside Neovim — `lua/toy_html`
@@ -34,3 +34,17 @@ python3 nvim/client/nvim_html.py [--html /tmp/nvim.html] [nvim args]
 Neovim's screen becomes an HTML document on every flush. The engine draws it in the
 terminal; the same document is written to `/tmp/nvim.html`, which a web browser can
 open (it reloads itself every second).
+
+## Options
+
+Set globally (`vim.g.toy_html_*`) or per page in `require("toy_html").open{...}`:
+
+| option | values | meaning |
+| --- | --- | --- |
+| `images` | `"alt"` (default), `"none"`, `"real"` | pictures as `[alt text]`, left out, or drawn (kitty graphics protocol: kitty, ghostty; turns on `termguicolors`; inside tmux needs `allow-passthrough on`) |
+| `scheme` | `"light"` (default), `"dark"` | what `prefers-color-scheme` says |
+| `transparent` | boolean | the page's default white and black take Neovim's colours (default: only for `html`, not for fetched pages) |
+
+Forms: `<CR>` on a field focuses it, `]f` / `[f` move focus along the tab order (the cursor follows), `i` asks for text and types it into the focused field, `gs` presses Enter there.
+
+Keys in a page buffer: `<CR>` / click follows a link, `r` reloads, `q` closes the window, `<A-Left>` / `<A-Right>` go back and forward by page (`<C-o>` / `<C-i>` work too). `:ToyHtmlGo {url}` loads a page in the current window; `:ToyHtmlHelp` shows these keys as a page in a float (`open{float=true}`).

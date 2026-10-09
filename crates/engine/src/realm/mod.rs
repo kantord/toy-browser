@@ -5,33 +5,44 @@
 //! `async` and `defer` do not change ordering here, and nothing is fetched over
 //! the network. See `docs/js-entry-points.md` for what that leaves out.
 
+#[cfg(feature = "quickjs")]
 mod bindings;
+#[cfg(feature = "quickjs")]
 mod convert;
+#[cfg(feature = "quickjs")]
 mod cookies;
+#[cfg(feature = "quickjs")]
 mod document;
+#[cfg(feature = "quickjs")]
 mod eval;
+#[cfg(feature = "quickjs")]
 mod load;
+#[cfg(feature = "quickjs")]
 mod node;
+#[cfg(feature = "quickjs")]
 mod opening;
+#[cfg(feature = "quickjs")]
 mod telling;
 
-use std::{
-    cell::{Cell, RefCell},
-    collections::{HashMap, HashSet},
-    rc::Rc,
-};
+#[cfg(not(feature = "quickjs"))]
+mod plain;
 
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
+
+#[cfg(feature = "quickjs")]
+use std::{cell::Cell, collections::HashMap};
+
+#[cfg(feature = "quickjs")]
 use anyhow::{Context as _, Result};
+#[cfg(feature = "quickjs")]
 use rquickjs::{Context, Persistent, Runtime, Value};
 
-use crate::{
-    Activated, Budget, Keyed, Mouse, NodeId, Outcome, Point, dom::Dom, scripts::ScriptSurvey,
-};
+#[cfg(feature = "quickjs")]
+use crate::{Activated, Budget, Mouse, Point};
+use crate::{Keyed, NodeId, Outcome, dom::Dom, scripts::ScriptSurvey};
 
+#[cfg(feature = "quickjs")]
 use bindings::install_globals;
-
-pub use eval::{Argument, Evaluated, Handle};
-pub use node::support::Relayout;
 
 /// The prelude, in the order its files are evaluated. Each is a standalone
 /// script; together they build the environment on one shared `__tb` namespace,
@@ -71,12 +82,21 @@ pub struct Realm {
     /// order, and QuickJS asserts that every value is freed before its context
     /// and every context before its runtime. Retained handles must therefore be
     /// declared first, or dropping the engine aborts the process.
+    #[cfg(feature = "quickjs")]
     handles: RefCell<HashMap<String, Persistent<Value<'static>>>>,
+    #[cfg(feature = "quickjs")]
     next_handle: Cell<u64>,
+    #[cfg(feature = "quickjs")]
     context: Context,
+    #[cfg(feature = "quickjs")]
     _runtime: Runtime,
+    /// Without an interpreter the last measure is held here; with one it lives
+    /// in the context, where the scripts can reach it.
+    #[cfg(not(feature = "quickjs"))]
+    measure: crate::measure::Measure,
 }
 
+#[cfg(feature = "quickjs")]
 impl Drop for Realm {
     /// Frees every wrapper the Realm retained, while its context is still
     /// alive. QuickJS aborts the process if a value outlives its context, and
@@ -126,6 +146,21 @@ impl Realm {
         self.dom.tag_name(node)
     }
 
+    /// What has focus.
+    pub fn focused(&self) -> Option<NodeId> {
+        self.dom.focused()
+    }
+
+    /// Moves focus to `node`, or takes it away. Runs no JavaScript.
+    pub fn focus(&self, node: Option<NodeId>) {
+        self.dom.focus(node);
+    }
+
+    /// Replaces what is inside an element with this markup.
+    pub fn set_inner_html(&self, node: NodeId, html: &str) {
+        self.dom.set_inner_html(node, html);
+    }
+
     pub fn parent(&self, node: NodeId) -> Option<NodeId> {
         self.dom.parent(node)
     }
@@ -157,6 +192,7 @@ impl Realm {
     ///
     /// Runs no JavaScript unless something on the path from `window` down to
     /// the node is actually waiting for this kind of event.
+    #[cfg(feature = "quickjs")]
     pub fn raise_mouse(&self, node: NodeId, mouse: Mouse<'_>) -> Result<Activated> {
         self.context
             .with(|ctx| node::raise_mouse(&ctx, node, mouse))
@@ -181,6 +217,7 @@ impl Realm {
 
     /// Raises one key event wherever the focus is, answering whether it
     /// changed the document.
+    #[cfg(feature = "quickjs")]
     pub fn raise_key(&self, key: crate::Key<'_>) -> Result<bool> {
         self.context
             .with(|ctx| node::raise_key(&ctx, key))
@@ -203,12 +240,14 @@ impl Realm {
     ///
     /// Answers from the last measure published here, so it runs no JavaScript —
     /// entering the context takes the userdata and nothing else.
+    #[cfg(feature = "quickjs")]
     pub fn hit_test(&self, point: Point) -> Option<NodeId> {
         self.context
             .with(|ctx| ctx.userdata::<node::Sharing>().and_then(|s| s.hit(point)))
     }
 
     /// Turns the task queue until nothing new is scheduled or `budget` is spent.
+    #[cfg(feature = "quickjs")]
     pub fn run_tasks(&self, budget: Budget) {
         self.context
             .with(|ctx| load::drain_tasks(&ctx, &self.report, budget.rounds));

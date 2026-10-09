@@ -1,0 +1,9 @@
+{
+  "name": "toy-browser-happy-dom-host",
+  "private": true,
+  "type": "module",
+  "description": "toy-browser-host's protocol, with pages fetched and scripted by happy-dom.",
+  "dependencies": {
+    "happy-dom": "^20.0.0"
+  }
+}

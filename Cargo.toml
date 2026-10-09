@@ -6,6 +6,7 @@ members = [
     "crates/browser",
     "crates/cli",
     "crates/tui",
+    "crates/host",
     "crates/e2e",
     # Somebody else's, kept here rather than pulled from crates.io. See
     # `vendor/README.md` for what was taken, from what, and what was changed.
@@ -40,5 +41,5 @@ anyhow = "1.0.104"
 serde_json = "1.0.151"
 toy-browser-fetch = { path = "crates/fetch" }
 toy-browser-rasterizer = { path = "crates/rasterizer" }
-toy-browser-engine = { path = "crates/engine" }
-toy-browser = { path = "crates/browser" }
+toy-browser-engine = { path = "crates/engine", default-features = false }
+toy-browser = { path = "crates/browser", default-features = false }

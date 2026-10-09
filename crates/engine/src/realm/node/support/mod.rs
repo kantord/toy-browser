@@ -13,14 +13,12 @@
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-mod measure;
-
 use rquickjs::{Class, Ctx, JsLifetime, Object, Persistent, Value};
 
 use super::Node;
+use crate::measure::Measure;
+pub use crate::measure::Relayout;
 use crate::{Boxes, ElementBox, Point, dom::Dom};
-use measure::Measure;
-pub use measure::Relayout;
 
 /// The document every `Node` in a Realm belongs to, plus the wrappers already
 /// handed out for it.

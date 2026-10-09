@@ -69,13 +69,27 @@ term url="https://news.ycombinator.com/" *ARGS:
 # Neovim with a page in a split beside an ordinary file: builds the host,
 # loads the plugin from nvim/ and runs :ToyHtml. `q` in the page closes it.
 nvim url="https://en.wikipedia.org/wiki/Neovim" file="README.md":
-    cargo build -p toy-browser-tui
+    cargo build -p toy-browser-host
     nvim -u NONE --cmd 'set rtp+=nvim' --cmd 'set mouse=a showtabline=2' -c 'runtime plugin/toy_html.lua' -c 'ToyHtml {{ url }}' {{ file }}
+
+# The Neovim plugin against the real host, headless.
+nvim-test:
+    cargo build -p toy-browser-host
+    nvim -u NONE --headless -l nvim/tests/run.lua
+
+# The host with no JavaScript interpreter at all (no QuickJS): scripts are not run.
+host-no-js:
+    cargo build -p toy-browser-host --no-default-features
+
+# The same, with pages fetched by happy-dom (cd hosts/happy-dom && npm install first).
+nvim-happy url="https://en.wikipedia.org/wiki/Neovim" file="README.md":
+    cargo build -p toy-browser-host
+    TOY_BROWSER_HOST=$PWD/hosts/happy-dom/host.mjs nvim -u NONE --cmd 'set rtp+=nvim' --cmd 'set mouse=a showtabline=2' -c 'runtime plugin/toy_html.lua' -c 'ToyHtml {{ url }}' {{ file }}
 
 # Neovim drawn as HTML: the engine shows it here, and /tmp/nvim.html holds the
 # same page for a web browser.
 nvim-html *ARGS:
-    cargo build -p toy-browser-tui
+    cargo build -p toy-browser-host
     python3 nvim/client/nvim_html.py {{ ARGS }}
 
 # The same protocol without a test runner in the way.

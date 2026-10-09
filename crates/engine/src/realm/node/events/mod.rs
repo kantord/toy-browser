@@ -8,8 +8,7 @@
 //! `window` is a dispatch target and is not a node, so a target is named by
 //! string: a node id, or the name of a global target.
 
-mod activation;
-mod editing;
+use crate::behaviour::{activation, editing};
 mod keys;
 mod listeners;
 

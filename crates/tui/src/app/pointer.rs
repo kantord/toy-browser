@@ -107,6 +107,9 @@ impl App {
             self.logged.extend(emitted.console);
             self.navigation = self.navigation.take().or(emitted.navigation);
         }
+        if !down {
+            self.watch_address(false);
+        }
         self.changed();
     }
 
@@ -118,36 +121,89 @@ impl App {
         if let Ok(emitted) = emitted {
             self.logged.extend(emitted.console);
         }
+        if !down {
+            self.watch_address(false);
+        }
         self.changed();
     }
 
-    /// Where the link under this cell goes, as an absolute URL — `None` where
-    /// the cell is not inside an `<a href>`. What a host needs to offer "open
-    /// in a new tab" without the engine knowing what a tab is.
-    pub fn link_at(&mut self, col: u16, row: u16) -> Option<String> {
+    /// The row an anchor starts on — the element with this `id`, or the `<a>`
+    /// with this `name` — in a page shown whole. What a `#fragment` link scrolls to.
+    pub fn anchor_row(&mut self, name: &str) -> Option<u16> {
+        let name = name.replace('\\', "\\\\").replace('"', "\\\"");
+        let selector = format!("[id=\"{name}\"], a[name=\"{name}\"]");
+        let found = self
+            .browser
+            .query(&self.page, &selector)
+            .ok()?
+            .into_iter()
+            .next()?;
+        let top = self.browser.bounding_box(&self.page, &found).ok()??.y;
+        Some((top / self.cell.1).round().max(0.0) as u16)
+    }
+
+    /// What a cell is of: the element under it, and what that element and the
+    /// ones around it say — a link it is inside, a `data-key` a client stamped on
+    /// the markup to name it. `None` where there is nothing.
+    pub fn under(&mut self, col: u16, row: u16) -> Option<Under> {
         let at = self.at(col, row);
         let mut node = self.browser.hit_test(&self.page, at).ok()??;
+        let mut found = None;
         loop {
-            if let Some(href) = self.href_of(node) {
-                return Url::parse(self.url())
-                    .ok()?
-                    .join(&href)
-                    .ok()
-                    .map(String::from);
+            self.note(node, &mut found);
+            match self.browser.parent(&self.page, node).ok().flatten() {
+                Some(parent) => node = parent,
+                None => return found,
             }
-            node = self.browser.parent(&self.page, node).ok()??;
         }
     }
 
-    /// The `href` of this node if it is an `<a>`. Text has no tag, and is what
-    /// a cell usually lands on, so most nodes answer `None` and the caller
-    /// walks up.
-    fn href_of(&mut self, node: NodeId) -> Option<String> {
+    /// Adds what one element on the way up from the hit has to say. Text has no
+    /// tag and says nothing; the nearest element is what the cell is of.
+    fn note(&mut self, node: NodeId, found: &mut Option<Under>) {
         let element = Remote::Element(node);
-        let tag = self.browser.tag_name(&self.page, &element).ok()??;
-        if tag != "a" {
-            return None;
-        }
-        self.browser.attribute(&self.page, &element, "href").ok()?
+        let Ok(Some(tag)) = self.browser.tag_name(&self.page, &element) else {
+            return;
+        };
+        let mut attribute = |name: &str| {
+            self.browser
+                .attribute(&self.page, &element, name)
+                .ok()
+                .flatten()
+        };
+        let key = attribute("data-key");
+        let href = attribute("href").filter(|_| tag == "a");
+        let under = found.get_or_insert_with(|| Under {
+            node,
+            tag,
+            href: None,
+            key: None,
+        });
+        under.key = under.key.take().or(key);
+        under.href = under
+            .href
+            .take()
+            .or(href.and_then(|href| self.resolve(&href)));
     }
+
+    /// A link as an absolute URL, against the page it is on.
+    fn resolve(&self, href: &str) -> Option<String> {
+        Url::parse(self.url())
+            .ok()?
+            .join(href)
+            .ok()
+            .map(String::from)
+    }
+}
+
+/// What a cell is of: see [`App::under`].
+#[derive(Clone, Debug)]
+pub struct Under {
+    /// The engine's id for the element, the one a hit map is keyed by.
+    pub node: NodeId,
+    pub tag: String,
+    /// Where the link the element is inside goes, as an absolute URL.
+    pub href: Option<String>,
+    /// The nearest `data-key` attribute, going up.
+    pub key: Option<String>,
 }

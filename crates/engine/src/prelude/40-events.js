@@ -219,7 +219,10 @@
     const source = __dom.getAttribute(id, attribute);
     if (!source) return;
     try {
-      new Function("event", source).call(tb.wrap(id), event);
+      // Returning false is cancelling, as in `onclick="...; return false"`.
+      if (new Function("event", source).call(tb.wrap(id), event) === false) {
+        event.preventDefault();
+      }
     } catch (error) {
       __console.error(`${attribute} handler threw: ${error}`);
     }
