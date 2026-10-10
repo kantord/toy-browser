@@ -1,6 +1,8 @@
 # Somebody else's code, kept here
 
 `blitz-dom` and `blitz-html`, copied out of crates.io rather than depended on.
+Their Cargo packages are named `toy-browser-blitz-dom` and `toy-browser-blitz-html`
+(library names unchanged) so they can be published beside the rest of the workspace.
 
 | | |
 | --- | --- |

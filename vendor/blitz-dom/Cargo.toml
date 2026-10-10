@@ -12,7 +12,7 @@
 [package]
 edition = "2024"
 rust-version = "1.89.0"
-name = "blitz-dom"
+name = "toy-browser-blitz-dom"
 version = "0.3.0-beta.2"
 build = false
 autolib = false
@@ -20,7 +20,7 @@ autobins = false
 autoexamples = false
 autotests = false
 autobenches = false
-description = "Blitz DOM implementation"
+description = "Blitz DOM implementation, as forked for toy-browser (see vendor/README.md)"
 homepage = "https://github.com/dioxuslabs/blitz"
 documentation = "https://docs.rs/blitz-dom"
 readme = false

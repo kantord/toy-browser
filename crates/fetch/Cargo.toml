@@ -4,6 +4,8 @@ description = "One shared, thread-safe, cached place every byte is read from."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+readme = "README.md"
 
 [dependencies]
 ureq = { version = "3.4.0", default-features = false, features = ["rustls"] }

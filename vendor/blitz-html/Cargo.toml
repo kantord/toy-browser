@@ -12,7 +12,7 @@
 [package]
 edition = "2024"
 rust-version = "1.89.0"
-name = "blitz-html"
+name = "toy-browser-blitz-html"
 version = "0.3.0-beta.2"
 build = false
 autolib = false
@@ -20,7 +20,7 @@ autobins = false
 autoexamples = false
 autotests = false
 autobenches = false
-description = "Blitz HTML parser"
+description = "Blitz HTML parser, as forked for toy-browser (see vendor/README.md)"
 homepage = "https://github.com/dioxuslabs/blitz"
 documentation = "https://docs.rs/blitz-html"
 readme = false
@@ -40,6 +40,7 @@ name = "blitz_html"
 path = "src/lib.rs"
 
 [dependencies.blitz-dom]
+package = "toy-browser-blitz-dom"
 path = "../blitz-dom"
 version = "=0.3.0-beta.2"
 default-features = false

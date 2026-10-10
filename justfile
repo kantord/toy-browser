@@ -72,6 +72,10 @@ nvim url="https://en.wikipedia.org/wiki/Neovim" file="README.md":
     cargo build -p toy-browser-host
     nvim -u NONE --cmd 'set rtp+=nvim' --cmd 'set mouse=a showtabline=2' -c 'runtime plugin/toy_html.lua' -c 'ToyHtml {{ url }}' {{ file }}
 
+# Every dependency's licence against deny.toml (what a release may ship).
+licences:
+    cargo deny check licenses
+
 # The Neovim plugin against the real host, headless.
 nvim-test:
     cargo build -p toy-browser-host

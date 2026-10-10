@@ -25,6 +25,7 @@ default-members = ["crates/cli"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/kantord/toy-browser"
 
 # `cognitive_complexity` is a nursery lint, so nothing turns it on by default.
 # Asking for it here rather than in the hook means a plain `cargo clippy` sees
@@ -39,7 +40,7 @@ fn_params_excessive_bools = "warn"
 [workspace.dependencies]
 anyhow = "1.0.104"
 serde_json = "1.0.151"
-toy-browser-fetch = { path = "crates/fetch" }
-toy-browser-rasterizer = { path = "crates/rasterizer" }
-toy-browser-engine = { path = "crates/engine", default-features = false }
-toy-browser = { path = "crates/browser", default-features = false }
+toy-browser-fetch = { path = "crates/fetch", version = "0.1.0" }
+toy-browser-rasterizer = { path = "crates/rasterizer", version = "0.1.0" }
+toy-browser-engine = { path = "crates/engine", version = "0.1.0", default-features = false }
+toy-browser = { path = "crates/browser", version = "0.1.0", default-features = false }

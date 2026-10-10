@@ -647,64 +647,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blitz-dom"
-version = "0.3.0-beta.2"
-dependencies = [
- "accesskit 0.24.1",
- "anyrender",
- "app_units",
- "atomic_refcell",
- "bitflags 2.13.1",
- "blitz-traits",
- "color",
- "cssparser",
- "cursor-icon",
- "debug_timer",
- "euclid",
- "getrandom 0.2.17",
- "getrandom 0.3.4",
- "html-escape",
- "image",
- "keyboard-types",
- "kurbo",
- "linebender_resource_handle",
- "markup5ever",
- "objc2 0.6.4",
- "parley",
- "percent-encoding",
- "rayon",
- "selectors",
- "skrifa",
- "slotmap",
- "smallvec",
- "stylo",
- "stylo_dom",
- "stylo_static_prefs",
- "stylo_taffy",
- "stylo_traits",
- "svgtypes",
- "taffy",
- "thin-vec",
- "thread_local",
- "tracing",
- "url",
- "usvg",
- "web-time",
- "wuff",
-]
-
-[[package]]
-name = "blitz-html"
-version = "0.3.0-beta.2"
-dependencies = [
- "blitz-dom",
- "blitz-traits",
- "html5ever",
- "tracing",
- "xml5ever",
-]
-
-[[package]]
 name = "blitz-traits"
 version = "0.3.0-beta.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5654,8 +5596,6 @@ dependencies = [
  "anyhow",
  "app_units",
  "base64 0.22.1",
- "blitz-dom",
- "blitz-html",
  "blitz-traits",
  "cursor-icon",
  "euclid",
@@ -5665,12 +5605,72 @@ dependencies = [
  "serde_json",
  "skrifa",
  "stylo",
+ "toy-browser-blitz-dom",
+ "toy-browser-blitz-html",
  "toy-browser-engine",
  "toy-browser-fetch",
  "toy-browser-rasterizer",
  "ureq",
  "url",
  "xxhash-rust",
+]
+
+[[package]]
+name = "toy-browser-blitz-dom"
+version = "0.3.0-beta.2"
+dependencies = [
+ "accesskit 0.24.1",
+ "anyrender",
+ "app_units",
+ "atomic_refcell",
+ "bitflags 2.13.1",
+ "blitz-traits",
+ "color",
+ "cssparser",
+ "cursor-icon",
+ "debug_timer",
+ "euclid",
+ "getrandom 0.2.17",
+ "getrandom 0.3.4",
+ "html-escape",
+ "image",
+ "keyboard-types",
+ "kurbo",
+ "linebender_resource_handle",
+ "markup5ever",
+ "objc2 0.6.4",
+ "parley",
+ "percent-encoding",
+ "rayon",
+ "selectors",
+ "skrifa",
+ "slotmap",
+ "smallvec",
+ "stylo",
+ "stylo_dom",
+ "stylo_static_prefs",
+ "stylo_taffy",
+ "stylo_traits",
+ "svgtypes",
+ "taffy",
+ "thin-vec",
+ "thread_local",
+ "tracing",
+ "url",
+ "usvg",
+ "web-time",
+ "wuff",
+]
+
+[[package]]
+name = "toy-browser-blitz-html"
+version = "0.3.0-beta.2"
+dependencies = [
+ "blitz-traits",
+ "html5ever",
+ "toy-browser-blitz-dom",
+ "tracing",
+ "xml5ever",
 ]
 
 [[package]]
@@ -5708,13 +5708,13 @@ name = "toy-browser-engine"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "blitz-dom",
- "blitz-html",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
  "html5ever",
  "rquickjs",
  "serde_json",
+ "toy-browser-blitz-dom",
+ "toy-browser-blitz-html",
  "toy-browser-fetch",
  "xml5ever",
 ]

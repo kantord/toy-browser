@@ -4,11 +4,13 @@ description = "The engine as a process: HTML in, a grid of cells out, over newli
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+readme = "README.md"
 
 [dependencies]
 anyhow.workspace = true
 toy-browser.workspace = true
-toy-browser-tui = { path = "../tui", default-features = false }
+toy-browser-tui = { path = "../tui", version = "0.1.0", default-features = false }
 serde_json.workspace = true
 # SVG pictures are drawn to pixels here, the same crate the browser draws them with.
 resvg = "0.48.1"

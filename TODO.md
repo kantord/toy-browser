@@ -64,8 +64,8 @@ engine gives:  dirty cell regions + events for the host to handle
 ## Cross-cutting (later)
 
 - [x] Wide characters: the host drops the blank after a wide glyph (own width table, `grid/width.rs`); a run in a non-monospace face (field text) no longer loses letters that land in one cell. Ligatures do not arise: the grid forces a monospace face. Wide glyphs the layout gives no blank after stay a cell off.
-- [x] Vendored Blitz and licences audited (`docs/release.md`): same licence, headers complete, no GPL dependency, MPL-2.0 Stylo crates unmodified. Left for the owner: publish the forks under new names or upstream the change (crates.io rejects path dependencies).
-- [x] Names checked on crates.io (all free) and a proposal written (`docs/release.md`); the choice of stem and the first publish are the owner's
+- [x] Vendored Blitz and licences audited (`docs/release.md`): same licence, headers complete, no GPL dependency, MPL-2.0 Stylo crates unmodified. Decided: the forks are published under our own names (`toy-browser-blitz-*`), done in the manifests.
+- [x] Names checked on crates.io (all free) and a proposal written (`docs/release.md`); decided: keep `toy-browser-*`; the publish order and what is still needed are in `docs/release.md`
 
 ## Architecture idea: host-owned projection (after the basics work)
 

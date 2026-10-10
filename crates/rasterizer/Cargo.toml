@@ -4,6 +4,8 @@ description = "A picture as a value, and the two ways of writing one down: pixel
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+readme = "README.md"
 
 [features]
 default = ["daemon"]

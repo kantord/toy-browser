@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build, with and without the JavaScript interpreter
+        run: |
+          cargo build --workspace
+          cargo build -p toy-browser-host --no-default-features
+      - name: Test
+        run: cargo test --workspace
+      - name: Lint
+        run: cargo clippy --workspace --all-targets
+
+  licences:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses
+
+  nvim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+      - name: Neovim plugin against the real host
+        run: |
+          cargo build -p toy-browser-host
+          nvim -u NONE --headless -l nvim/tests/run.lua
