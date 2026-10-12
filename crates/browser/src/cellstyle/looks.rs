@@ -12,6 +12,7 @@
 //! alpha at all is `None`; partial alpha is flattened by ignoring it, since
 //! there is nothing behind to blend with.
 
+use style::color::{AbsoluteColor, ColorSpace};
 use style::computed_values::text_wrap_mode::T as Wrap;
 use style::computed_values::visibility::T as Visibility;
 use style::computed_values::white_space_collapse::T as Collapse;
@@ -20,14 +21,24 @@ use style::values::computed::text::TextAlign as Align;
 use style::values::computed::{FontStyle, TextDecorationLine};
 use toy_browser_cells::{Rgb, TextAlign, WhiteSpace};
 
+/// The four components of a colour in sRGB, whatever it was written in.
+///
+/// `raw_components` answers in the colour's *own* space: `oklch(0.14 0 285)`
+/// is `[0.14, 0, 285, 1]`, which read as red, green and blue is a vivid blue.
+/// Modern stylesheets use `oklch`, `lab`, `color-mix` and `color(display-p3 …)`
+/// freely, so every colour is converted before it is read as a channel.
+fn srgb(colour: &AbsoluteColor) -> [f32; 4] {
+    *colour.to_color_space(ColorSpace::Srgb).raw_components()
+}
+
 pub(super) fn foreground(style: &ComputedValues) -> Option<Rgb> {
-    let [red, green, blue, _] = *style.clone_color().raw_components();
+    let [red, green, blue, _] = srgb(&style.clone_color());
     Some(rgb(red, green, blue)).filter(|c| *c != Rgb(0, 0, 0))
 }
 
 pub(super) fn background(style: &ComputedValues) -> Option<Rgb> {
     let fill = style.resolve_color(&style.get_background().background_color);
-    let [red, green, blue, alpha] = *fill.raw_components();
+    let [red, green, blue, alpha] = srgb(&fill);
     (alpha > 0.0).then(|| rgb(red, green, blue))
 }
 

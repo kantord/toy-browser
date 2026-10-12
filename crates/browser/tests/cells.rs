@@ -144,3 +144,22 @@ fn hidden_breaks_and_rules() {
         "      boo\n next\n ──────────\n after"
     );
 }
+
+// Pins: colours written in other colour spaces are read as sRGB. The component
+// array of `oklch(0.14 0.005 285)` is `[0.14, 0.005, 285]`; read as red, green
+// and blue that was the vivid blue background simonkoeck.com showed in a
+// terminal instead of its near-black one.
+#[test]
+fn colours_in_other_spaces_are_converted_to_srgb() {
+    let html = "<body style='margin:0;background:oklch(0.14 0.005 285);color:oklch(0.98 0 0)'>x</body>";
+    let cell = |grid: &Grid| grid.cell(0, 0).expect("inside").style;
+    let style = cell(&page("oklch", html, 10));
+    let Some(Rgb(r, g, b)) = style.bg else {
+        panic!("a background was asked for");
+    };
+    assert!(r < 40 && g < 40 && b < 40, "near black, got {r} {g} {b}");
+    let Some(Rgb(r, g, b)) = style.fg else {
+        panic!("a light foreground was asked for");
+    };
+    assert!(r > 240 && g > 240 && b > 240, "near white, got {r} {g} {b}");
+}
