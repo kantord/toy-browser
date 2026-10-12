@@ -1,0 +1,23 @@
+[package]
+name = "toy-browser-cells"
+description = "A pure terminal-cell renderer: typed styled tree in, grid of cells out."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+publish = false
+
+[dependencies]
+# Standalone: only the algorithms the renderer maps onto, no CSS parsing.
+taffy = { version = "0.14.0", default-features = false, features = ["std", "taffy_tree", "flexbox", "block_layout"] }
+unicode-normalization = "0.1.25"
+unicode-segmentation = "1.13.3"
+unicode-width = "0.2.2"
+
+[dev-dependencies]
+html5ever = "0.39"
+markup5ever_rcdom = "0.39"
+
+[lints]
+workspace = true

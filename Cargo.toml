@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/fetch",
+    "crates/cells",
     "crates/rasterizer",
     "crates/engine",
     "crates/browser",
