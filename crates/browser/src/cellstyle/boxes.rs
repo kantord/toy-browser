@@ -7,11 +7,11 @@
 
 use style::properties::ComputedValues;
 use style::values::computed::length::NonNegativeLengthPercentageOrNormal;
-use style::values::computed::{BorderSideWidth, Margin, MaxSize, Size};
+use style::values::computed::{BorderSideWidth, Color, Margin, MaxSize, Size};
 use style::values::specified::border::BorderStyle;
 use toy_browser_cells::{Edges, Length, Spacing};
 
-use super::units::{Axis, border_cells, length, plain};
+use super::units::{Axis, border_cells, length, plain, spaced};
 
 pub(super) fn sizes(style: &ComputedValues, page: f32) -> [Length; 6] {
     let pos = style.get_position();
@@ -43,7 +43,7 @@ pub(super) fn margin(style: &ComputedValues, page: f32) -> Spacing {
     use style::values::generics::length::GenericMargin::{Auto, LengthPercentage as Fixed};
     let it = style.get_margin();
     let side = |value: &Margin, axis| match value {
-        Fixed(inner) => length(inner, axis, page),
+        Fixed(inner) => spaced(inner, axis, page),
         Auto => Length::Auto,
         _ => Length::Cells(0),
     };
@@ -58,24 +58,43 @@ pub(super) fn margin(style: &ComputedValues, page: f32) -> Spacing {
 pub(super) fn padding(style: &ComputedValues, page: f32) -> Spacing {
     let it = style.get_padding();
     Spacing {
-        top: length(&it.padding_top.0, Axis::Y, page),
-        right: length(&it.padding_right.0, Axis::X, page),
-        bottom: length(&it.padding_bottom.0, Axis::Y, page),
-        left: length(&it.padding_left.0, Axis::X, page),
+        top: spaced(&it.padding_top.0, Axis::Y, page),
+        right: spaced(&it.padding_right.0, Axis::X, page),
+        bottom: spaced(&it.padding_bottom.0, Axis::Y, page),
+        left: spaced(&it.padding_left.0, Axis::X, page),
     }
 }
 
-/// Any visible border is one cell wide or tall, whatever its pixel width.
+/// Any visible border is one cell wide or tall, whatever its pixel width. A
+/// transparent one is not visible: pages reserve room for a focus ring or a
+/// button's edge that way, and drawing it would box every such button.
 pub(super) fn border(style: &ComputedValues) -> Edges {
     let it = style.get_border();
-    let side = |width: &BorderSideWidth, line: BorderStyle| {
-        border_cells(width.0.to_f32_px(), !line.none_or_hidden())
+    let side = |width: &BorderSideWidth, line: BorderStyle, color: &Color| {
+        let seen = style.resolve_color(color).raw_components()[3] > 0.0;
+        border_cells(width.0.to_f32_px(), seen && !line.none_or_hidden())
     };
     Edges {
-        top: side(&it.border_top_width, it.border_top_style),
-        right: side(&it.border_right_width, it.border_right_style),
-        bottom: side(&it.border_bottom_width, it.border_bottom_style),
-        left: side(&it.border_left_width, it.border_left_style),
+        top: side(
+            &it.border_top_width,
+            it.border_top_style,
+            &it.border_top_color,
+        ),
+        right: side(
+            &it.border_right_width,
+            it.border_right_style,
+            &it.border_right_color,
+        ),
+        bottom: side(
+            &it.border_bottom_width,
+            it.border_bottom_style,
+            &it.border_bottom_color,
+        ),
+        left: side(
+            &it.border_left_width,
+            it.border_left_style,
+            &it.border_left_color,
+        ),
     }
 }
 

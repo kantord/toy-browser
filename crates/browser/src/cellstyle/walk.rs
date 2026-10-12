@@ -107,7 +107,7 @@ impl Walk<'_> {
         };
         let mut parts = Parts::default();
         self.sort(node, down, &mut parts);
-        table::assemble(el, parts, table::bordered(node))
+        table::assemble(el, parts, table::Rules::of(node))
     }
 
     /// What `node` hands its children, after marking it if it has focus.

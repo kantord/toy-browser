@@ -12,10 +12,10 @@ use taffy::prelude::{
     Style, TaffyAuto, TaffyZero, length, percent,
 };
 
-use crate::tracks;
 use crate::tree::{
     AlignItems, Computed, Display, Edges, FlexDirection, JustifyContent, Length, Spacing,
 };
+use crate::{flow, tracks};
 
 pub fn to_taffy(c: &Computed) -> Style {
     let mut style = Style {
@@ -45,6 +45,7 @@ pub fn to_taffy(c: &Computed) -> Style {
     style.margin = spacing(c.margin, auto_or);
     style.padding = spacing(c.padding, padded);
     style.border = rect(c.border, cells);
+    flow::apply(c, &mut style);
     style
 }
 

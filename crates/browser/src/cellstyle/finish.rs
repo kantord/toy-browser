@@ -1,6 +1,8 @@
 //! Elements whose box needs a touch after their style has been read: line
 //! breaks, rules, buttons and list items.
 //!
+//! - `<html>` and `<body>` never clip: a page that sets `overflow: hidden` there
+//!   means its viewport, which here is as tall as the content.
 //! - `<br>` is a newline in a `white-space: pre` inline, the only thing the
 //!   renderer treats as a forced break.
 //! - `<hr>` is a block with only a top border, which paints as one row of `─`.
@@ -28,6 +30,7 @@ pub(super) fn finish(el: &mut Element, marker: Option<&ListItemLayout>) {
 
 fn by_tag(el: &mut Element) {
     match el.tag.as_str() {
+        "html" | "body" => el.style.clip = false,
         "br" => line_break(el),
         "hr" => rule(el),
         "button" => {

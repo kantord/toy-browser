@@ -27,6 +27,7 @@
 //!
 //! What a `Computed` cannot say is out of scope on purpose: see the README.
 
+use crate::flow::{Clear, Float, Inset, Position};
 use crate::tracks::{Placement, Template};
 
 /// A 24-bit colour. `None` wherever a colour is optional means "leave the
@@ -205,6 +206,14 @@ pub struct Computed {
     /// `visibility: visible`. A hidden box keeps its space but paints nothing:
     /// no background, no border, and its text becomes blank cells.
     pub visible: bool,
+    /// Out of flow, see [`crate::flow`]. A floated or absolute box must
+    /// already be block-level (not `Inline`, not `atomic`).
+    pub float: Float,
+    pub clear: Clear,
+    pub position: Position,
+    pub inset: Inset,
+    /// `overflow: hidden | clip`: cut what is painted inside the padding box.
+    pub clip: bool,
     /// A replaced box shown as a picture, named by its source. The box is
     /// sized by `width` and `height` (the styler gives it whole cells) and
     /// paints nothing of its own; the grid records where it is, see
@@ -247,6 +256,11 @@ impl Default for Computed {
             white_space: WhiteSpace::Normal,
             text_align: TextAlign::Left,
             visible: true,
+            float: Float::None,
+            clear: Clear::None,
+            position: Position::Static,
+            inset: Inset::default(),
+            clip: false,
             picture: None,
         }
     }

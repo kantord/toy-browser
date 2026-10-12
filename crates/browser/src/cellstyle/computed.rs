@@ -11,10 +11,17 @@
 use style::properties::ComputedValues;
 use toy_browser_cells::Computed;
 
-use super::{boxes, flex, looks, tracks};
+use super::{boxes, flex, looks, outflow, tracks};
 
 /// `page` is the page's width in px, which a `calc()` is resolved against.
 pub(super) fn computed(style: &ComputedValues, page: f32) -> Computed {
+    let mut computed = inflow(style, page);
+    outflow::apply(style, page, &mut computed);
+    computed
+}
+
+/// Everything but what takes a box out of the flow.
+fn inflow(style: &ComputedValues, page: f32) -> Computed {
     let [width, height, min_width, min_height, max_width, max_height] = boxes::sizes(style, page);
     let (flex_grow, flex_shrink, flex_basis) = flex::factors(style, page);
     let (column_gap, row_gap) = boxes::gaps(style, page);
@@ -52,6 +59,6 @@ pub(super) fn computed(style: &ComputedValues, page: f32) -> Computed {
         white_space: looks::white_space(style),
         text_align: looks::text_align(style),
         visible: looks::visible(style),
-        picture: None,
+        ..Computed::default()
     }
 }

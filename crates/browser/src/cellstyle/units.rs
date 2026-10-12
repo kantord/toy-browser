@@ -7,7 +7,8 @@
 //! paragraph's `margin: 1em 0` becomes one blank row, a `padding: 0 1em` two
 //! columns.
 //!
-//! Everything floors. A length that is not a whole number of cells has to go
+//! Everything floors, except the space between things across the page (see
+//! `spaced`). A length that is not a whole number of cells has to go
 //! somewhere, and down is the one direction that never makes a layout wider
 //! than the page said it could be. The single exception is borders, which are
 //! rounded up to one cell, because a 1px hairline floors to nothing and a
@@ -65,11 +66,38 @@ pub(super) fn length(value: &LengthPercentage, axis: Axis, page: f32) -> Length 
     }
 }
 
+/// A margin, padding or gap. Across, a length rounds instead of flooring, so
+/// the 4px or 6px a page puts between inline items is a column and not
+/// nothing; sizes still floor, and so does everything down the page.
+pub(super) fn spaced(value: &LengthPercentage, axis: Axis, page: f32) -> Length {
+    match (value.unpack(), axis) {
+        (Unpacked::Length(px), Axis::X) => Length::Cells(
+            (px.px() / CELL_WIDTH)
+                .round()
+                .clamp(0.0, f32::from(u16::MAX)) as u16,
+        ),
+        _ => length(value, axis, page),
+    }
+}
+
 /// A length that has no percentage form in the cell tree (a gap): percentages
 /// count as nothing.
 pub(super) fn plain(value: &LengthPercentage, axis: Axis, page: f32) -> u16 {
-    match length(value, axis, page) {
+    match spaced(value, axis, page) {
         Length::Cells(n) => n,
         _ => 0,
     }
+}
+
+/// Like [`length`] but signed and in plain cells, for an offset that may be
+/// negative (`left: -9999px`). A percentage is a share of the page width and
+/// only across; one down has no basis and is `None`, like `auto`.
+pub(super) fn signed(value: &LengthPercentage, axis: Axis, page: f32) -> Option<i32> {
+    let px = match (value.unpack(), axis) {
+        (Unpacked::Length(px), _) => px.px(),
+        (Unpacked::Percentage(share), Axis::X) => share.0 * page,
+        (Unpacked::Calc(calc), Axis::X) => calc.resolve(CSSPixelLength::new(page)).px(),
+        _ => return None,
+    };
+    Some((px / axis.cell()).floor().clamp(-1e6, 1e6) as i32)
 }

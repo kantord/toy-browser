@@ -17,7 +17,7 @@
 //! into one of these. Painting is in DOM order, there is no `z-index`, and an
 //! element with `clip` set cuts what is painted inside its padding box.
 
-use taffy::prelude::{Dimension, LengthPercentageAuto, Rect, Style, TaffyAuto, length, percent};
+use taffy::prelude::{LengthPercentageAuto, Rect, Style, TaffyAuto, length, percent};
 use taffy::{Overflow, Point};
 
 use crate::tree::Computed;
@@ -71,9 +71,8 @@ pub(crate) fn apply(c: &Computed, style: &mut Style) {
         Clear::Both => taffy::Clear::Both,
     };
     style.position = match c.position {
-        Position::Static => taffy::Position::Relative,
-        Position::Relative => taffy::Position::Relative,
         Position::Absolute => taffy::Position::Absolute,
+        Position::Static | Position::Relative => taffy::Position::Relative,
     };
     let side = |n: Option<i32>| n.map_or(LengthPercentageAuto::AUTO, |n| length(n as f32));
     style.inset = Rect {
@@ -103,7 +102,7 @@ pub(crate) fn avoid(style: &mut Style) {
         return;
     }
     contain(style);
-    if style.min_size.width == Dimension::AUTO {
+    if style.min_size.width == LengthPercentageAuto::AUTO {
         style.min_size.width = percent(0.5);
     }
 }
@@ -111,4 +110,9 @@ pub(crate) fn avoid(style: &mut Style) {
 /// Whether the box floats.
 pub(crate) fn floated(c: &Computed) -> bool {
     c.float != Float::None
+}
+
+/// Floated or absolute: a box that is its own block even among inline text.
+pub(crate) fn out_of_flow(c: &Computed) -> bool {
+    floated(c) || c.position == Position::Absolute
 }

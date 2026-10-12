@@ -14,19 +14,20 @@
 //!         +-- cells, each with grid-column / grid-row
 //! ```
 //!
-//! What is not CSS tables: `border-collapse` and `table-layout` are ignored, so
-//! each cell draws its own border and neighbours' borders sit side by side;
-//! `border-spacing` and `vertical-align` are ignored; and the columns share
+//! What is not CSS tables: `table-layout` is ignored, and without
+//! `border-collapse: collapse` (see `collapse`) each cell draws its own border
+//! and neighbours' borders sit side by side; `border-spacing` and `vertical-align` are ignored; and the columns share
 //! the width by the grid's rules, which are close to the table algorithm
 //! (content between its min and max, surplus shared out) and not identical.
 
 use std::collections::HashSet;
 
+use super::{collapse, outflow};
 use blitz_dom::{Node as Dom, local_name};
 use style::properties::ComputedValues;
 use style::values::specified::box_::{DisplayInside, DisplayOutside};
 use toy_browser_cells::{
-    AlignItems, Computed, Display, Edges, Element, Node, Placement, Template, Track,
+    AlignItems, Computed, Display, Edges, Element, Length, Node, Placement, Template, Track,
 };
 
 /// What a box is within a table, by its `display`.
@@ -96,27 +97,49 @@ impl Parts {
     }
 }
 
-/// Whether `<table border=...>` asks for lines: browsers draw the table's box
-/// and every cell's. Blitz does not apply that hint, so it is applied here.
-pub(super) fn bordered(node: &Dom) -> bool {
-    node.attr(local_name!("border"))
-        .is_some_and(|width| width.trim() != "0")
+/// What the page asks of a table's lines.
+pub(super) struct Rules {
+    /// `<table border=...>`: browsers draw the table's box and every cell's.
+    /// Blitz does not apply that hint, so it is applied here.
+    pub drawn: bool,
+    /// `border-collapse: collapse`, see `collapse`.
+    pub collapsed: bool,
+}
+
+impl Rules {
+    pub fn of(node: &Dom) -> Self {
+        use style::computed_values::border_collapse::T as Border;
+        let collapsed = node
+            .primary_styles()
+            .is_some_and(|s| s.clone_border_collapse() == Border::Collapse);
+        Self {
+            drawn: node
+                .attr(local_name!("border"))
+                .is_some_and(|width| width.trim() != "0"),
+            collapsed,
+        }
+    }
 }
 
 /// The table `table` (whose own box it is) with these parts.
-pub(super) fn assemble(mut table: Element, parts: Parts, lines: bool) -> Element {
+pub(super) fn assemble(mut table: Element, parts: Parts, rules: Rules) -> Element {
     let Parts { captions, rows, .. } = parts;
     let (mut cells, columns) = place(rows);
-    if lines {
+    if rules.drawn {
         outline(&mut table, &mut cells);
     }
+    if rules.collapsed {
+        collapse::merge(&mut cells);
+    }
     // Cells with no border of their own would run into each other, so they get
-    // a column between them; a border already separates its cell.
+    // a column between them; a border already separates its cell, and a rule
+    // under a row (a border on any side) must run on across the columns.
     let ruled = cells
         .iter()
-        .any(|cell| matches!(cell, Node::Element(c) if c.style.border.left > 0));
+        .any(|cell| matches!(cell, Node::Element(c) if c.style.border != Edges::default()));
     let kept = inherited(&table.style);
     let mut style = table.style;
+    let outer = outflow::lifted(&mut style, kept.clone());
     style.display = Display::Grid;
     style.grid_columns = vec![Template::Single(Track::AUTO); columns];
     style.column_gap = u16::from(!ruled);
@@ -126,23 +149,30 @@ pub(super) fn assemble(mut table: Element, parts: Parts, lines: bool) -> Element
         children: cells,
         key: table.key,
     };
-    let wrap = Computed {
-        display: Display::Flex,
-        align_items: AlignItems::Start,
-        ..kept.clone()
-    };
-    let wrap = Element {
-        tag: "table-wrap".to_owned(),
-        style: wrap,
-        children: vec![Node::Element(Box::new(grid))],
-        key: table.key,
-    };
+    let wrap = shrunk(kept, grid);
     let above = captions.into_iter().map(|c| Node::Element(Box::new(c)));
     Element {
         tag: "table-box".to_owned(),
-        style: kept,
+        style: outer,
         children: above.chain([Node::Element(Box::new(wrap))]).collect(),
         key: table.key,
+    }
+}
+
+/// The row that lets the table shrink to its content instead of filling the
+/// width of the box it is in.
+fn shrunk(kept: Computed, grid: Element) -> Element {
+    let key = grid.key;
+    let style = Computed {
+        display: Display::Flex,
+        align_items: AlignItems::Start,
+        ..kept
+    };
+    Element {
+        tag: "table-wrap".to_owned(),
+        style,
+        children: vec![Node::Element(Box::new(grid))],
+        key,
     }
 }
 
@@ -205,6 +235,10 @@ fn place(rows: Vec<Element>) -> (Vec<Node>, usize) {
                 line: i16::try_from(r + 1).ok(),
                 span: tall as u16,
             };
+            // A cell's width is a hint to its column, not the size of its box:
+            // `width: 1%` on a header cell would otherwise shrink the box
+            // while its column stays wide, leaving text outside its borders.
+            cell.style.width = Length::Auto;
             if cell.style.background.is_none() {
                 cell.style.background = row.style.background;
             }

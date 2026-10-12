@@ -48,29 +48,90 @@ impl Painter<'_> {
         if let Some(key) = item.key {
             self.grid.claim(rect, key);
         }
-        if item.style.visible {
-            self.decorate(item, rect);
-        }
         // Taffy's own resolved insets: a percentage padding is only a number
         // once the containing block's width is known.
         let inset = |pad: f32, border: f32| (pad + border).round() as i64;
-        let (left, top, right) = (
+        let (left, top, right, bottom) = (
             inset(layout.padding.left, layout.border.left),
             inset(layout.padding.top, layout.border.top),
             inset(layout.padding.right, layout.border.right),
+            inset(layout.padding.bottom, layout.border.bottom),
         );
+        let content = Rect {
+            x: x + left,
+            y: y + top,
+            w: (rect.w - left - right).max(0),
+            h: (rect.h - top - bottom).max(0),
+        };
+        if item.style.visible && !self.hollow(item, content) {
+            self.decorate(item, rect);
+        }
+        let outer = item.style.clip.then(|| self.confine(rect, layout));
+        self.contents(item, content, (x, y));
+        if let Some(outer) = outer {
+            self.grid.clip_to(outer);
+        }
+    }
+
+    /// Clip to the padding box of `rect`, inside whatever clip is already on.
+    /// Returns the clip to restore.
+    fn confine(&mut self, rect: Rect, layout: &taffy::Layout) -> Option<Rect> {
+        let b = layout.border;
+        let edge = |n: f32| n.round() as i64;
+        let padding_box = Rect {
+            x: rect.x + edge(b.left),
+            y: rect.y + edge(b.top),
+            w: rect.w - edge(b.left) - edge(b.right),
+            h: rect.h - edge(b.top) - edge(b.bottom),
+        };
+        let none = Rect {
+            w: 0,
+            h: 0,
+            ..padding_box
+        };
+        let outer = self.grid.clip_to(None);
+        let inner = outer.map_or(Some(padding_box), |o| o.meet(padding_box));
+        self.grid.clip_to(Some(inner.unwrap_or(none)));
+        outer
+    }
+
+    fn contents(&mut self, item: &Item, content: Rect, at: (i64, i64)) {
         if let Some(index) = item.paragraph {
-            let content = Rect {
-                x: x + left,
-                y: y + top,
-                w: (rect.w - left - right).max(0),
-                h: 0,
-            };
-            self.text(&self.paragraphs[index], content, item.style.text_align);
+            let line = Rect { h: 0, ..content };
+            self.text(&self.paragraphs[index], line, item.style.text_align);
         }
         for child in &item.children {
-            self.item(child, (x, y));
+            self.item(child, at);
         }
+    }
+
+    /// A boxed outline with nothing in it and no room for anything: the empty
+    /// `<div>` a page leaves with a border, which would draw two rows of line
+    /// around nothing. A rule (one border side) is not that, and neither is
+    /// anything with text, a picture or a background in it to see.
+    fn hollow(&self, item: &Item, content: Rect) -> bool {
+        let Edges {
+            top,
+            right,
+            bottom,
+            left,
+        } = item.style.border;
+        let sides = [top, right, bottom, left]
+            .iter()
+            .filter(|n| **n > 0)
+            .count();
+        let pinched = content.w == 0 || content.h == 0;
+        pinched && sides >= 2 && !self.shows(item)
+    }
+
+    /// Whether the box or anything inside it paints more than a border.
+    fn shows(&self, item: &Item) -> bool {
+        let text = item
+            .paragraph
+            .is_some_and(|i| !self.paragraphs[i].atoms.is_empty());
+        text || item.style.background.is_some()
+            || item.style.picture.is_some()
+            || item.children.iter().any(|c| self.shows(c))
     }
 
     fn decorate(&mut self, item: &Item, rect: Rect) {

@@ -23,15 +23,18 @@
 //! first: typed values and focus (`LaidOut::focused`), the hovered element
 //! (`focus`), and pictures (`picture`) are fetched through the same cache the
 //! pixel path draws from. See `units` for the cell size and
-//! the rounding, `flex` for what `display` values are folded together, and
-//! `table` and `tracks` for the two that become a grid.
+//! the rounding, `flex` for what `display` values are folded together,
+//! `outflow` for floats, positioning and clipping, and `table` (with
+//! `collapse`) and `tracks` for the two that become a grid.
 
 mod boxes;
+mod collapse;
 mod computed;
 mod finish;
 mod flex;
 mod focus;
 mod looks;
+mod outflow;
 mod picture;
 mod replaced;
 mod table;

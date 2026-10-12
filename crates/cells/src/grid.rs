@@ -69,6 +69,8 @@ pub struct Grid {
     /// of its own is left showing in it.
     rects: HashMap<u64, Rect>,
     pictures: Vec<Picture>,
+    /// Writes outside this rectangle are dropped, see [`Self::clip_to`].
+    clip: Option<Rect>,
 }
 
 impl Grid {
@@ -79,7 +81,19 @@ impl Grid {
             cells: vec![Cell::default(); width * height],
             rects: HashMap::new(),
             pictures: Vec::new(),
+            clip: None,
         }
+    }
+
+    /// Confine writes to `rect` as well as the grid (`overflow: hidden`),
+    /// returning the clip it replaces so the caller can put it back.
+    pub fn clip_to(&mut self, rect: Option<Rect>) -> Option<Rect> {
+        std::mem::replace(&mut self.clip, rect)
+    }
+
+    fn open(&self, x: i64, y: i64) -> bool {
+        let inside = (0..self.width as i64).contains(&x) && (0..self.height as i64).contains(&y);
+        inside && self.clip.is_none_or(|c| c.contains(x, y))
     }
 
     pub fn width(&self) -> usize {
@@ -96,8 +110,8 @@ impl Grid {
     }
 
     fn cell_mut(&mut self, x: i64, y: i64) -> Option<&mut Cell> {
-        let inside = (0..self.width as i64).contains(&x) && (0..self.height as i64).contains(&y);
-        inside.then(|| &mut self.cells[y as usize * self.width + x as usize])
+        self.open(x, y)
+            .then(|| &mut self.cells[y as usize * self.width + x as usize])
     }
 
     /// The pictures placed on the page, in paint order.
@@ -107,6 +121,9 @@ impl Grid {
 
     /// Notes that a picture fills `rect`.
     pub fn place_picture(&mut self, rect: Rect, source: std::sync::Arc<str>) {
+        if self.clip.is_some_and(|c| c.meet(rect).is_none()) {
+            return;
+        }
         self.pictures.push(Picture { rect, source });
     }
 
@@ -167,9 +184,7 @@ impl Grid {
     /// Write one cluster of `width` (1 or 2) columns. A `None` background in
     /// `style` keeps whatever background is already there.
     pub fn put(&mut self, x: i64, y: i64, symbol: &str, width: usize, style: CellStyle) {
-        let fits =
-            x >= 0 && y >= 0 && (y as usize) < self.height && (x as usize + width) <= self.width;
-        if !fits {
+        if !self.open(x, y) || !self.open(x + width as i64 - 1, y) {
             return;
         }
         if style.hidden {
@@ -222,4 +237,23 @@ pub struct Rect {
     pub y: i64,
     pub w: i64,
     pub h: i64,
+}
+
+impl Rect {
+    fn contains(&self, x: i64, y: i64) -> bool {
+        (self.x..self.x + self.w).contains(&x) && (self.y..self.y + self.h).contains(&y)
+    }
+
+    /// The overlap of two rectangles, if they share any cell.
+    pub fn meet(&self, other: Rect) -> Option<Rect> {
+        let (x0, y0) = (self.x.max(other.x), self.y.max(other.y));
+        let x1 = (self.x + self.w).min(other.x + other.w);
+        let y1 = (self.y + self.h).min(other.y + other.h);
+        (x1 > x0 && y1 > y0).then_some(Rect {
+            x: x0,
+            y: y0,
+            w: x1 - x0,
+            h: y1 - y0,
+        })
+    }
 }

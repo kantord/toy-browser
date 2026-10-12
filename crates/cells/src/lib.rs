@@ -11,6 +11,7 @@
 //! contract with the styler and the README for what is left out.
 
 mod atoms;
+mod flow;
 mod grid;
 mod layout;
 mod mapping;
@@ -20,6 +21,7 @@ mod tracks;
 pub mod tree;
 mod wrap;
 
+pub use flow::{Clear, Float, Inset, Position};
 pub use grid::{Cell, CellStyle, Grid, Picture, Rect};
 pub use tracks::{Placement, Template, Track, TrackSize};
 pub use tree::{

@@ -19,6 +19,7 @@ use taffy::compute_leaf_layout;
 use taffy::prelude::{AvailableSpace, NodeId, Size, TaffyTree};
 
 use crate::atoms;
+use crate::flow;
 use crate::grid::CellStyle;
 use crate::mapping::to_taffy;
 use crate::text::Builder;
@@ -130,10 +131,17 @@ impl Planner {
         }
         let children: Vec<Item> = runs.iter().filter_map(|run| self.run(el, run)).collect();
         let ids: Vec<NodeId> = children.iter().map(|c| c.id).collect();
-        let id = self
-            .taffy
-            .new_with_children(to_taffy(&el.style), &ids)
-            .expect("taffy");
+        let mut style = to_taffy(&el.style);
+        if runs
+            .iter()
+            .any(|run| matches!(run, Run::Block(b) if flow::floated(&b.style)))
+        {
+            flow::contain(&mut style);
+            children
+                .iter()
+                .for_each(|c| self.restyle(c.id, flow::avoid));
+        }
+        let id = self.taffy.new_with_children(style, &ids).expect("taffy");
         Item {
             id,
             key: el.key,
@@ -141,6 +149,12 @@ impl Planner {
             paragraph: None,
             children,
         }
+    }
+
+    fn restyle(&mut self, id: NodeId, change: fn(&mut taffy::Style)) {
+        let mut style = self.taffy.style(id).expect("taffy").clone();
+        change(&mut style);
+        self.taffy.set_style(id, style).expect("taffy");
     }
 
     fn run(&mut self, owner: &Element, run: &Run) -> Option<Item> {
@@ -212,17 +226,18 @@ fn partition(children: &[Node]) -> Vec<Run<'_>> {
 fn push_node<'a>(runs: &mut Vec<Run<'a>>, node: &'a Node) {
     match node {
         Node::Element(el) if el.style.display == Display::None => {}
-        Node::Element(el)
-            if !el.style.atomic
-                && matches!(
-                    el.style.display,
-                    Display::Block | Display::Flex | Display::Grid
-                ) =>
-        {
-            runs.push(Run::Block(el));
-        }
+        Node::Element(el) if is_block(&el.style) => runs.push(Run::Block(el)),
         _ => push_inline(runs, node),
     }
+}
+
+/// A box of its own among its siblings, not a piece of their text.
+fn is_block(style: &Computed) -> bool {
+    let shown = matches!(
+        style.display,
+        Display::Block | Display::Flex | Display::Grid
+    );
+    flow::out_of_flow(style) || (shown && !style.atomic)
 }
 
 fn push_inline<'a>(runs: &mut Vec<Run<'a>>, node: &'a Node) {

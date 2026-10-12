@@ -12,8 +12,8 @@
 //!   `table`; the parts of a table (rows, cells, row groups, captions) are
 //!   `Block` too, which is what they are outside a table. Table columns and
 //!   column groups paint nothing and are `None`.
-//! - `contents` is `Inline`, `list-item` is `Block`, and `float` / `position`
-//!   are ignored.
+//! - `contents` is `Inline`, `list-item` is `Block`. `float` and `position`
+//!   are read in `outflow`.
 //! - `row-reverse` / `column-reverse` / `wrap-reverse` lose their reversal.
 
 use style::properties::ComputedValues;

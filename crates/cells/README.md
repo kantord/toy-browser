@@ -30,6 +30,11 @@ present or absent. The renderer never cascades and never converts units.
   the styler maps them onto this grid.
 - Margins and padding as `Spacing`: cells, percentages of the containing
   block, and `auto` on a margin (`margin: 0 auto`).
+- Floats (`float`, `clear`) on Taffy's block layout, and `position:
+  absolute` (inset in cells, may be negative) and `relative`. A paragraph
+  beside a float is narrowed as a whole, see `flow.rs`. `overflow: hidden`
+  clips painting to the padding box; an empty box that is only a border (no
+  text, picture or background, no room inside) is not drawn.
 - Inline-level boxes (`Computed::atomic`: `inline-block`, `inline-flex`) as
   units in a wrapping row, see `atoms.rs` for what that gives up (no sharing a
   line with the middle of a sentence, no baseline alignment).
@@ -38,11 +43,16 @@ present or absent. The renderer never cascades and never converts units.
 
 - The styler itself lives in `toy-browser` (`cellstyle`): real cascade to
   typed tree.
-- Floats, absolute and fixed positioning, `z-index`, `transform`. Content that
-  relies on them stacks in flow order.
+- Per-line float exclusion: text wraps to the slot at the top of its
+  paragraph, not line by line around the float (nor around an inline float
+  in the middle of a paragraph). An absolute box is placed against its
+  parent, not the nearest positioned ancestor. `fixed` and `sticky` are the
+  styler's to fold into these; `z-index` (paint order is DOM order) and
+  `transform`.
 - Grid named lines and areas, `grid-auto-*`, subgrid, masonry.
-- Table-specific layout: `border-collapse`, `table-layout`, `border-spacing`,
-  `vertical-align`. The styler's table grid shares width by the grid rules.
+- Table-specific layout: `table-layout`, `border-spacing`, `vertical-align`
+  (`border-collapse` is the styler's: it drops the borders two cells would
+  draw twice). The styler's table grid shares width by the grid rules.
 - `calc()` sizes whose basis is not the page: the styler resolves them against
   the page width, so one nested in a narrower box is an overestimate.
 - Bidi reordering and UAX#14 line breaking (breaks happen at spaces only).

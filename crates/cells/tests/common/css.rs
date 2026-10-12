@@ -6,8 +6,8 @@
 //! engine. Unknown properties are ignored, the way a browser would.
 
 use toy_browser_cells::{
-    AlignItems, Computed, Display, Edges, FlexDirection, JustifyContent, Length, Placement, Rgb,
-    Spacing, Template, TextAlign, Track, TrackSize, WhiteSpace,
+    AlignItems, Clear, Computed, Display, Edges, FlexDirection, Float, Inset, JustifyContent,
+    Length, Placement, Position, Rgb, Spacing, Template, TextAlign, Track, TrackSize, WhiteSpace,
 };
 
 pub fn apply_declarations(c: &mut Computed, style: &str) {
@@ -19,7 +19,10 @@ pub fn apply_declarations(c: &mut Computed, style: &str) {
 }
 
 fn apply(c: &mut Computed, prop: &str, v: &str) {
-    let _ = apply_flex(c, prop, v) || apply_box(c, prop, v) || apply_text(c, prop, v);
+    let _ = apply_flex(c, prop, v)
+        || apply_box(c, prop, v)
+        || apply_flow(c, prop, v)
+        || apply_text(c, prop, v);
 }
 
 fn apply_flex(c: &mut Computed, prop: &str, v: &str) -> bool {
@@ -66,6 +69,52 @@ fn apply_box(c: &mut Computed, prop: &str, v: &str) -> bool {
         _ => return false,
     }
     true
+}
+
+fn apply_flow(c: &mut Computed, prop: &str, v: &str) -> bool {
+    match prop {
+        "float" => c.float = float(v),
+        "clear" => c.clear = clear(v),
+        "position" => c.position = position(v),
+        "overflow" => c.clip = v == "hidden",
+        "top" | "right" | "bottom" | "left" => inset(&mut c.inset, prop, v.parse().ok()),
+        _ => return false,
+    }
+    true
+}
+
+fn float(v: &str) -> Float {
+    match v {
+        "left" => Float::Left,
+        "right" => Float::Right,
+        _ => Float::None,
+    }
+}
+
+fn clear(v: &str) -> Clear {
+    match v {
+        "left" => Clear::Left,
+        "right" => Clear::Right,
+        "both" => Clear::Both,
+        _ => Clear::None,
+    }
+}
+
+fn position(v: &str) -> Position {
+    match v {
+        "absolute" => Position::Absolute,
+        "relative" => Position::Relative,
+        _ => Position::Static,
+    }
+}
+
+fn inset(into: &mut Inset, side: &str, cells: Option<i32>) {
+    match side {
+        "top" => into.top = cells,
+        "right" => into.right = cells,
+        "bottom" => into.bottom = cells,
+        _ => into.left = cells,
+    }
 }
 
 fn apply_text(c: &mut Computed, prop: &str, v: &str) -> bool {
