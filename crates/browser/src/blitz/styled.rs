@@ -29,7 +29,9 @@ pub fn style(
     resources: &toy_browser_fetch::Resources,
 ) -> Result<LaidOut> {
     let (mut document, files) = parsed(html, sheets, viewport, base, resources);
-    restyle(&mut document);
+    // Not styled before the reads are in: an imported stylesheet that lands on
+    // its reader's thread holds the style lock for writing, and taking
+    // delivery while it does panics (`already mutably borrowed`).
     delivered(&mut document, &files);
     Ok(LaidOut {
         document,

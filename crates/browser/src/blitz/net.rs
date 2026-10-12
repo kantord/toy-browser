@@ -61,7 +61,20 @@ pub struct Flight {
     /// from "everything has already arrived"; this only ever goes up.
     done: AtomicUsize,
     landed: Condvar,
-    lock: Mutex<()>,
+    /// Bytes that have been read and are waiting for [`Files::settle`] to hand
+    /// them to their handler.
+    ///
+    /// A handler writes to the document's style lock, which does not block: a
+    /// second thread taking it while one holds it panics. So handlers run on
+    /// the thread that owns the document, and the reader threads only read.
+    lock: Mutex<Vec<Arrived>>,
+}
+
+/// A read that has finished, and what is to be done with it.
+struct Arrived {
+    handler: Box<dyn NetHandler>,
+    url: String,
+    bytes: Bytes,
 }
 
 impl Flight {
@@ -73,6 +86,12 @@ impl Flight {
         self.count.fetch_sub(1, Ordering::SeqCst);
         self.done.fetch_add(1, Ordering::SeqCst);
         let _held = self.lock.lock();
+        self.landed.notify_all();
+    }
+
+    fn arrived(&self, arrived: Arrived) {
+        let mut waiting = self.lock.lock().expect("nothing else panics holding this");
+        waiting.push(arrived);
         self.landed.notify_all();
     }
 }
@@ -100,21 +119,46 @@ impl Files {
         self.outstanding.count.load(Ordering::SeqCst) > 0
     }
 
-    /// Waits until nothing is still on its way, or until patience runs out.
+    /// Hands what has been read to its handlers, and waits until nothing is
+    /// still on its way, or until patience runs out.
+    ///
+    /// A handler may ask for more (a stylesheet's `@import`), which is in
+    /// flight before it returns, so this does not stop early.
     pub fn settle(&self) {
-        let mut held = self
-            .outstanding
+        let flight = &self.outstanding;
+        let mut held = flight
             .lock
             .lock()
-            .expect("nothing else holds this");
-        while self.outstanding.count.load(Ordering::SeqCst) > 0 {
-            let (again, timed_out) = self
-                .outstanding
+            .expect("nothing else panics holding this");
+        loop {
+            let waiting = std::mem::take(&mut *held);
+            drop(held);
+            let ran = !waiting.is_empty();
+            for Arrived {
+                handler,
+                url,
+                bytes,
+            } in waiting
+            {
+                handler.bytes(url, bytes);
+                flight.landed();
+            }
+            held = flight
+                .lock
+                .lock()
+                .expect("nothing else panics holding this");
+            if ran || !held.is_empty() {
+                continue;
+            }
+            if flight.count.load(Ordering::SeqCst) == 0 {
+                return;
+            }
+            let (again, timed_out) = flight
                 .landed
                 .wait_timeout(held, PATIENCE)
-                .expect("nothing else holds this");
+                .expect("nothing else panics holding this");
             held = again;
-            if timed_out.timed_out() {
+            if timed_out.timed_out() && held.is_empty() {
                 return;
             }
         }
@@ -129,14 +173,18 @@ impl NetProvider for Files {
         let started = std::thread::Builder::new()
             .name(format!("read {}", url.as_str()))
             .spawn(move || {
-                if let Some(bytes) = read(&resources, &url) {
-                    // The url as it was actually read, which is what the
-                    // handler resolves the resource's own references against —
-                    // an imported stylesheet names its images relative to
-                    // itself, not to the document.
-                    handler.bytes(url.to_string(), Bytes::from(bytes));
-                }
-                flight.landed();
+                let Some(bytes) = read(&resources, &url) else {
+                    return flight.landed();
+                };
+                // The url as it was actually read, which is what the
+                // handler resolves the resource's own references against —
+                // an imported stylesheet names its images relative to
+                // itself, not to the document.
+                flight.arrived(Arrived {
+                    handler,
+                    url: url.to_string(),
+                    bytes: Bytes::from(bytes),
+                });
             });
         if started.is_err() {
             self.outstanding.landed();

@@ -157,6 +157,9 @@ impl NetHandler for ResourceHandler<StylesheetHandler> {
         // NOTE(Nico): I don't *think* external stylesheets should have HTML entities escaped
         // let escaped_css = html_escape::decode_html_entities(css);
 
+        // tb+++ the media features Stylo lacks, answered as "no preference"; see `contrast.rs`.
+        let css = &crate::contrast::without_unknown_contrast(css);
+        // tb---
         let sheet = Stylesheet::from_str(
             css,
             self.data.source_url.clone().into(),
@@ -261,6 +264,9 @@ impl NetHandler for ResourceHandler<NestedStylesheetHandler> {
         // NOTE(Nico): I don't *think* external stylesheets should have HTML entities escaped
         // let escaped_css = html_escape::decode_html_entities(css);
 
+        // tb+++ the media features Stylo lacks, answered as "no preference"; see `contrast.rs`.
+        let css = &crate::contrast::without_unknown_contrast(css);
+        // tb---
         let sheet = ServoArc::new(Stylesheet::from_str(
             css,
             UrlExtraData(self.data.url.clone()),

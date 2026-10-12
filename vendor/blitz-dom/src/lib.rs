@@ -85,6 +85,9 @@ mod url;
 pub use stylo_to_kurbo::resolve_2d_transform;
 
 pub mod net;
+// tb+++ new: see `contrast.rs`.
+mod contrast;
+// tb---
 pub mod util;
 
 #[cfg(feature = "accessibility")]

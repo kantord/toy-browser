@@ -1147,8 +1147,11 @@ impl BaseDocument {
     }
 
     pub fn make_stylesheet(&self, css: impl AsRef<str>, origin: Origin) -> DocumentStyleSheet {
+        // tb+++ the media features Stylo lacks, answered as "no preference"; see `contrast.rs`.
+        let css = crate::contrast::without_unknown_contrast(css.as_ref());
+        // tb---
         let data = Stylesheet::from_str(
-            css.as_ref(),
+            &css,
             self.url.url_extra_data(),
             origin,
             ServoArc::new(self.guard.wrap(MediaList::empty())),
