@@ -152,12 +152,11 @@ pub fn frame(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use toy_browser_tui::app::{App, Layout};
+    use toy_browser_tui::app::App;
 
     #[test]
     fn a_frame_carries_whole_clusters() {
         let mut app = App::blank(20, 3, false, toy_browser::Scheme::Light).expect("an app");
-        app.set_layout(Layout::Cells).expect("cells");
         app.load_markup("<p>é 👍🏽 ❤️</p>", "file:///t.html")
             .expect("markup");
         let grid = app.render().expect("painted");
@@ -171,7 +170,6 @@ mod tests {
     #[test]
     fn a_transparent_frame_leaves_the_default_colours_to_the_client() {
         let mut app = App::blank(20, 3, false, toy_browser::Scheme::Light).expect("an app");
-        app.set_layout(Layout::Cells).expect("cells");
         app.load_markup("<p>plain</p>", "file:///t.html")
             .expect("markup");
         let grid = app.render().expect("painted");

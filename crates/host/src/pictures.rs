@@ -119,7 +119,7 @@ fn base64(bytes: &[u8]) -> String {
 mod tests {
     use super::{Announced, base64};
     use toy_browser::{Images, Scheme};
-    use toy_browser_tui::app::{App, Layout};
+    use toy_browser_tui::app::App;
 
     #[test]
     fn a_picture_in_cells_mode_is_announced_once_scaled_to_its_cells() {
@@ -128,7 +128,6 @@ mod tests {
             "/../../tests/fixtures/noise.png"
         );
         let mut app = App::blank(40, 20, false, Scheme::Light).expect("an app");
-        app.set_layout(Layout::Cells).expect("cells");
         app.set_images(Images::Real);
         app.load_markup(&format!("<img src='file://{file}'>"), "file:///t.html")
             .expect("markup");

@@ -7,8 +7,7 @@
 //! instead of the page.
 //!
 //! No zoom: a window's wheel-and-ctrl zoom exists to keep a picture sharp
-//! while it grows, and a character has no sharpness to keep. A terminal that
-//! wants a bigger page is given a bigger [`GRID`] instead.
+//! while it grows, and a character has no sharpness to keep.
 
 mod cells;
 mod hosting;
@@ -16,54 +15,32 @@ mod pointer;
 mod scroll;
 mod shared;
 
-pub use cells::Layout;
 pub use hosting::Focused;
 pub use pointer::{Hover, Under};
 pub use shared::{Shared, shared_browser};
 
 use anyhow::Result;
-use toy_browser::{Monospace, PageId, Resources, Scheme, Viewport};
+use toy_browser::{CELL_WIDTH, PageId, Resources, Scheme, Viewport};
 
-use crate::grid::{self, Grid};
-
-/// The text grid this front end forces on every page — see
-/// `toy_browser::Monospace`. `font_size` and `line_height` are what the page
-/// is told outright; a cell's width is answered by [`calibrate::cell`],
-/// since CSS has no property for how wide a character is.
-const GRID: Monospace = Monospace {
-    font_size: 16,
-    line_height: 18,
-};
+use crate::grid::Grid;
 
 /// A page, and everything needed to show a screenful of it as cells.
 pub struct App {
     browser: Shared,
     page: PageId,
-    /// How many CSS pixels one cell covers, across and down — [`GRID`],
-    /// measured.
-    cell: (f32, f32),
-    layout: Layout,
-    /// In cells mode, the whole page laid out in cells, kept until the page or
-    /// the width changes.
+    /// The whole page laid out in cells, kept until the page or the width
+    /// changes.
     flow: Option<toy_browser::cells::Grid>,
-    /// In cells mode, the bytes of the pictures the page has, by name.
+    /// The bytes of the pictures the page has, by name.
     shown: std::collections::HashMap<
         toy_browser::rasterizer::Digest,
         toy_browser::rasterizer::Picture,
     >,
     cols: u16,
     rows: u16,
-    /// How far the window has been moved over the page, in CSS pixels — the
-    /// same quantity `window::Open::scrolled` keeps, for the same reason.
-    scrolled: (f32, f32),
-    /// How far the page reaches, kept until something that could change it
-    /// does. Costs a Scene to work out; see `window/acts.rs::settle`.
-    reaches: Option<(f32, f32)>,
-    /// The page's Scene, kept across scrolling: moving the window over a page
-    /// does not change what the page looks like, only which part is painted.
-    /// Costs ~20ms to rebuild on a long page, which was most of a scroll.
-    scene: Option<toy_browser::Scene>,
-    /// The page's revision when `scene` was last dropped: what lets an event
+    /// How far the window has been moved over the page, in columns and rows.
+    scrolled: (usize, usize),
+    /// The page's revision when the layout was last dropped: what lets an event
     /// that changed nothing leave the grid alone.
     revision: u64,
     /// The grid last painted, kept until the page or the scroll changes.
@@ -76,7 +53,7 @@ pub struct App {
     /// showing, or once anything has changed enough that the position might
     /// no longer mean what it did.
     hover: Option<(u16, u16, Hover)>,
-    /// In cells mode, the element the pointer is over: when it changes the
+    /// The element the pointer is over: when it changes the
     /// page is styled again, for its `:hover` rules.
     hovered: Option<toy_browser::NodeId>,
     scheme: Scheme,
@@ -116,21 +93,15 @@ impl App {
 
     /// As [`Self::blank`], in a browser other pages are open in too.
     pub fn blank_in(browser: Shared, cols: u16, rows: u16, scheme: Scheme) -> Result<Self> {
-        let layout = Layout::from_env();
-        let cell = layout.cell(&mut browser.borrow_mut())?;
         let page = browser.borrow_mut().new_page()?;
         let app = Self {
             browser,
             page,
-            cell,
-            layout,
             flow: None,
             shown: std::collections::HashMap::new(),
             cols,
             rows,
-            scrolled: (0.0, 0.0),
-            reaches: None,
-            scene: None,
+            scrolled: (0, 0),
             revision: 0,
             grid: None,
             paints: 0,
@@ -156,7 +127,7 @@ impl App {
             .borrow_mut()
             .load_markup(&self.page, markup, base)
             .map_err(|error| anyhow::anyhow!("{error}"))?;
-        self.scrolled = (0.0, 0.0);
+        self.scrolled = (0, 0);
         self.watch_address(true);
         self.changed();
         Ok(())
@@ -176,7 +147,7 @@ impl App {
             .borrow_mut()
             .navigate(&self.page, url)
             .map_err(|error| anyhow::anyhow!("{error}"))?;
-        self.scrolled = (0.0, 0.0);
+        self.scrolled = (0, 0);
         self.watch_address(true);
         self.changed();
         Ok(())
@@ -185,7 +156,7 @@ impl App {
     /// Makes the grid as tall as the page, so the host can scroll it itself.
     pub fn show_whole(&mut self, whole: bool) {
         self.whole = whole;
-        self.scrolled.1 = 0.0;
+        self.scrolled.1 = 0;
         self.grid = None;
     }
 
@@ -205,27 +176,11 @@ impl App {
 
     fn viewport(&self) -> Viewport {
         Viewport {
-            width: (f32::from(self.cols) * self.cell.0).round() as u32,
+            width: (f32::from(self.cols) * CELL_WIDTH).round() as u32,
             height: None,
             zoom: Viewport::NORMAL,
             scheme: self.scheme,
-            monospace: Some(GRID),
         }
-    }
-
-    pub fn resized(&mut self, cols: u16, rows: u16) {
-        if self.layout == Layout::Cells {
-            return self.resized_cells(cols, rows);
-        }
-        let same = (self.cols, self.rows) == (cols, rows);
-        self.cols = cols;
-        self.rows = rows;
-        let viewport = self.viewport();
-        if same && viewport == self.browser.borrow_mut().viewport(&self.page) {
-            return;
-        }
-        self.browser.borrow_mut().set_viewport(&self.page, viewport);
-        self.changed();
     }
 
     /// As [`Self::changed`], for an event that may well have changed nothing:
@@ -239,10 +194,8 @@ impl App {
     /// Whatever last happened may have moved on the page, on screen, or both.
     fn changed(&mut self) {
         self.revision = self.browser.borrow_mut().revision(&self.page);
-        self.scene = None;
         self.flow = None;
         self.grid = None;
-        self.reaches = None;
         self.hover = None;
     }
 
@@ -260,18 +213,8 @@ impl App {
     /// The screenful of the page as it stands, painting it again only if
     /// scrolling, a click or a key has left the last one stale.
     pub fn render(&mut self) -> Result<&Grid> {
-        if self.grid.is_none() && self.layout == Layout::Cells {
-            self.grid = Some(self.paint_cells()?);
-            self.paints += 1;
-        }
         if self.grid.is_none() {
-            let rows = self.grid_rows();
-            if self.scene.is_none() {
-                self.scene = Some(self.browser.borrow_mut().scene_for(&self.page)?);
-            }
-            let scene = self.scene.as_ref().expect("just built");
-            let painted = grid::paint(scene, self.cell, self.scrolled, self.cols, rows);
-            self.grid = Some(painted);
+            self.grid = Some(self.paint_cells()?);
             self.paints += 1;
         }
         Ok(self.grid.as_ref().expect("just painted"))

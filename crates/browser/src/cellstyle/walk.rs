@@ -22,7 +22,7 @@ use super::computed::computed;
 use super::finish::finish;
 use super::table::{self, Part, Parts};
 use super::units::CELL_WIDTH;
-use super::{Env, focus, picture, replaced};
+use super::{Env, focus, inline, picture, replaced};
 use crate::blitz::keyed;
 use toy_browser_cells::{Computed, Display, Element, Node as Cell};
 
@@ -91,6 +91,7 @@ impl Walk<'_> {
             key: down.owner,
         };
         finish(&mut el, data.list_item_data.as_deref());
+        inline::tidy(node, &mut el, picture.is_some());
         if let Some(boxed) = picture {
             picture::apply(&mut el, boxed);
         }

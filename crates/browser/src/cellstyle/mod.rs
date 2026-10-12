@@ -33,6 +33,7 @@ mod computed;
 mod finish;
 mod flex;
 mod focus;
+mod inline;
 mod looks;
 mod outflow;
 mod picture;
@@ -74,7 +75,7 @@ impl Browser {
             .base_url(page)
             .map_or_else(|| "about:blank".to_owned(), |url| url.to_string());
         let run_scripts = self.pages.get(page).is_none_or(|held| held.run_scripts);
-        let sheets = crate::rules::sheets(run_scripts, None, self.images);
+        let sheets = crate::rules::sheets(run_scripts);
         let viewport = Viewport {
             width: u32::from(width) * units::CELL_WIDTH as u32,
             height: None,

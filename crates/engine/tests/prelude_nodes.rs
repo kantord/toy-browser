@@ -272,3 +272,21 @@ fn clone_node_produces_a_different_wrapper() {
     );
     assert_eq!(result, json!([false, false, "P"]));
 }
+
+/// example.org's script does `body.prepend(p)` with `p` already the body's
+/// first child, which is inserting a node before itself: a no-op in the DOM,
+/// and a panic in the tree underneath when it looked for the node's slot
+/// after detaching it.
+#[test]
+fn a_node_inserted_before_itself_stays_where_it_is() {
+    let (mut engine, session) = page(TREE);
+
+    holds(
+        &mut engine,
+        &session,
+        "(() => { const first = document.body.children[0]; \
+         document.body.prepend(first); \
+         document.body.insertBefore(first, first); \
+         return document.body.children[0] === first; })()",
+    );
+}

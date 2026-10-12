@@ -2,12 +2,11 @@
 //! values, focus, hover, the colour scheme and real pictures.
 
 use toy_browser::Scheme;
-use toy_browser_tui::app::{App, Layout};
+use toy_browser_tui::app::App;
 use toy_browser_tui::grid::Grid;
 
 fn shown(markup: &str, cols: u16, rows: u16) -> App {
     let mut app = App::blank(cols, rows, false, Scheme::Light).expect("an app");
-    app.set_layout(Layout::Cells).expect("cells mode");
     app.leave_navigation(true);
     app.load_markup(markup, "file:///t/page.html")
         .expect("markup");

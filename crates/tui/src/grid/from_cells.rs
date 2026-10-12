@@ -6,10 +6,8 @@
 //! teaching each of them a second type.
 //!
 //! A wide cluster is a symbol and then a continuation in `cells`; here it is
-//! its first character and then a blank, which is what `marks.rs` leaves after
-//! a wide glyph and what `Cell::is_wide` tells a reader to skip. The marks
-//! after the first character of a cluster (a variation selector, a
-//! combining accent) are dropped.
+//! its first character and then a blank, which is what `Cell::is_wide` tells a
+//! reader to skip.
 
 use toy_browser::cells;
 use toy_browser::rasterizer::Digest;
@@ -27,7 +25,6 @@ fn cell(from: &cells::Cell) -> Cell {
         more: None,
         fg: rgb(style.fg, INK),
         bg: rgb(style.bg, PAPER),
-        hit: None,
         style: Style {
             bold: style.bold,
             italic: style.italic,
@@ -44,8 +41,8 @@ fn cell(from: &cells::Cell) -> Cell {
 ///
 /// `digests` names the bytes of each of the page's pictures, in its order, or
 /// says they could not be had. A picture the window shows any of is noted on
-/// the grid like the pixel path does (see `pictures.rs`): every cell of its box
-/// in the window is a slice of it, numbered from the box's own corner, so a
+/// the grid (see `pictures.rs`): every cell of its box in
+/// the window is a slice of it, numbered from the box's own corner, so a
 /// picture cut off by the window keeps the right part.
 pub fn slice(page: &cells::Grid, top: usize, rows: u16, digests: &[Option<Digest>]) -> Grid {
     let cols = page.width() as u16;

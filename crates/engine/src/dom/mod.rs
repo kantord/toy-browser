@@ -219,9 +219,14 @@ impl Dom {
             .clear_attribute(ids::of(id), attribute_name(name));
     }
 
-    /// Inserts `node` before `anchor`, which must have a parent.
+    /// Inserts `node` before `anchor`, which must have a parent. A node before
+    /// itself is already where it would go, and is left alone: blitz detaches
+    /// the node first and then cannot find the anchor it just detached.
     #[cfg(feature = "quickjs")]
     pub fn insert_before(&self, node: usize, anchor: usize) {
+        if node == anchor {
+            return;
+        }
         self.touched();
         let mut doc = self.doc.borrow_mut();
         let mut mutator = doc.mutate();

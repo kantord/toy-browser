@@ -91,7 +91,7 @@ fn act(app: &mut App, command: &Value) {
             app.keyed(true, key, code, held);
             app.keyed(false, key, code, held);
         }
-        _ => app.scroll(0.0, command["rows"].as_f64().unwrap_or(0.0) as f32),
+        _ => app.scroll(0, command["rows"].as_i64().unwrap_or(0) as i32),
     }
 }
 

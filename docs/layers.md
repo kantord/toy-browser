@@ -157,14 +157,11 @@ talks to any of them. See `docs/accessibility.md`.
 `UnsupportedScheme` or `NotFound`; the words a client sees are its protocol's
 business.
 
-**A `Viewport` can force a `Monospace` grid onto every element's text.**
-`rules.rs` turns it into a user-agent rule — `font-family`, `font-size`,
-`line-height`, `letter-spacing` and `word-spacing`, all `!important` — added
-to `lay_out`'s own `sheets`, the same seam `noscript`'s fallback rule already
-used. Being a field of the Viewport is what makes it a cascade input: a page
-laid out for its own fonts has to be laid out again once one is forced. Only
-`tui` asks for one; a page nobody asked to grid still measures its own fonts
-exactly as it always did.
+**The terminal is laid out by `cellstyle`, not by Blitz's layout.** `Browser::cells`
+runs Blitz for parsing and the cascade only, reads each element's computed
+style into a typed tree in whole cells, and hands it to `toy-browser-cells`
+(`crates/cells`), which runs Taffy standalone in those units. See
+`docs/adr/0014-the-terminal-lays-out-in-cells.md`.
 
 ## cli — front ends
 
@@ -190,23 +187,12 @@ answers to a different input system end to end — crossterm's events rather
 than winit's — and shares nothing with the window front end but `browser`
 itself, the same way `cli` shares nothing with it but that.
 
-**It measures text in character units, not pixels rescaled into them.**
-`app.rs` forces a `Monospace` grid onto every page it opens; `calibrate.rs`
-answers what that grid's cell actually comes to, in real pixels, by loading a
-two-character probe under the same grid and reading back how far apart they
-landed — CSS has a property for `line-height` but none for how wide a
-character is, so that half is measured rather than asked for. Once every
-element's text is the same size everywhere, a real position and a cell
-boundary are the same thing, and `grid.rs` divides by the cell size once
-instead of reconciling neighbours that used to disagree — see its own
-`glyphs` for what disagreeing looked like, and why it no longer needs to.
-
-Past that, it replaces one step only: where the window front end rasterizes a
-Scene to pixels, this paints it onto a grid of character cells, each one a
-character, a foreground and a background. Everything above that step is
-unchanged: the same `Browser`, the same pointer and keyboard calls, the same
-Scene. `Mark::Image` is left undrawn and a `Fill`'s corners are always
-square, which is the whole of what a cell cannot hold that a pixel can.
+**It lays a page out in character cells, not pixels rescaled into them.**
+`Browser::cells` returns the whole page as a grid of cells (see the `browser`
+section and ADR 0014), `grid/from_cells.rs` cuts the window out of it, and the
+scroll position is integer rows and columns. A click is a cell looked up in the
+page's own grid, so no position is ever divided by a cell size. The Scene, the
+rasterizer and the window front end are not involved.
 
 Arrow keys, Page Up/Down, Home and End move the window over the page instead
 of reaching the DOM — nothing in this codebase scrolls a document from the

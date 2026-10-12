@@ -2,12 +2,11 @@
 //! and clicked by row and column, with no pixels anywhere.
 
 use toy_browser::Scheme;
-use toy_browser_tui::app::{App, Layout};
+use toy_browser_tui::app::App;
 use toy_browser_tui::grid::Grid;
 
 fn shown(markup: &str, cols: u16, rows: u16) -> App {
     let mut app = App::blank(cols, rows, false, Scheme::Light).expect("an app");
-    app.set_layout(Layout::Cells).expect("cells mode");
     app.leave_navigation(true);
     app.load_markup(markup, "file:///t/page.html")
         .expect("markup");
@@ -89,12 +88,12 @@ fn a_click_on_plain_text_navigates_nowhere() {
 #[test]
 fn scrolling_clamps_to_the_rows_of_the_page() {
     let mut app = shown(&lines(30), 20, 5);
-    app.scroll(0.0, 1000.0);
+    app.scroll(0, 1000);
     let rows = rows_of(&mut app);
     assert_eq!(rows.iter().rfind(|row| !row.is_empty()).unwrap(), "line 29");
     assert_eq!(rows.len(), 5);
 
-    app.scroll(0.0, -1000.0);
+    app.scroll(0, -1000);
     assert!(rows_of(&mut app).contains(&"line 0".to_owned()));
 }
 
@@ -102,7 +101,7 @@ fn scrolling_clamps_to_the_rows_of_the_page() {
 fn a_page_down_moves_by_whole_rows() {
     let mut app = shown(&lines(30), 20, 5);
     let before = rows_of(&mut app);
-    app.scroll(0.0, app.page_rows());
+    app.scroll(0, app.page_rows());
     let after = rows_of(&mut app);
     // One row of overlap: the last row seen is the first now.
     assert_eq!(before.last(), after.first());

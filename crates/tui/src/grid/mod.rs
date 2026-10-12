@@ -1,34 +1,19 @@
-//! A Scene, painted onto a grid of character cells instead of pixels.
+//! A page as a grid of character cells.
 //!
-//! No fonts, no shaping, no antialiasing: a cell is as wide and as tall as
-//! every other one, so where a Mark lands is a division and a floor rather
-//! than anything a rasterizer would call measuring. What a cell holds is
-//! exactly what the goal asked for and nothing past it — a character, an
-//! ink, a paper — so a picture is only noted (which cells, which slice of it:
-//! see `pictures.rs`) and a `Fill`'s corners are always square.
-//!
-//! This file is the grid itself: what a cell is, and what the whole of one
-//! holds before anything has been painted onto it. `marks.rs` is where a
-//! Scene's Marks turn into writes against it — split out because the two
-//! change for different reasons, the way `svg.rs` and `shapes.rs` do in
-//! `crates/rasterizer`: this moves when a cell gains a new thing to hold,
-//! that when a new kind of Mark needs painting.
-
-use std::collections::BTreeMap;
-
-use toy_browser::rasterizer::Digest;
+//! A cell holds what a terminal can show and nothing past it: a grapheme
+//! cluster, an ink, a paper, bold, italic, underline. A picture is only noted
+//! (which cells, which slice of it: see `pictures.rs`). The cells come from
+//! `toy_browser::cells`; `from_cells.rs` pours a window onto a laid-out page
+//! into this type, which the host, the terminal drawer and the Neovim plugin
+//! all read.
 
 mod cluster;
-mod faces;
 mod from_cells;
-mod glyphs;
-mod marks;
 mod pictures;
 pub mod placeholder;
 mod width;
 
 pub use from_cells::slice as from_cells;
-pub use marks::paint;
 pub use pictures::{Placed, Slice};
 pub use width::is_wide;
 
@@ -50,17 +35,6 @@ pub struct Cell {
     pub more: Option<Box<str>>,
     pub fg: Rgb,
     pub bg: Rgb,
-    /// Where a click on this cell should land in the document, screen-relative
-    /// (scroll not yet added back in). `None` means the cell's own centre is
-    /// the best guess there is — true of every `Fill`, and of a glyph only
-    /// where a `Monospace` grid was not forced onto the page that painted it.
-    ///
-    /// Kept per cell, and not simply trusted to be the centre, for the reason
-    /// `marks.rs::glyphs`'s own comment gives: forcing the grid is what makes
-    /// a real position and a cell's centre agree, and the one page that skips
-    /// it, or a font whose hinting nudges a glyph by a fraction of a pixel, is
-    /// what this is the insurance against.
-    pub hit: Option<(f32, f32)>,
     pub style: Style,
     /// Set where a picture was drawn: which slice of it this cell shows.
     pub pic: Option<Slice>,
@@ -81,17 +55,10 @@ pub struct Grid {
     pub cols: u16,
     pub rows: u16,
     cells: Vec<Cell>,
-    /// Thin horizontal lines seen while painting, as `(first col, end col, row)`.
-    /// Resolved onto characters once everything is painted, since a line can
-    /// be drawn before or after the text it sits under.
-    rules: Vec<(u16, u16, u16)>,
-    /// How each face the Scene holds is set, worked out once before painting.
-    looks: BTreeMap<Digest, Style>,
     pictures: Vec<Placed>,
 }
 
-/// What the page is painted on. See `window/blit.rs`'s own `PAPER` for the
-/// pixel path's equivalent.
+/// What the page is painted on, and the ink on it, where it says nothing else.
 const PAPER: Rgb = Rgb {
     r: 255,
     g: 255,
@@ -106,7 +73,6 @@ impl Grid {
             more: None,
             fg: INK,
             bg: PAPER,
-            hit: None,
             style: Style::default(),
             pic: None,
         };
@@ -114,8 +80,6 @@ impl Grid {
             cols,
             rows,
             cells: vec![cell; usize::from(cols) * usize::from(rows)],
-            rules: Vec::new(),
-            looks: BTreeMap::new(),
             pictures: Vec::new(),
         }
     }
@@ -127,32 +91,6 @@ impl Grid {
 
     pub fn cell(&self, col: u16, row: u16) -> &Cell {
         &self.cells[usize::from(row) * usize::from(self.cols) + usize::from(col)]
-    }
-
-    /// Where a click on this cell should land, screen-relative — `None` past
-    /// the grid's own edge as well as where nothing more precise was painted.
-    pub fn hit(&self, col: u16, row: u16) -> Option<(f32, f32)> {
-        if col >= self.cols || row >= self.rows {
-            return None;
-        }
-        self.cell(col, row).hit
-    }
-
-    /// Puts each noted line on the characters it lies under: in its own row, or
-    /// the one above, since an underline sits near the baseline and can round
-    /// either way. Cells with nothing to underline are left alone.
-    fn underline_text(&mut self) {
-        for (from, to, row) in std::mem::take(&mut self.rules) {
-            let text_row = [row, row.saturating_sub(1)]
-                .into_iter()
-                .find(|&r| (from..to).any(|c| self.at_mut(c, r).is_some_and(|x| x.ch != ' ')));
-            let Some(text_row) = text_row else { continue };
-            for col in from..to {
-                if let Some(cell) = self.at_mut(col, text_row).filter(|c| c.ch != ' ') {
-                    cell.style.underline = true;
-                }
-            }
-        }
     }
 
     pub(super) fn at_mut(&mut self, col: u16, row: u16) -> Option<&mut Cell> {

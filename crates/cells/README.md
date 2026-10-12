@@ -1,6 +1,6 @@
 # toy-browser-cells
 
-A pure terminal-cell renderer. Prototype.
+A pure terminal-cell renderer: the layout every terminal page in toy-browser goes through.
 
 ```
 HTML + stylesheets --(1) styler--> typed styled tree --(2) cell renderer--> cells

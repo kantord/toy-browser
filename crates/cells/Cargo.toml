@@ -6,7 +6,8 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 readme = "README.md"
-publish = false
+keywords = ["terminal", "layout", "text-browser", "unicode"]
+categories = ["command-line-interface", "text-processing"]
 
 [dependencies]
 # Standalone: only the algorithms the renderer maps onto, no CSS parsing.

@@ -4,9 +4,9 @@
 //! Split from `mod.rs`, which keeps what a page *is* and how it is shown; this
 //! changes when the input vocabulary does.
 
-use toy_browser::{CursorIcon, Emitted, Held, NodeId, Point, Remote, Url};
+use toy_browser::{Held, NodeId, Remote, Url};
 
-use super::{App, Layout};
+use super::App;
 
 /// The two shapes worth telling a terminal's own text cursor to become.
 ///
@@ -27,72 +27,7 @@ pub enum Hover {
     Editable,
 }
 
-impl Hover {
-    fn of(icon: Option<CursorIcon>) -> Option<Self> {
-        match icon? {
-            CursorIcon::Pointer => Some(Self::Clickable),
-            CursorIcon::Text => Some(Self::Editable),
-            _ => None,
-        }
-    }
-}
-
 impl App {
-    /// Where in the document a click on this cell lands.
-    ///
-    /// The grid's own recorded [`hit`](crate::grid::Grid::hit) point when there is
-    /// one — the real position of whatever character was actually painted
-    /// here, which for a wide or a narrow font is not the cell's own centre —
-    /// and that centre otherwise, for a cell nothing more precise painted.
-    fn at(&mut self, col: u16, row: u16) -> Point {
-        // Painted if it is not, so a cell is mapped by where its glyph really
-        // is: any change drops the grid, and the middle of a cell can be
-        // outside the text that was drawn in it.
-        let _ = self.render();
-        let (x, y) = self
-            .grid
-            .as_ref()
-            .and_then(|grid| grid.hit(col, row))
-            // A glyph's recorded position is its top-left corner, which sits
-            // exactly on the edge of whatever element starts there and can
-            // fall just outside it: the middle of the cell is safely inside.
-            .map(|(x, y)| (x + self.cell.0 / 2.0, y + self.cell.1 / 2.0))
-            .unwrap_or_else(|| self.cell_centre(col, row));
-        Point {
-            x: x + self.scrolled.0,
-            y: y + self.scrolled.1,
-        }
-    }
-
-    fn cell_centre(&self, col: u16, row: u16) -> (f32, f32) {
-        (
-            (f32::from(col) + 0.5) * self.cell.0,
-            (f32::from(row) + 0.5) * self.cell.1,
-        )
-    }
-
-    /// The pointer arriving at a cell — through the same hover and pointer
-    /// calls `window/acts.rs::moved` makes. What a window does with the
-    /// cursor icon this also gets back, [`Hover::of`] turns into the one
-    /// thing a terminal can be told instead — see `main.rs::redrawn`.
-    pub fn moved(&mut self, col: u16, row: u16) {
-        if self.layout == Layout::Cells {
-            return self.moved_cells(col, row);
-        }
-        let at = self.at(col, row);
-        let Ok(hovering) = self.browser.borrow_mut().hover(&self.page, at) else {
-            return;
-        };
-        if let Ok(emitted) = self.browser.borrow_mut().pointer_move(&self.page, at) {
-            self.logged.extend(emitted.console);
-        }
-        self.hover = Hover::of(hovering.cursor).map(|shape| (col, row, shape));
-        if hovering.moved {
-            self.scene = None;
-            self.grid = None;
-        }
-    }
-
     /// Where the pointer is, and which shape the terminal's own cursor
     /// should stand in there for — `None` where the page under it asked for
     /// nothing worth showing.
@@ -101,11 +36,7 @@ impl App {
     }
 
     pub fn clicked(&mut self, down: bool, col: u16, row: u16) {
-        let emitted = match self.layout {
-            Layout::Cells => self.press_cells(down, col, row),
-            Layout::Pixels => self.press_pixels(down, col, row),
-        };
-        if let Ok(emitted) = emitted {
+        if let Ok(emitted) = self.press_cells(down, col, row) {
             self.logged.extend(emitted.console);
             self.navigation = self.navigation.take().or(emitted.navigation);
         }
@@ -113,14 +44,6 @@ impl App {
             self.watch_address(false);
         }
         self.changed_if_revised();
-    }
-
-    fn press_pixels(&mut self, down: bool, col: u16, row: u16) -> anyhow::Result<Emitted> {
-        let at = self.at(col, row);
-        match down {
-            true => self.browser.borrow_mut().pointer_down(&self.page, at),
-            false => self.browser.borrow_mut().pointer_up(&self.page, at),
-        }
     }
 
     pub fn keyed(&mut self, down: bool, key: &str, code: &str, held: Held) {
@@ -158,23 +81,14 @@ impl App {
         let Remote::Element(node) = found else {
             return None;
         };
-        Some(self.start_of(node).ok()?.1)
-    }
-
-    /// The element covering a cell, as the engine knows it.
-    fn node_at(&mut self, col: u16, row: u16) -> Option<NodeId> {
-        if self.layout == Layout::Cells {
-            return self.cells_node(col, row);
-        }
-        let at = self.at(col, row);
-        self.browser.borrow_mut().hit_test(&self.page, at).ok()?
+        Some(self.start_of(node).1)
     }
 
     /// What a cell is of: the element under it, and what that element and the
     /// ones around it say — a link it is inside, a `data-key` a client stamped on
     /// the markup to name it. `None` where there is nothing.
     pub fn under(&mut self, col: u16, row: u16) -> Option<Under> {
-        let mut node = self.node_at(col, row)?;
+        let mut node = self.cells_node(col, row)?;
         let mut found = None;
         loop {
             self.note(node, &mut found);

@@ -8,7 +8,7 @@
 //! crossterm's events rather than winit's — and shares nothing with the
 //! window front end except the browser crate both are built on.
 //!
-//! See `grid.rs` for the render path, `app.rs` for what a click, a move or a
+//! See `grid/` for the cells a page becomes, `app/` for what a click, a move or a
 //! key does, and `input.rs` for crossterm's vocabulary translated into the
 //! DOM's.
 
@@ -26,11 +26,11 @@ use toy_browser_tui::{app, input, terminal};
 use app::App;
 
 /// How many rows one notch of the wheel, or one press of an arrow key, moves.
-const LINE: f32 = 3.0;
+const LINE: i32 = 3;
 
 /// Far enough past any page's reach that Home and End land on an edge of it,
 /// once [`App::scroll`] clamps the result back inside.
-const JUMP: f32 = 1_000_000.0;
+const JUMP: i32 = 1_000_000;
 
 fn scheme(name: &str) -> Result<Scheme, String> {
     name.parse()
@@ -50,20 +50,12 @@ struct Cli {
     /// Which colour scheme the page is shown in.
     #[arg(long, value_parser = scheme, default_value = "light")]
     scheme: Scheme,
-
-    /// Lay pages out in whole cells instead of pixels (also
-    /// `TOY_BROWSER_LAYOUT=cells`).
-    #[arg(long)]
-    cells: bool,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let (cols, rows) = crossterm::terminal::size().context("reading the terminal's size")?;
     let mut app = App::open(&cli.url, cols, rows, !cli.no_scripts, cli.scheme)?;
-    if cli.cells {
-        app.set_layout(app::Layout::Cells)?;
-    }
 
     let screen = terminal::Screen::entered()?;
     let result = run(&mut app);
@@ -131,14 +123,14 @@ fn type_key(app: &mut App, key: &KeyEvent, name: &str, code: &str) {
 
 fn scroll_by(app: &mut App, scroll: input::Scroll) {
     match scroll {
-        input::Scroll::Up => app.scroll(0.0, -LINE),
-        input::Scroll::Down => app.scroll(0.0, LINE),
-        input::Scroll::Left => app.scroll(-LINE, 0.0),
-        input::Scroll::Right => app.scroll(LINE, 0.0),
-        input::Scroll::PageUp => app.scroll(0.0, -app.page_rows()),
-        input::Scroll::PageDown => app.scroll(0.0, app.page_rows()),
-        input::Scroll::Home => app.scroll(0.0, -JUMP),
-        input::Scroll::End => app.scroll(0.0, JUMP),
+        input::Scroll::Up => app.scroll(0, -LINE),
+        input::Scroll::Down => app.scroll(0, LINE),
+        input::Scroll::Left => app.scroll(-LINE, 0),
+        input::Scroll::Right => app.scroll(LINE, 0),
+        input::Scroll::PageUp => app.scroll(0, -app.page_rows()),
+        input::Scroll::PageDown => app.scroll(0, app.page_rows()),
+        input::Scroll::Home => app.scroll(0, -JUMP),
+        input::Scroll::End => app.scroll(0, JUMP),
     }
 }
 
@@ -147,10 +139,10 @@ fn handle_mouse(app: &mut App, mouse: MouseEvent) {
         MouseEventKind::Moved | MouseEventKind::Drag(_) => app.moved(mouse.column, mouse.row),
         MouseEventKind::Down(MouseButton::Left) => clicked(app, true, mouse),
         MouseEventKind::Up(MouseButton::Left) => clicked(app, false, mouse),
-        MouseEventKind::ScrollUp => app.scroll(0.0, -LINE),
-        MouseEventKind::ScrollDown => app.scroll(0.0, LINE),
-        MouseEventKind::ScrollLeft => app.scroll(-LINE, 0.0),
-        MouseEventKind::ScrollRight => app.scroll(LINE, 0.0),
+        MouseEventKind::ScrollUp => app.scroll(0, -LINE),
+        MouseEventKind::ScrollDown => app.scroll(0, LINE),
+        MouseEventKind::ScrollLeft => app.scroll(-LINE, 0),
+        MouseEventKind::ScrollRight => app.scroll(LINE, 0),
         _ => {}
     }
 }

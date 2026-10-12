@@ -67,7 +67,7 @@ pub use toy_browser_rasterizer::{
     Area, Ink, Mark, Rendered, Scene, draw as draw_scene, family, normal_form,
     pixels as scene_pixels, render as render_scene,
 };
-pub use viewport::{Monospace, Scheme, Viewport};
+pub use viewport::{Scheme, Viewport};
 
 /// A reference handed to a caller.
 ///
