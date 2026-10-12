@@ -24,6 +24,17 @@ vim.api.nvim_create_user_command("ToyHtmlDemo", function()
   })
 end, {})
 
+-- :ToyHtmlScheme [dark|light|toggle]   what pages are told about the colour scheme
+-- (prefers-color-scheme): dark by default, light if 'background' is light
+vim.api.nvim_create_user_command("ToyHtmlScheme", function(args)
+  require("toy_html").scheme(args.args)
+end, {
+  nargs = "?",
+  complete = function()
+    return { "dark", "light", "toggle" }
+  end,
+})
+
 -- :ToyHtmlHelp   the keys in a page, as a page in a float
 vim.api.nvim_create_user_command("ToyHtmlHelp", function()
   require("toy_html").open({

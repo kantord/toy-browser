@@ -416,9 +416,36 @@ end
 --   opts.images  "alt" (default): pictures as [their alt text]; "none": left out;
 --              "real": shown, in a terminal that speaks kitty's graphics protocol
 --              (kitty, ghostty, ...), as text the buffer can scroll and clip
---   opts.scheme  "light" (default) or "dark": what the page's prefers-color-scheme says
+--   opts.scheme  "dark" (default, "light" when 'background' is light) or "light":
+--              what the page's prefers-color-scheme says; :ToyHtmlScheme changes it
 --   opts.transparent  leave the page's default white and black to the
 --              colorscheme (default: only for `html`, not for a fetched `url`)
+-- Dark unless the editor itself is set to a light background.
+function M.default_scheme()
+  return vim.o.background == "light" and "light" or "dark"
+end
+
+-- Switch every page to "dark" or "light" ("toggle" flips the current one) and
+-- remember it for pages opened later. A page hidden in a buffer takes the new
+-- scheme when it is shown again.
+function M.scheme(mode)
+  local now = vim.g.toy_html_scheme or M.default_scheme()
+  if mode == "toggle" or mode == nil or mode == "" then
+    mode = now == "dark" and "light" or "dark"
+  end
+  if mode ~= "dark" and mode ~= "light" then
+    vim.notify("toy_html: scheme is dark, light or toggle, not " .. mode, vim.log.levels.ERROR)
+    return
+  end
+  vim.g.toy_html_scheme = mode
+  for _, view in pairs(host.views) do
+    view.scheme = mode
+    if not view.closed then
+      send(view, { op = "scheme", mode = mode })
+    end
+  end
+end
+
 function M.open(opts)
   opts = opts or {}
   local buf = vim.api.nvim_create_buf(not opts.float, true)
@@ -462,7 +489,7 @@ function M.open(opts)
     -- Markup a plugin supplies is its own, and takes the colorscheme.
     transparent = opts.transparent,
     images = opts.images or vim.g.toy_html_images,
-    scheme = opts.scheme or vim.g.toy_html_scheme,
+    scheme = opts.scheme or vim.g.toy_html_scheme or M.default_scheme(),
     pictures = {},
     on_event = opts.on_event or function(text)
       vim.notify(text)

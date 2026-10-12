@@ -70,6 +70,7 @@ fn convert(handle: &Handle, parent: &Computed) -> Option<Node> {
 fn tag_defaults(tag: &str, parent: &Computed) -> Computed {
     let mut c = Computed {
         color: parent.color,
+        color_alpha: parent.color_alpha,
         bold: parent.bold,
         italic: parent.italic,
         underline: parent.underline,

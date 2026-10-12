@@ -17,7 +17,7 @@ use std::sync::Arc;
 use blitz_dom::{BaseDocument, Node};
 use style::values::computed::Size;
 use style::values::computed::length_percentage::Unpacked;
-use toy_browser_cells::{Display, Edges, Element, Length, Spacing};
+use toy_browser_cells::{Display, Edges, Element, Length, Shrink, Spacing};
 
 use super::units::{CELL_HEIGHT, CELL_WIDTH};
 use super::{Env, boxes};
@@ -133,7 +133,7 @@ pub(super) fn apply(el: &mut Element, boxed: Boxed) {
     el.style.height = Length::Cells(boxed.rows);
     el.style.min_width = Length::Auto;
     el.style.max_width = Length::Auto;
-    el.style.flex_shrink = 0.0;
+    el.style.flex_shrink = Shrink(0.0);
     el.style.border = Edges::default();
     el.style.padding = Spacing::default();
     el.style.picture = Some(boxed.source);

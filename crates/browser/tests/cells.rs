@@ -151,7 +151,8 @@ fn hidden_breaks_and_rules() {
 // terminal instead of its near-black one.
 #[test]
 fn colours_in_other_spaces_are_converted_to_srgb() {
-    let html = "<body style='margin:0;background:oklch(0.14 0.005 285);color:oklch(0.98 0 0)'>x</body>";
+    let html =
+        "<body style='margin:0;background:oklch(0.14 0.005 285);color:oklch(0.98 0 0)'>x</body>";
     let cell = |grid: &Grid| grid.cell(0, 0).expect("inside").style;
     let style = cell(&page("oklch", html, 10));
     let Some(Rgb(r, g, b)) = style.bg else {
@@ -162,4 +163,38 @@ fn colours_in_other_spaces_are_converted_to_srgb() {
         panic!("a light foreground was asked for");
     };
     assert!(r > 240 && g > 240 && b > 240, "near white, got {r} {g} {b}");
+}
+
+const CARD: &str = "<body style='margin:0;background:rgb(200,100,0)'>\
+    <div style='background:rgba(0,0,0,.5);color:rgba(255,255,255,.6)'>x</div>\
+    <p style='margin:0;color:rgba(0,0,0,.5)'>y</p>\
+    <p style='margin:0;opacity:.1;background:rgb(10,20,30)'>z</p></body>";
+
+// Pins: a half-black card darkens its coloured parent instead of turning
+// black, and its text does not composite the card a second time.
+#[test]
+fn translucent_background_blends_with_the_parent() {
+    let grid = page("alpha-bg", CARD, 10);
+    let bg = grid.cell(0, 0).expect("inside").style.bg;
+    assert_eq!(bg, Some(Rgb(100, 50, 0)));
+}
+
+// Pins: translucent white text is a blend with the card behind it, not
+// white; translucent black text stays a colour, not the terminal default.
+#[test]
+fn translucent_text_blends_with_its_background() {
+    let grid = page("alpha-fg", CARD, 10);
+    let fg = |y| grid.cell(0, y).expect("inside").style.fg;
+    assert_eq!(fg(0), Some(Rgb(193, 173, 153)));
+    assert_eq!(fg(1), Some(Rgb(100, 50, 0)));
+}
+
+// Pins: `opacity` is ignored; the box is as opaque as its colours say.
+#[test]
+fn opacity_is_ignored() {
+    let style = page("alpha-opacity", CARD, 10)
+        .cell(0, 2)
+        .expect("inside")
+        .style;
+    assert_eq!((style.fg, style.bg), (None, Some(Rgb(10, 20, 30))));
 }

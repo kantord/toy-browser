@@ -196,12 +196,13 @@ fn outline(table: &mut Element, cells: &mut [Node]) {
 fn inherited(parent: &Computed) -> Computed {
     Computed {
         color: parent.color,
+        color_alpha: parent.color_alpha,
         bold: parent.bold,
         italic: parent.italic,
         underline: parent.underline,
         white_space: parent.white_space,
         text_align: parent.text_align,
-        visible: parent.visible,
+        hidden: parent.hidden,
         ..Computed::default()
     }
 }
@@ -241,6 +242,7 @@ fn place(rows: Vec<Element>) -> (Vec<Node>, usize) {
             cell.style.width = Length::Auto;
             if cell.style.background.is_none() {
                 cell.style.background = row.style.background;
+                cell.style.background_alpha = row.style.background_alpha;
             }
             columns = columns.max(c + wide);
             c += wide;

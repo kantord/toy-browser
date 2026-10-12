@@ -13,13 +13,22 @@
 
 use std::collections::HashMap;
 
+use crate::blend::{layer, over};
 use crate::tree::Rgb;
 
 /// The look of one cell. `None` colours mean the terminal's defaults.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+///
+/// The alphas describe a style being *written*: the grid composites the
+/// colour over what is there and stores the result with both at 255, so a
+/// cell you read back is always opaque.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CellStyle {
     pub fg: Option<Rgb>,
+    /// 0 to 255, 255 being opaque.
+    pub fg_alpha: u8,
     pub bg: Option<Rgb>,
+    /// 0 to 255, 255 being opaque.
+    pub bg_alpha: u8,
     pub bold: bool,
     pub italic: bool,
     pub underline: bool,
@@ -27,6 +36,22 @@ pub struct CellStyle {
     pub hidden: bool,
     /// The element that painted this; copied onto [`Cell::key`].
     pub key: Option<u64>,
+}
+
+impl Default for CellStyle {
+    fn default() -> Self {
+        Self {
+            fg: None,
+            fg_alpha: 255,
+            bg: None,
+            bg_alpha: 255,
+            bold: false,
+            italic: false,
+            underline: false,
+            hidden: false,
+            key: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -71,6 +96,9 @@ pub struct Grid {
     pictures: Vec<Picture>,
     /// Writes outside this rectangle are dropped, see [`Self::clip_to`].
     clip: Option<Rect>,
+    /// What an unpainted cell looks like, for translucent colours to blend
+    /// over. White unless [`Self::set_canvas`] says otherwise.
+    canvas: Rgb,
 }
 
 impl Grid {
@@ -82,7 +110,14 @@ impl Grid {
             rects: HashMap::new(),
             pictures: Vec::new(),
             clip: None,
+            canvas: Rgb(255, 255, 255),
         }
+    }
+
+    /// The colour a cell with no background shows, if the caller knows it
+    /// (a terminal's own background, say). Set it before painting.
+    pub fn set_canvas(&mut self, canvas: Rgb) {
+        self.canvas = canvas;
     }
 
     /// Confine writes to `rect` as well as the grid (`overflow: hidden`),
@@ -170,19 +205,22 @@ impl Grid {
         }
     }
 
-    /// Paint a background colour over a rectangle, keeping what is on top.
-    pub fn fill_bg(&mut self, rect: Rect, bg: Rgb) {
+    /// Paint a background colour at `alpha` over a rectangle, compositing it
+    /// with the background already there (or the canvas).
+    pub fn fill_bg(&mut self, rect: Rect, bg: Rgb, alpha: u8) {
+        let canvas = self.canvas;
         for y in rect.y..rect.y + rect.h {
             for x in rect.x..rect.x + rect.w {
                 if let Some(cell) = self.cell_mut(x, y) {
-                    cell.style.bg = Some(bg);
+                    cell.style.bg = layer(Some(bg), alpha, cell.style.bg, canvas);
                 }
             }
         }
     }
 
     /// Write one cluster of `width` (1 or 2) columns. A `None` background in
-    /// `style` keeps whatever background is already there.
+    /// `style` keeps whatever background is already there; a translucent one
+    /// or a translucent text colour is composited as in [`Self::fill_bg`].
     pub fn put(&mut self, x: i64, y: i64, symbol: &str, width: usize, style: CellStyle) {
         if !self.open(x, y) || !self.open(x + width as i64 - 1, y) {
             return;
@@ -202,8 +240,12 @@ impl Grid {
     }
 
     fn write(&mut self, x: i64, y: i64, symbol: &str, continuation: bool, style: CellStyle) {
+        let canvas = self.canvas;
         if let Some(cell) = self.cell_mut(x, y) {
-            let bg = style.bg.or(cell.style.bg);
+            let bg = layer(style.bg, style.bg_alpha, cell.style.bg, canvas);
+            let fg = style
+                .fg
+                .map(|c| over(c, style.fg_alpha, bg.unwrap_or(canvas)));
             cell.symbol = if continuation {
                 String::new()
             } else {
@@ -211,7 +253,13 @@ impl Grid {
             };
             cell.continuation = continuation;
             cell.key = style.key.or(cell.key);
-            cell.style = CellStyle { bg, ..style };
+            cell.style = CellStyle {
+                fg,
+                fg_alpha: 255,
+                bg,
+                bg_alpha: 255,
+                ..style
+            };
         }
     }
 

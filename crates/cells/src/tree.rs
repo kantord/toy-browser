@@ -160,14 +160,36 @@ pub enum TextAlign {
     Center,
 }
 
+/// How opaque a colour is, 0 to 255. Opaque by default, which a bare `u8`
+/// (default 0) could not say.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Alpha(pub u8);
+
+impl Default for Alpha {
+    fn default() -> Self {
+        Self(255)
+    }
+}
+
+/// A flex shrink factor. One by default, as in CSS, where a bare `f32`
+/// would default to not shrinking at all.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Shrink(pub f32);
+
+impl Default for Shrink {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
+
 /// Every property the renderer understands, already cascaded and inherited.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct Computed {
     pub display: Display,
     pub flex_direction: FlexDirection,
     pub flex_wrap: bool,
     pub flex_grow: f32,
-    pub flex_shrink: f32,
+    pub flex_shrink: Shrink,
     pub flex_basis: Length,
     /// Cells between flex items or grid tracks, across and down.
     pub column_gap: u16,
@@ -197,15 +219,23 @@ pub struct Computed {
     pub border: Edges,
     /// Text and border colour.
     pub color: Option<Rgb>,
+    /// How opaque `color` is, 0 to 255. Painting composites it over the
+    /// background already in the cell, see [`crate::Grid`]. `opacity` is not
+    /// modelled: only alpha written into a colour counts.
+    pub color_alpha: Alpha,
     pub background: Option<Rgb>,
+    /// How opaque `background` is, 0 to 255; a translucent one is composited
+    /// over what is already painted under the box (or the grid's canvas).
+    pub background_alpha: Alpha,
     pub bold: bool,
     pub italic: bool,
     pub underline: bool,
     pub white_space: WhiteSpace,
     pub text_align: TextAlign,
-    /// `visibility: visible`. A hidden box keeps its space but paints nothing:
-    /// no background, no border, and its text becomes blank cells.
-    pub visible: bool,
+    /// `visibility: hidden | collapse`. A hidden box keeps its space but
+    /// paints nothing: no background, no border, and its text becomes blank
+    /// cells.
+    pub hidden: bool,
     /// Out of flow, see [`crate::flow`]. A floated or absolute box must
     /// already be block-level (not `Inline`, not `atomic`).
     pub float: Float,
@@ -219,51 +249,6 @@ pub struct Computed {
     /// paints nothing of its own; the grid records where it is, see
     /// [`crate::Grid::pictures`].
     pub picture: Option<std::sync::Arc<str>>,
-}
-
-impl Default for Computed {
-    fn default() -> Self {
-        Self {
-            display: Display::Block,
-            flex_direction: FlexDirection::Row,
-            flex_wrap: false,
-            flex_grow: 0.0,
-            flex_shrink: 1.0,
-            flex_basis: Length::Auto,
-            column_gap: 0,
-            row_gap: 0,
-            grid_columns: Vec::new(),
-            grid_rows: Vec::new(),
-            grid_column: Placement::default(),
-            grid_row: Placement::default(),
-            atomic: false,
-            justify_content: JustifyContent::Start,
-            align_items: AlignItems::Stretch,
-            width: Length::Auto,
-            height: Length::Auto,
-            min_width: Length::Auto,
-            min_height: Length::Auto,
-            max_width: Length::Auto,
-            max_height: Length::Auto,
-            margin: Spacing::default(),
-            padding: Spacing::default(),
-            border: Edges::default(),
-            color: None,
-            background: None,
-            bold: false,
-            italic: false,
-            underline: false,
-            white_space: WhiteSpace::Normal,
-            text_align: TextAlign::Left,
-            visible: true,
-            float: Float::None,
-            clear: Clear::None,
-            position: Position::Static,
-            inset: Inset::default(),
-            clip: false,
-            picture: None,
-        }
-    }
 }
 
 /// An element or a run of text.

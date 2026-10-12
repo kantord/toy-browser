@@ -51,7 +51,7 @@ fn key_at_blank_and_outside() {
 #[test]
 fn hidden_text_keeps_its_space() {
     let mut ghost = el(2, Display::Inline, vec![Node::Text("ab漢".into())]);
-    ghost.style.visible = false;
+    ghost.style.hidden = true;
     ghost.style.background = Some(Rgb(1, 2, 3));
     let tail = Node::Text("|".into());
     let root = el(

@@ -11,6 +11,7 @@
 //! contract with the styler and the README for what is left out.
 
 mod atoms;
+mod blend;
 mod flow;
 mod grid;
 mod layout;
@@ -25,8 +26,8 @@ pub use flow::{Clear, Float, Inset, Position};
 pub use grid::{Cell, CellStyle, Grid, Picture, Rect};
 pub use tracks::{Placement, Template, Track, TrackSize};
 pub use tree::{
-    AlignItems, Computed, Display, Edges, Element, FlexDirection, JustifyContent, Length, Node,
-    Rgb, Spacing, TextAlign, WhiteSpace,
+    AlignItems, Alpha, Computed, Display, Edges, Element, FlexDirection, JustifyContent, Length,
+    Node, Rgb, Shrink, Spacing, TextAlign, WhiteSpace,
 };
 
 /// Render `root` into a grid `width` columns wide. The grid is exactly as tall

@@ -4,13 +4,14 @@
 //! 600 up (what browsers' own `<b>` and `<h1>` use), any slant is italic, and
 //! every other decoration is dropped.
 //!
-//! **Colour.** Plain black text maps to `None`, "the terminal's own
+//! **Colour.** Plain opaque black text maps to `None`, "the terminal's own
 //! foreground". Black is the initial value of `color`, so a page that never
 //! set one would otherwise paint black on a black terminal. A page that
 //! really asks for `color: #000` gets the terminal default too, which is
-//! also what its author would want on a dark terminal. A background with no
-//! alpha at all is `None`; partial alpha is flattened by ignoring it, since
-//! there is nothing behind to blend with.
+//! also what its author would want on a dark terminal. Translucent black
+//! stays a colour. A background with no alpha at all is `None`; any other
+//! alpha is passed on beside the colour for the grid to composite. The
+//! `opacity` property is ignored: only alpha inside a colour counts.
 
 use style::color::{AbsoluteColor, ColorSpace};
 use style::computed_values::text_wrap_mode::T as Wrap;
@@ -19,7 +20,7 @@ use style::computed_values::white_space_collapse::T as Collapse;
 use style::properties::ComputedValues;
 use style::values::computed::text::TextAlign as Align;
 use style::values::computed::{FontStyle, TextDecorationLine};
-use toy_browser_cells::{Rgb, TextAlign, WhiteSpace};
+use toy_browser_cells::{Alpha, Computed, Rgb, TextAlign, WhiteSpace};
 
 /// The four components of a colour in sRGB, whatever it was written in.
 ///
@@ -31,20 +32,42 @@ fn srgb(colour: &AbsoluteColor) -> [f32; 4] {
     *colour.to_color_space(ColorSpace::Srgb).raw_components()
 }
 
-pub(super) fn foreground(style: &ComputedValues) -> Option<Rgb> {
-    let [red, green, blue, _] = srgb(&style.clone_color());
-    Some(rgb(red, green, blue)).filter(|c| *c != Rgb(0, 0, 0))
+/// Text and background colour, each with its alpha.
+pub(super) fn colours(style: &ComputedValues, computed: &mut Computed) {
+    computed.color = foreground(style);
+    computed.color_alpha = Alpha(foreground_alpha(style));
+    computed.background = background(style);
+    computed.background_alpha = Alpha(background_alpha(style));
 }
 
-pub(super) fn background(style: &ComputedValues) -> Option<Rgb> {
+fn foreground(style: &ComputedValues) -> Option<Rgb> {
+    let [red, green, blue, alpha] = srgb(&style.clone_color());
+    let opaque = to_byte(alpha) == 255;
+    Some(rgb(red, green, blue)).filter(|c| !opaque || *c != Rgb(0, 0, 0))
+}
+
+fn foreground_alpha(style: &ComputedValues) -> u8 {
+    to_byte(srgb(&style.clone_color())[3])
+}
+
+fn background(style: &ComputedValues) -> Option<Rgb> {
     let fill = style.resolve_color(&style.get_background().background_color);
     let [red, green, blue, alpha] = srgb(&fill);
     (alpha > 0.0).then(|| rgb(red, green, blue))
 }
 
 fn rgb(red: f32, green: f32, blue: f32) -> Rgb {
-    let channel = |part: f32| (part * 255.0).round().clamp(0.0, 255.0) as u8;
-    Rgb(channel(red), channel(green), channel(blue))
+    Rgb(to_byte(red), to_byte(green), to_byte(blue))
+}
+
+/// A 0..1 component as a byte.
+fn to_byte(part: f32) -> u8 {
+    (part * 255.0).round().clamp(0.0, 255.0) as u8
+}
+
+fn background_alpha(style: &ComputedValues) -> u8 {
+    let fill = style.resolve_color(&style.get_background().background_color);
+    to_byte(srgb(&fill)[3])
 }
 
 pub(super) fn bold(style: &ComputedValues) -> bool {
@@ -62,8 +85,8 @@ pub(super) fn underline(style: &ComputedValues) -> bool {
         .contains(TextDecorationLine::UNDERLINE)
 }
 
-pub(super) fn visible(style: &ComputedValues) -> bool {
-    style.get_inherited_box().visibility == Visibility::Visible
+pub(super) fn hidden(style: &ComputedValues) -> bool {
+    style.get_inherited_box().visibility != Visibility::Visible
 }
 
 /// `pre-wrap` and `pre-line` both count as `pre`: the tree has no mode that

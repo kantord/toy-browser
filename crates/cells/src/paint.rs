@@ -63,7 +63,7 @@ impl Painter<'_> {
             w: (rect.w - left - right).max(0),
             h: (rect.h - top - bottom).max(0),
         };
-        if item.style.visible && !self.hollow(item, content) {
+        if !item.style.hidden && !self.hollow(item, content) {
             self.decorate(item, rect);
         }
         let outer = item.style.clip.then(|| self.confine(rect, layout));
@@ -136,7 +136,7 @@ impl Painter<'_> {
 
     fn decorate(&mut self, item: &Item, rect: Rect) {
         if let Some(bg) = item.style.background {
-            self.grid.fill_bg(rect, bg);
+            self.grid.fill_bg(rect, bg, item.style.background_alpha.0);
         }
         if let Some(source) = &item.style.picture {
             self.grid.place_picture(rect, source.clone());

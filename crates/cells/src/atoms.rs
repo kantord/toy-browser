@@ -15,7 +15,7 @@
 //! right.
 
 use crate::grid::CellStyle;
-use crate::layout::{Item, Planner, cell_style};
+use crate::layout::{Item, Planner, cell_style, own_text_style};
 use crate::text::Builder;
 use crate::tree::{
     AlignItems, Computed, Display, Element, JustifyContent, Node, TextAlign, WhiteSpace,
@@ -92,7 +92,7 @@ impl Planner {
     /// run it is.
     pub(crate) fn atoms_row(&mut self, owner: &Element, nodes: &[&Node]) -> Item {
         let parent = &owner.style;
-        let span = (cell_style(parent, owner.key), parent.white_space);
+        let span = (own_text_style(parent, owner.key), parent.white_space);
         let (mut cur, mut pieces) = (Text::new(), Vec::new());
         nodes
             .iter()

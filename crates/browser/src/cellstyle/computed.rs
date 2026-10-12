@@ -9,7 +9,7 @@
 //! inheriting, so the walk ORs it down.
 
 use style::properties::ComputedValues;
-use toy_browser_cells::Computed;
+use toy_browser_cells::{Computed, Shrink};
 
 use super::{boxes, flex, looks, outflow, tracks};
 
@@ -26,12 +26,12 @@ fn inflow(style: &ComputedValues, page: f32) -> Computed {
     let (flex_grow, flex_shrink, flex_basis) = flex::factors(style, page);
     let (column_gap, row_gap) = boxes::gaps(style, page);
     let pos = style.get_position();
-    Computed {
+    let mut computed = Computed {
         display: flex::display(style),
         flex_direction: flex::direction(style),
         flex_wrap: flex::wraps(style),
         flex_grow,
-        flex_shrink,
+        flex_shrink: Shrink(flex_shrink),
         flex_basis,
         column_gap,
         row_gap,
@@ -51,14 +51,14 @@ fn inflow(style: &ComputedValues, page: f32) -> Computed {
         margin: boxes::margin(style, page),
         padding: boxes::padding(style, page),
         border: boxes::border(style),
-        color: looks::foreground(style),
-        background: looks::background(style),
         bold: looks::bold(style),
         italic: looks::italic(style),
         underline: looks::underline(style),
         white_space: looks::white_space(style),
         text_align: looks::text_align(style),
-        visible: looks::visible(style),
+        hidden: looks::hidden(style),
         ..Computed::default()
-    }
+    };
+    looks::colours(style, &mut computed);
+    computed
 }

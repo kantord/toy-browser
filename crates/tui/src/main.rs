@@ -48,7 +48,7 @@ struct Cli {
     no_scripts: bool,
 
     /// Which colour scheme the page is shown in.
-    #[arg(long, value_parser = scheme, default_value = "light")]
+    #[arg(long, value_parser = scheme, default_value = "dark")]
     scheme: Scheme,
 }
 

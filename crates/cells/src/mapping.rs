@@ -27,7 +27,7 @@ pub fn to_taffy(c: &Computed) -> Style {
             FlexWrap::NoWrap
         },
         flex_grow: c.flex_grow,
-        flex_shrink: c.flex_shrink,
+        flex_shrink: c.flex_shrink.0,
         flex_basis: dimension(c.flex_basis),
         justify_content: Some(justify(c.justify_content)),
         align_items: Some(align(c.align_items)),

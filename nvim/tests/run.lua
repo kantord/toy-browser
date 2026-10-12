@@ -71,5 +71,20 @@ press("<CR>")
 local at = line_of("the end")
 check("a fragment link moves to its anchor", vim.fn.line(".") == at, { vim.fn.line("."), at })
 
+-- The colour scheme: dark by default, switched for the open page at runtime.
+local function colours_in_use()
+  local names = {}
+  for _, m in ipairs(vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, { details = true })) do
+    names[#names + 1] = m[4].hl_group or ""
+  end
+  return table.concat(names, " ")
+end
+local function wait_for_colour(hex) vim.wait(5000, function() return colours_in_use():find(hex, 1, true) end, 50) end
+T.open({ url = "file://" .. pages .. "scheme.html", here = true })
+wait_for("Scheme page"); wait_for_colour("101820")
+check("pages are dark by default", colours_in_use():find("101820", 1, true), colours_in_use())
+T.scheme("light"); wait_for_colour("ffffff")
+check(":ToyHtmlScheme light re-renders the open page", colours_in_use():find("ffffff", 1, true), colours_in_use())
+
 io.stdout:write((failures == 0 and "all passed" or (failures .. " failed")) .. "\n")
 vim.cmd(failures == 0 and "qa!" or "cq")

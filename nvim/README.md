@@ -42,7 +42,7 @@ Set globally (`vim.g.toy_html_*`) or per page in `require("toy_html").open{...}`
 | option | values | meaning |
 | --- | --- | --- |
 | `images` | `"alt"` (default), `"none"`, `"real"` | pictures as `[alt text]`, left out, or drawn (kitty graphics protocol: kitty, ghostty; turns on `termguicolors`; inside tmux needs `allow-passthrough on`) |
-| `scheme` | `"light"` (default), `"dark"` | what `prefers-color-scheme` says |
+| `scheme` | `"dark"` (default; `"light"` if `background` is light), `"light"` | what `prefers-color-scheme` says; `:ToyHtmlScheme [dark\|light\|toggle]` changes it for open pages |
 | `transparent` | boolean | the page's default white and black take Neovim's colours (default: only for `html`, not for fetched pages) |
 
 Forms: `<CR>` on a field focuses it, `]f` / `[f` move focus along the tab order (the cursor follows), `i` asks for text and types it into the focused field, `gs` presses Enter there.

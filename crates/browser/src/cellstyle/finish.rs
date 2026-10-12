@@ -19,7 +19,9 @@
 //!   of under the bullet.
 
 use blitz_dom::node::{ListItemLayout, Marker};
-use toy_browser_cells::{Computed, Display, Edges, Element, Length, Node, Spacing, WhiteSpace};
+use toy_browser_cells::{
+    Computed, Display, Edges, Element, Length, Node, Shrink, Spacing, WhiteSpace,
+};
 
 pub(super) fn finish(el: &mut Element, marker: Option<&ListItemLayout>) {
     by_tag(el);
@@ -88,12 +90,13 @@ fn bracket(el: &mut Element) {
 fn inherit(parent: &Computed) -> Computed {
     Computed {
         color: parent.color,
+        color_alpha: parent.color_alpha,
         bold: parent.bold,
         italic: parent.italic,
         underline: parent.underline,
         white_space: parent.white_space,
         text_align: parent.text_align,
-        visible: parent.visible,
+        hidden: parent.hidden,
         ..Computed::default()
     }
 }
@@ -102,7 +105,7 @@ fn hang(el: &mut Element, marker: String) {
     let width = u16::try_from(marker.chars().count()).unwrap_or(u16::MAX);
     let mut label = inherit(&el.style);
     label.width = Length::Cells(width);
-    label.flex_shrink = 0.0;
+    label.flex_shrink = Shrink(0.0);
     let mut content = inherit(&el.style);
     content.flex_grow = 1.0;
     let part = |tag: &str, style, children| {

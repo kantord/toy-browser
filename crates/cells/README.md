@@ -35,6 +35,10 @@ present or absent. The renderer never cascades and never converts units.
   beside a float is narrowed as a whole, see `flow.rs`. `overflow: hidden`
   clips painting to the padding box; an empty box that is only a border (no
   text, picture or background, no room inside) is not drawn.
+- Colour alpha: `color_alpha` and `background_alpha` are composited "source
+  over" at paint time, onto the cell's background or, where it has none, the
+  grid's canvas (white, `Grid::set_canvas`). Stacked layers compose in paint
+  order and every cell ends up opaque. Pictures are not blended.
 - Inline-level boxes (`Computed::atomic`: `inline-block`, `inline-flex`) as
   units in a wrapping row, see `atoms.rs` for what that gives up (no sharing a
   line with the middle of a sentence, no baseline alignment).
@@ -63,5 +67,6 @@ present or absent. The renderer never cascades and never converts units.
   (`Grid::pictures`) and the caller supplies the bytes.
 - Per-terminal quirks such as VS16 width disagreement; the grid reports the
   `unicode-width` answer, and whoever writes it out re-syncs the cursor.
+- `opacity`: only alpha written into a colour is honoured.
 - Reverse video, a caret, hover and focus: the styler expresses them as
   ordinary colours, so this crate has no attribute for them.

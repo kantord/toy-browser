@@ -13,7 +13,7 @@
 
 use blitz_dom::{BaseDocument, NodeId};
 use style_dom::ElementState;
-use toy_browser_cells::{Computed, Rgb};
+use toy_browser_cells::{Alpha, Computed, Rgb};
 
 use crate::blitz::keyed;
 
@@ -37,10 +37,17 @@ pub(super) fn hover(doc: &mut BaseDocument, over: Option<usize>) {
     crate::blitz::restyle(doc);
 }
 
-/// Swaps text and background, taking black on white for a colour left unsaid.
+/// Swaps text and background (alphas with them), taking opaque black on
+/// white for a colour left unsaid.
 pub(super) fn reverse(style: &mut Computed) {
-    let ink = style.color.unwrap_or(Rgb(0, 0, 0));
-    let paper = style.background.unwrap_or(Rgb(255, 255, 255));
-    style.color = Some(paper);
-    style.background = Some(ink);
+    let ink = style
+        .color
+        .map_or((Rgb(0, 0, 0), Alpha(255)), |c| (c, style.color_alpha));
+    let paper = style
+        .background
+        .map_or((Rgb(255, 255, 255), Alpha(255)), |c| {
+            (c, style.background_alpha)
+        });
+    (style.color, style.color_alpha) = (Some(paper.0), paper.1);
+    (style.background, style.background_alpha) = (Some(ink.0), ink.1);
 }

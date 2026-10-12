@@ -7,7 +7,8 @@
 
 use toy_browser_cells::{
     AlignItems, Clear, Computed, Display, Edges, FlexDirection, Float, Inset, JustifyContent,
-    Length, Placement, Position, Rgb, Spacing, Template, TextAlign, Track, TrackSize, WhiteSpace,
+    Length, Placement, Position, Rgb, Shrink, Spacing, Template, TextAlign, Track, TrackSize,
+    WhiteSpace,
 };
 
 pub fn apply_declarations(c: &mut Computed, style: &str) {
@@ -42,7 +43,7 @@ fn apply_flex(c: &mut Computed, prop: &str, v: &str) -> bool {
         }
         "flex-wrap" => c.flex_wrap = v == "wrap",
         "flex-grow" => c.flex_grow = v.parse().unwrap_or(0.0),
-        "flex-shrink" => c.flex_shrink = v.parse().unwrap_or(1.0),
+        "flex-shrink" => c.flex_shrink = Shrink(v.parse().unwrap_or(1.0)),
         "flex-basis" => c.flex_basis = length(v),
         "gap" => {
             c.column_gap = v.parse().unwrap_or(0);

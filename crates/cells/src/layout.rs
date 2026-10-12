@@ -188,7 +188,7 @@ impl Planner {
         nodes: &[&Node],
     ) -> Item {
         let mut builder = Builder::new();
-        let span = (cell_style(text, key), text.white_space);
+        let span = (own_text_style(text, key), text.white_space);
         nodes.iter().for_each(|n| flatten(n, span, &mut builder));
         self.leaf_built(style, key, builder)
     }
@@ -263,11 +263,23 @@ fn flatten(node: &Node, parent: (CellStyle, WhiteSpace), builder: &mut Builder) 
 pub fn cell_style(c: &Computed, key: Option<u64>) -> CellStyle {
     CellStyle {
         fg: c.color,
-        bg: c.background.filter(|_| c.visible),
+        fg_alpha: c.color_alpha.0,
+        bg: c.background.filter(|_| !c.hidden),
+        bg_alpha: c.background_alpha.0,
         bold: c.bold,
         italic: c.italic,
         underline: c.underline,
-        hidden: !c.visible,
+        hidden: c.hidden,
         key,
+    }
+}
+
+/// The style of text directly inside the box `c`, which has already painted
+/// its own background: writing it again would composite a translucent one
+/// twice.
+pub fn own_text_style(c: &Computed, key: Option<u64>) -> CellStyle {
+    CellStyle {
+        bg: None,
+        ..cell_style(c, key)
     }
 }
