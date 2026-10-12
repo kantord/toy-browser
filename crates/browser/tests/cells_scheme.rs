@@ -66,3 +66,22 @@ fn style_imports_follow_the_scheme() {
     assert_eq!(background("style", Scheme::Dark, style), Some(DARK));
     assert_eq!(background("style", Scheme::Light, style), None);
 }
+
+// Pins: the body's background is the page's, edge to edge. lobste.rs centres a
+// `max-width` body, and its dark theme was dark in the middle only.
+#[test]
+fn a_narrow_bodys_background_covers_the_whole_page() {
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cells-canvas");
+    std::fs::create_dir_all(&dir).expect("a place to write");
+    let page = "<body style='background:rgb(10,20,30);max-width:80px;margin:40px auto'>text";
+    std::fs::write(dir.join("page.html"), page).expect("written");
+    let mut browser = Browser::new(Resources::new()).expect("a browser");
+    let tab = browser.new_page().expect("a page");
+    let url = Url::from_file_path(dir.join("page.html")).expect("a file url");
+    browser.navigate(&tab, url.as_str()).expect("loads");
+    let grid = browser.cells(&tab, 60).expect("renders");
+    let edge = grid.cell(0, 0).expect("inside").style.bg;
+    let far = grid.cell(59, 0).expect("inside").style.bg;
+    let top = grid.cell(30, 0).expect("inside").style.bg;
+    assert_eq!((edge, far, top), (Some(DARK), Some(DARK), Some(DARK)));
+}

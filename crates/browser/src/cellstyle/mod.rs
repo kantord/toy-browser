@@ -94,6 +94,10 @@ impl Browser {
         };
         let root =
             walk::tree(&laid.document, &env).ok_or_else(|| anyhow!("the page has no root"))?;
-        Ok(toy_browser_cells::render(&root, width))
+        let mut grid = toy_browser_cells::render(&root, width);
+        if let Some(canvas) = root.style.background {
+            grid.paint_canvas(canvas);
+        }
+        Ok(grid)
     }
 }

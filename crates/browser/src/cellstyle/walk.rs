@@ -28,7 +28,27 @@ use toy_browser_cells::{Computed, Display, Element, Node as Cell};
 
 /// The whole document as a tree rooted at its `<html>` element.
 pub(super) fn tree(doc: &BaseDocument, env: &Env) -> Option<Element> {
-    Walk { doc, env }.element(doc.root_element(), Down::default())
+    let mut root = Walk { doc, env }.element(doc.root_element(), Down::default())?;
+    propagate_background(&mut root);
+    Some(root)
+}
+
+/// A page whose `<html>` paints nothing is on the `<body>`'s background, all
+/// the way across the window, however narrow the body itself is (CSS
+/// propagates it to the canvas). A dark page with a centred, `max-width` body
+/// was otherwise dark in the middle and white at both sides.
+fn propagate_background(root: &mut Element) {
+    if root.style.background.is_some() {
+        return;
+    }
+    let body = root.children.iter().find_map(|child| match child {
+        Cell::Element(el) if el.tag == "body" => Some(&el.style),
+        _ => None,
+    });
+    if let Some(body) = body {
+        (root.style.background, root.style.background_alpha) =
+            (body.background, body.background_alpha);
+    }
 }
 
 struct Walk<'a> {

@@ -120,6 +120,15 @@ impl Grid {
         self.canvas = canvas;
     }
 
+    /// Give every cell that shows no background of its own this one: a page's
+    /// canvas reaches past the box its root is laid out in.
+    pub fn paint_canvas(&mut self, canvas: Rgb) {
+        self.canvas = canvas;
+        for cell in self.cells.iter_mut().filter(|cell| cell.style.bg.is_none()) {
+            cell.style.bg = Some(canvas);
+        }
+    }
+
     /// Confine writes to `rect` as well as the grid (`overflow: hidden`),
     /// returning the clip it replaces so the caller can put it back.
     pub fn clip_to(&mut self, rect: Option<Rect>) -> Option<Rect> {
