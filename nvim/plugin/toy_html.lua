@@ -1,6 +1,6 @@
--- :ToyHtml [url]   show a page in a vertical split (default: Wikipedia's Neovim article)
+-- :ToyHtml [url]   show a page in a vertical split (default: Hacker News)
 vim.api.nvim_create_user_command("ToyHtml", function(args)
-  local url = args.args ~= "" and args.args or "https://en.wikipedia.org/wiki/Neovim"
+  local url = args.args ~= "" and args.args or "https://news.ycombinator.com"
   require("toy_html").open({ url = url })
 end, { nargs = "?" })
 

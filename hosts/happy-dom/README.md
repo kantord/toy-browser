@@ -15,7 +15,7 @@ as `markup`. Everything else passes through.
 
 ```
 cd hosts/happy-dom && npm install
-just nvim-happy https://en.wikipedia.org/wiki/Neovim
+just nvim-happy https://news.ycombinator.com
 ```
 
 or point any client at it: `TOY_BROWSER_HOST=$PWD/hosts/happy-dom/host.mjs nvim ...`.
