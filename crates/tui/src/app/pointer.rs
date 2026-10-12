@@ -77,10 +77,10 @@ impl App {
     /// thing a terminal can be told instead — see `main.rs::redrawn`.
     pub fn moved(&mut self, col: u16, row: u16) {
         let at = self.at(col, row);
-        let Ok(hovering) = self.browser.hover(&self.page, at) else {
+        let Ok(hovering) = self.browser.borrow_mut().hover(&self.page, at) else {
             return;
         };
-        if let Ok(emitted) = self.browser.pointer_move(&self.page, at) {
+        if let Ok(emitted) = self.browser.borrow_mut().pointer_move(&self.page, at) {
             self.logged.extend(emitted.console);
         }
         self.hover = Hover::of(hovering.cursor).map(|shape| (col, row, shape));
@@ -100,8 +100,8 @@ impl App {
     pub fn clicked(&mut self, down: bool, col: u16, row: u16) {
         let at = self.at(col, row);
         let emitted = match down {
-            true => self.browser.pointer_down(&self.page, at),
-            false => self.browser.pointer_up(&self.page, at),
+            true => self.browser.borrow_mut().pointer_down(&self.page, at),
+            false => self.browser.borrow_mut().pointer_up(&self.page, at),
         };
         if let Ok(emitted) = emitted {
             self.logged.extend(emitted.console);
@@ -110,13 +110,19 @@ impl App {
         if !down {
             self.watch_address(false);
         }
-        self.changed();
+        self.changed_if_revised();
     }
 
     pub fn keyed(&mut self, down: bool, key: &str, code: &str, held: Held) {
         let emitted = match down {
-            true => self.browser.key_down(&self.page, key, code, held),
-            false => self.browser.key_up(&self.page, key, code, held),
+            true => self
+                .browser
+                .borrow_mut()
+                .key_down(&self.page, key, code, held),
+            false => self
+                .browser
+                .borrow_mut()
+                .key_up(&self.page, key, code, held),
         };
         if let Ok(emitted) = emitted {
             self.logged.extend(emitted.console);
@@ -124,7 +130,7 @@ impl App {
         if !down {
             self.watch_address(false);
         }
-        self.changed();
+        self.changed_if_revised();
     }
 
     /// The row an anchor starts on — the element with this `id`, or the `<a>`
@@ -134,11 +140,17 @@ impl App {
         let selector = format!("[id=\"{name}\"], a[name=\"{name}\"]");
         let found = self
             .browser
+            .borrow_mut()
             .query(&self.page, &selector)
             .ok()?
             .into_iter()
             .next()?;
-        let top = self.browser.bounding_box(&self.page, &found).ok()??.y;
+        let top = self
+            .browser
+            .borrow_mut()
+            .bounding_box(&self.page, &found)
+            .ok()??
+            .y;
         Some((top / self.cell.1).round().max(0.0) as u16)
     }
 
@@ -147,11 +159,17 @@ impl App {
     /// the markup to name it. `None` where there is nothing.
     pub fn under(&mut self, col: u16, row: u16) -> Option<Under> {
         let at = self.at(col, row);
-        let mut node = self.browser.hit_test(&self.page, at).ok()??;
+        let mut node = self.browser.borrow_mut().hit_test(&self.page, at).ok()??;
         let mut found = None;
         loop {
             self.note(node, &mut found);
-            match self.browser.parent(&self.page, node).ok().flatten() {
+            match self
+                .browser
+                .borrow_mut()
+                .parent(&self.page, node)
+                .ok()
+                .flatten()
+            {
                 Some(parent) => node = parent,
                 None => return found,
             }
@@ -162,11 +180,12 @@ impl App {
     /// tag and says nothing; the nearest element is what the cell is of.
     fn note(&mut self, node: NodeId, found: &mut Option<Under>) {
         let element = Remote::Element(node);
-        let Ok(Some(tag)) = self.browser.tag_name(&self.page, &element) else {
+        let Ok(Some(tag)) = self.browser.borrow_mut().tag_name(&self.page, &element) else {
             return;
         };
-        let mut attribute = |name: &str| {
+        let attribute = |name: &str| {
             self.browser
+                .borrow_mut()
                 .attribute(&self.page, &element, name)
                 .ok()
                 .flatten()
@@ -188,7 +207,7 @@ impl App {
 
     /// A link as an absolute URL, against the page it is on.
     fn resolve(&self, href: &str) -> Option<String> {
-        Url::parse(self.url())
+        Url::parse(&self.url())
             .ok()?
             .join(href)
             .ok()

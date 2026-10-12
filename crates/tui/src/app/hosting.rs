@@ -10,7 +10,7 @@ impl App {
     /// Has links the page lets be followed reported (see [`Self::take_navigation`])
     /// instead of loaded, for a host that decides where they go.
     pub fn leave_navigation(&mut self, leave: bool) {
-        self.browser.set_leave_navigation(leave);
+        self.browser.borrow_mut().set_leave_navigation(leave);
     }
 
     /// The link a click set off, as an absolute URL, once.
@@ -28,7 +28,9 @@ impl App {
     /// scripts, and after a load, which sets the address without it being a move.
     pub(super) fn watch_address(&mut self, loaded: bool) {
         let Ok(toy_browser::Remote::Value(value)) =
-            self.browser.evaluate(&self.page, "location.href", true)
+            self.browser
+                .borrow_mut()
+                .evaluate(&self.page, "location.href", true)
         else {
             return;
         };
@@ -46,7 +48,9 @@ impl App {
         let Some(Remote::Element(node)) = self.keyed_element(key)? else {
             return Ok(false);
         };
-        self.browser.set_inner_html(&self.page, node, html)?;
+        self.browser
+            .borrow_mut()
+            .set_inner_html(&self.page, node, html)?;
         self.changed();
         Ok(true)
     }
@@ -56,6 +60,7 @@ impl App {
         let key = key.replace('\\', "\\\\").replace('"', "\\\"");
         let found = self
             .browser
+            .borrow_mut()
             .query(&self.page, &format!("[data-key=\"{key}\"]"))?;
         Ok(found.into_iter().next())
     }
@@ -65,13 +70,13 @@ impl App {
     pub fn set_scheme(&mut self, scheme: Scheme) {
         self.scheme = scheme;
         let viewport = self.viewport();
-        self.browser.set_viewport(&self.page, viewport);
+        self.browser.borrow_mut().set_viewport(&self.page, viewport);
         self.changed();
     }
 
     /// How pictures are shown: as their alt text, or not at all.
     pub fn set_images(&mut self, images: Images) {
-        self.browser.set_images(images);
+        self.browser.borrow_mut().set_images(images);
         self.changed();
     }
 
@@ -99,10 +104,11 @@ impl App {
         let Some(node) = target else {
             return Ok(None);
         };
-        self.browser.focus(&self.page, Some(node))?;
+        self.browser.borrow_mut().focus(&self.page, Some(node))?;
         self.changed();
         let at = self
             .browser
+            .borrow_mut()
             .bounding_box(&self.page, &Remote::Element(node))?
             .unwrap_or(toy_browser::ElementBox {
                 x: 0.0,
@@ -119,7 +125,7 @@ impl App {
 
     /// What a Tab (or Shift-Tab) from where focus is would reach.
     fn next_tabbable(&mut self, forward: bool) -> Result<Option<NodeId>> {
-        let found = self.browser.query(
+        let found = self.browser.borrow_mut().query(
             &self.page,
             "a[href],button,input,select,textarea,[tabindex]",
         )?;
@@ -130,6 +136,7 @@ impl App {
             };
             let attribute = |app: &mut Self, name: &str| {
                 app.browser
+                    .borrow_mut()
                     .attribute(&app.page, &Remote::Element(node), name)
                     .ok()
                     .flatten()
@@ -148,7 +155,7 @@ impl App {
         if order.is_empty() {
             return Ok(None);
         }
-        let at = self.browser.focused(&self.page)?;
+        let at = self.browser.borrow_mut().focused(&self.page)?;
         let here = order.iter().position(|&(_, node)| Some(node) == at);
         let last = order.len() - 1;
         let next = match (here, forward) {
@@ -163,13 +170,19 @@ impl App {
     /// The `data-key` an element carries, or the nearest one above it.
     fn data_key(&mut self, mut node: NodeId) -> Option<String> {
         loop {
-            let key = self
-                .browser
-                .attribute(&self.page, &Remote::Element(node), "data-key");
+            let key =
+                self.browser
+                    .borrow_mut()
+                    .attribute(&self.page, &Remote::Element(node), "data-key");
             if let Ok(Some(key)) = key {
                 return Some(key);
             }
-            node = self.browser.parent(&self.page, node).ok().flatten()?;
+            node = self
+                .browser
+                .borrow_mut()
+                .parent(&self.page, node)
+                .ok()
+                .flatten()?;
         }
     }
 }

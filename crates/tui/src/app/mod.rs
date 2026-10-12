@@ -12,14 +12,15 @@
 
 mod hosting;
 mod pointer;
+mod shared;
 
 pub use hosting::Focused;
 pub use pointer::{Hover, Under};
+pub use shared::{Shared, shared_browser};
 
 use anyhow::Result;
-use toy_browser::{Browser, Images, Monospace, PageId, Resources, Scheme, Viewport};
+use toy_browser::{Monospace, PageId, Resources, Scheme, Viewport};
 
-use crate::calibrate;
 use crate::grid::{self, Grid};
 
 /// The text grid this front end forces on every page — see
@@ -37,7 +38,7 @@ const MOST_ROWS: u16 = 20_000;
 
 /// A page, and everything needed to show a screenful of it as cells.
 pub struct App {
-    browser: Browser,
+    browser: Shared,
     page: PageId,
     /// How many CSS pixels one cell covers, across and down — [`GRID`],
     /// measured.
@@ -54,8 +55,14 @@ pub struct App {
     /// does not change what the page looks like, only which part is painted.
     /// Costs ~20ms to rebuild on a long page, which was most of a scroll.
     scene: Option<toy_browser::Scene>,
+    /// The page's revision when `scene` was last dropped: what lets an event
+    /// that changed nothing leave the grid alone.
+    revision: u64,
     /// The grid last painted, kept until the page or the scroll changes.
     grid: Option<Grid>,
+    /// How many times a grid has been painted: a host that kept what it made
+    /// of the last one can tell that this is still it.
+    paints: u64,
     /// Where the pointer last moved to, and which shape the cascade asked
     /// for there — `None` where nothing under it asked for one worth
     /// showing, or once anything has changed enough that the position might
@@ -82,8 +89,9 @@ impl App {
     /// Opens `url` in a fresh page, laid out for a screen of `cols` by `rows`
     /// cells.
     pub fn open(url: &str, cols: u16, rows: u16, scripts: bool, scheme: Scheme) -> Result<Self> {
-        let mut app = Self::blank(cols, rows, scripts, scheme)?;
+        let app = Self::blank(cols, rows, scripts, scheme)?;
         app.browser
+            .borrow_mut()
             .navigate(&app.page, url)
             .map_err(|error| anyhow::anyhow!("{error}"))?;
         Ok(app)
@@ -91,25 +99,15 @@ impl App {
 
     /// A page with nothing in it yet, for a host that will supply the markup.
     pub fn blank(cols: u16, rows: u16, scripts: bool, scheme: Scheme) -> Result<Self> {
-        Self::blank_sharing(Resources::new(), cols, rows, scripts, scheme)
+        let browser = shared_browser(Resources::new(), scripts)?;
+        Self::blank_in(browser, cols, rows, scheme)
     }
 
-    /// As [`Self::blank`], reading through this cache: pages that share one
-    /// fetch a thing once between them.
-    pub fn blank_sharing(
-        resources: Resources,
-        cols: u16,
-        rows: u16,
-        scripts: bool,
-        scheme: Scheme,
-    ) -> Result<Self> {
-        let mut browser = Browser::new(resources)?;
-        browser.set_scripts(scripts);
-        // A grid cannot show a picture, so what it says it is stands in.
-        browser.set_images(Images::AltText);
-        let cell = calibrate::cell(&mut browser, GRID)?;
-        let page = browser.new_page()?;
-        let mut app = Self {
+    /// As [`Self::blank`], in a browser other pages are open in too.
+    pub fn blank_in(browser: Shared, cols: u16, rows: u16, scheme: Scheme) -> Result<Self> {
+        let cell = shared::measured(&mut browser.borrow_mut())?;
+        let page = browser.borrow_mut().new_page()?;
+        let app = Self {
             browser,
             page,
             cell,
@@ -118,7 +116,9 @@ impl App {
             scrolled: (0.0, 0.0),
             reaches: None,
             scene: None,
+            revision: 0,
             grid: None,
+            paints: 0,
             hover: None,
             scheme,
             whole: false,
@@ -128,13 +128,16 @@ impl App {
             pushed: None,
             quit: false,
         };
-        app.browser.set_viewport(&app.page, app.viewport());
+        app.browser
+            .borrow_mut()
+            .set_viewport(&app.page, app.viewport());
         Ok(app)
     }
 
     /// Replaces the page with this markup, scrolled back to the top.
     pub fn load_markup(&mut self, markup: &str, base: &str) -> Result<()> {
         self.browser
+            .borrow_mut()
             .load_markup(&self.page, markup, base)
             .map_err(|error| anyhow::anyhow!("{error}"))?;
         self.scrolled = (0.0, 0.0);
@@ -144,8 +147,17 @@ impl App {
     }
 
     /// Loads this URL into the page, scrolled back to the top.
+    ///
+    /// The address the page is already at is a reload: it is fetched again,
+    /// not answered from the cache.
     pub fn navigate(&mut self, url: &str) -> Result<()> {
+        if self.url() == url
+            && let Ok(address) = toy_browser::Url::parse(url)
+        {
+            self.browser.borrow().resources().forget(&address);
+        }
         self.browser
+            .borrow_mut()
             .navigate(&self.page, url)
             .map_err(|error| anyhow::anyhow!("{error}"))?;
         self.scrolled = (0.0, 0.0);
@@ -176,8 +188,12 @@ impl App {
     }
 
     /// The page's title bar, such as it is: whatever it is now showing.
-    pub fn url(&self) -> &str {
-        self.browser.url(&self.page).unwrap_or_default()
+    pub fn url(&self) -> String {
+        self.browser
+            .borrow_mut()
+            .url(&self.page)
+            .unwrap_or_default()
+            .to_owned()
     }
 
     /// How many rows a Page Up or Page Down moves — a screen, less one row of
@@ -205,15 +221,28 @@ impl App {
     }
 
     pub fn resized(&mut self, cols: u16, rows: u16) {
+        let same = (self.cols, self.rows) == (cols, rows);
         self.cols = cols;
         self.rows = rows;
         let viewport = self.viewport();
-        self.browser.set_viewport(&self.page, viewport);
+        if same && viewport == self.browser.borrow_mut().viewport(&self.page) {
+            return;
+        }
+        self.browser.borrow_mut().set_viewport(&self.page, viewport);
         self.changed();
+    }
+
+    /// As [`Self::changed`], for an event that may well have changed nothing:
+    /// the page's document says whether it did.
+    fn changed_if_revised(&mut self) {
+        if self.browser.borrow_mut().revision(&self.page) != self.revision {
+            self.changed();
+        }
     }
 
     /// Whatever last happened may have moved on the page, on screen, or both.
     fn changed(&mut self) {
+        self.revision = self.browser.borrow_mut().revision(&self.page);
         self.scene = None;
         self.grid = None;
         self.reaches = None;
@@ -224,10 +253,12 @@ impl App {
         if let Some(reaches) = self.reaches {
             return reaches;
         }
+        let mut browser = self.browser.borrow_mut();
         let reaches = (
-            self.browser.widest(&self.page).unwrap_or(0.0),
-            self.browser.height(&self.page).unwrap_or(0.0),
+            browser.widest(&self.page).unwrap_or(0.0),
+            browser.height(&self.page).unwrap_or(0.0),
         );
+        drop(browser);
         self.reaches = Some(reaches);
         reaches
     }
@@ -257,18 +288,31 @@ impl App {
         self.grid.as_ref()
     }
 
+    /// How many grids have been painted so far; see [`Self::rendered`].
+    pub fn paints(&self) -> u64 {
+        self.paints
+    }
+
     /// The screenful of the page as it stands, painting it again only if
     /// scrolling, a click or a key has left the last one stale.
     pub fn render(&mut self) -> Result<&Grid> {
         if self.grid.is_none() {
             let rows = self.grid_rows();
             if self.scene.is_none() {
-                self.scene = Some(self.browser.scene_for(&self.page)?);
+                self.scene = Some(self.browser.borrow_mut().scene_for(&self.page)?);
             }
             let scene = self.scene.as_ref().expect("just built");
             let painted = grid::paint(scene, self.cell, self.scrolled, self.cols, rows);
             self.grid = Some(painted);
+            self.paints += 1;
         }
         Ok(self.grid.as_ref().expect("just painted"))
+    }
+}
+
+impl Drop for App {
+    /// The page is closed, so that the browser it was in does not keep it.
+    fn drop(&mut self) {
+        self.browser.borrow_mut().close_page(&self.page);
     }
 }

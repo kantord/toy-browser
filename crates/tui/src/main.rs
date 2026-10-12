@@ -82,9 +82,10 @@ fn run(app: &mut App) -> Result<()> {
 /// Puts the page's title up if it changed, then the page itself, then shows
 /// wherever the pointer is as the nearest thing to its shape a terminal owns.
 fn redrawn(app: &mut App, out: &mut impl io::Write, shown_title: &mut String) -> Result<()> {
-    if app.url() != shown_title {
-        terminal::set_title(app.url(), out)?;
-        app.url().clone_into(shown_title);
+    let url = app.url();
+    if url != *shown_title {
+        terminal::set_title(&url, out)?;
+        *shown_title = url;
     }
     terminal::draw(app.render()?, out)?;
     terminal::point(app.hover(), out)

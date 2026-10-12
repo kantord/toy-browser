@@ -66,7 +66,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use anyhow::Result;
 use serde_json::{Value, json};
 use toy_browser::{Resources, Scheme};
-use toy_browser_tui::app::App;
+use toy_browser_tui::app::{self, App, Shared};
+use toy_browser_tui::grid::Grid;
 
 /// The protocol this host speaks, said first thing. Adding an op, an event or a
 /// field to one does not change it; changing or removing what is there does.
@@ -82,7 +83,9 @@ static NEXT_PICTURE: AtomicU32 = AtomicU32::new(256);
 struct Sent {
     size: (u16, u16),
     transparent: bool,
-    rows: Vec<Value>,
+    /// How many grids the app had painted by then.
+    paints: u64,
+    rows: Vec<u64>,
 }
 
 /// What the host holds for one page the client has named.
@@ -96,16 +99,16 @@ struct Page {
     pictures: pictures::Announced,
 }
 
-/// Every page the client has opened, reading through one cache.
+/// Every page the client has opened, in one browser with one fetch cache.
 struct Host {
     pages: HashMap<u64, Page>,
-    resources: Resources,
+    browser: Shared,
 }
 
 fn main() -> Result<()> {
     let mut host = Host {
         pages: HashMap::new(),
-        resources: Resources::new(),
+        browser: app::shared_browser(Resources::new(), true)?,
     };
     let mut out = io::stdout().lock();
     emit(
@@ -125,8 +128,7 @@ impl Host {
         match self.pages.entry(id) {
             Entry::Occupied(page) => Ok(page.into_mut()),
             Entry::Vacant(slot) => {
-                let mut app =
-                    App::blank_sharing(self.resources.clone(), 80, 24, true, Scheme::Light)?;
+                let mut app = App::blank_in(self.browser.clone(), 80, 24, Scheme::Light)?;
                 app.leave_navigation(true);
                 Ok(slot.insert(Page {
                     app,
@@ -204,19 +206,39 @@ fn answer(page: &mut Page, id: u64, out: &mut impl Write) -> Result<()> {
         }
         (grid, numbers)
     };
-    let size = (grid.cols, grid.rows);
-    let rows = frame::rows_of(grid, page.transparent, &numbers);
-    let last = page
-        .sent
-        .take()
-        .filter(|last| last.size == size && last.transparent == page.transparent);
-    let reply = frame::frame(&rows, size, last.as_ref().map(|last| last.rows.as_slice()));
-    page.sent = Some(Sent {
-        size,
-        transparent: page.transparent,
-        rows,
-    });
+    let paints = page.app.paints();
+    let (sent, reply) = Sent::next(page.sent.take(), grid, page.transparent, paints, &numbers);
+    page.sent = Some(sent);
     emit(out, id, &reply)
+}
+
+impl Sent {
+    /// What to remember of `grid`, and the frame that brings a client from
+    /// `last` to it.
+    fn next(
+        last: Option<Self>,
+        grid: &Grid,
+        transparent: bool,
+        paints: u64,
+        numbers: &[Option<u32>],
+    ) -> (Self, Value) {
+        let size = (grid.cols, grid.rows);
+        let last = last.filter(|last| last.size == size && last.transparent == transparent);
+        // The very grid sent last time need not be looked at again.
+        let rows = match &last {
+            Some(last) if last.paints == paints => last.rows.clone(),
+            _ => frame::hashes(grid, numbers),
+        };
+        let before = last.as_ref().map(|last| last.rows.as_slice());
+        let reply = frame::frame(grid, transparent, numbers, &rows, before);
+        let sent = Self {
+            size,
+            transparent,
+            paints,
+            rows,
+        };
+        (sent, reply)
+    }
 }
 
 /// Writes one event, tagged with the page it is about.

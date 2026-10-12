@@ -83,6 +83,10 @@ impl Resource {
     }
 }
 
+/// The most bytes the cache holds. A process that reads without end starts over
+/// rather than growing without end.
+const MOST_BYTES: usize = 64 << 20;
+
 /// The cache, and the only thing that touches a filesystem.
 ///
 /// Cheap to clone: every clone is the same cache.
@@ -105,7 +109,7 @@ impl Resources {
     /// syscall and because a page edited between two runs must not answer with
     /// what it used to say — that is a browser that lies to whoever is working
     /// on the page. Nothing over the network is revalidated: it is read once
-    /// and remembered for the life of the process.
+    /// and remembered until [`Self::forget`] or the cache outgrows its bound.
     pub fn get(&self, url: &Url) -> Result<Arc<Resource>, FetchError> {
         if let Some(hit) = self.cached.read().ok().and_then(|c| c.get(url).cloned())
             && hit.stamp == stamp_of(url)
@@ -115,9 +119,21 @@ impl Resources {
 
         let resource = Arc::new(self.read(url)?);
         if let Ok(mut cached) = self.cached.write() {
+            let held: usize = cached.values().map(|it| it.bytes.len()).sum();
+            if held + resource.bytes.len() > MOST_BYTES {
+                cached.clear();
+            }
             cached.insert(url.clone(), Arc::clone(&resource));
         }
         Ok(resource)
+    }
+
+    /// Drops what is remembered of `url`, so the next read goes back to the
+    /// source: what a reload is.
+    pub fn forget(&self, url: &Url) {
+        if let Ok(mut cached) = self.cached.write() {
+            cached.remove(url);
+        }
     }
 
     /// Whether `url` can be read, without keeping the bytes if it can. A
@@ -246,6 +262,33 @@ mod tests {
             "re-read a file that had not moved"
         );
 
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn forgetting_a_url_drops_it() {
+        let resources = Resources::new();
+        let url = Url::parse("about:blank").unwrap();
+        resources.insert(url.clone(), b"seeded".to_vec());
+
+        resources.forget(&url);
+
+        assert!(resources.is_empty());
+    }
+
+    #[test]
+    fn a_cache_over_its_bound_starts_over() {
+        let dir = std::env::temp_dir().join(format!("toy-fetch-full-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let resources = Resources::new();
+        let big = "x".repeat(MOST_BYTES / 2 + 1);
+
+        let first = written(&dir, "a.html", &big);
+        let second = written(&dir, "b.html", &big);
+        resources.get(&first).unwrap();
+        resources.get(&second).unwrap();
+
+        assert_eq!(resources.len(), 1);
         std::fs::remove_dir_all(&dir).ok();
     }
 }

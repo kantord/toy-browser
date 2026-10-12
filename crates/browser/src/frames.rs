@@ -89,6 +89,14 @@ impl Browser {
         held.viewport != viewport || held.revisions != now
     }
 
+    /// A number that differs whenever this page's document (or one mounted in
+    /// it) has changed since it was last asked: for a caller that wants to
+    /// know whether what it drew can still be shown.
+    pub fn revision(&mut self, page: &PageId) -> u64 {
+        let revisions = self.revisions(page).unwrap_or_default();
+        revisions.iter().map(|(_, revision)| revision).sum()
+    }
+
     /// Every page in the unit and how many times its document has changed.
     ///
     /// The whole unit, because a `<webview>` is drawn into this picture: its

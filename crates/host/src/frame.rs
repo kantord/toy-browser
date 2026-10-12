@@ -1,5 +1,8 @@
 //! A grid as the rows of runs that go over the wire, and which of them to send.
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
 use serde_json::{Value, json};
 use toy_browser_tui::grid::{Cell, Grid, Rgb, Style, is_wide, placeholder};
 
@@ -38,15 +41,6 @@ fn flags(style: Style) -> String {
     .into_iter()
     .filter_map(|(on, flag)| on.then_some(flag))
     .collect()
-}
-
-/// Each row as runs of cells that share both colours and style. A cell of a
-/// picture that has a number (`numbers`, by the grid's order) is its
-/// placeholder text in a colour that is the number.
-pub fn rows_of(grid: &Grid, transparent: bool, numbers: &[Option<u32>]) -> Vec<Value> {
-    (0..grid.rows)
-        .map(|row| row_of(grid, row, transparent, numbers))
-        .collect()
 }
 
 /// One row, as `[text, fg, bg, flags]` per run.
@@ -95,20 +89,62 @@ fn shown(cell: &Cell, numbers: &[Option<u32>]) -> (String, Rgb) {
     }
 }
 
-/// The frame to send for `rows`, given the rows last sent: all of them, or —
-/// when the size is the same and some rows are unchanged — only the rows that
-/// differ, named in `at`.
-pub fn frame(rows: &[Value], size: (u16, u16), last: Option<&[Value]>) -> Value {
-    let (cols, height) = size;
+/// A fingerprint of each row: what it is sent as, without building that. Two
+/// rows with the same one are taken to be the same on the wire.
+pub fn hashes(grid: &Grid, numbers: &[Option<u32>]) -> Vec<u64> {
+    (0..grid.rows)
+        .map(|row| {
+            let mut hasher = DefaultHasher::new();
+            (0..grid.cols).for_each(|col| print(&grid.cell(col, row), numbers).hash(&mut hasher));
+            hasher.finish()
+        })
+        .collect()
+}
+
+/// What of a cell reaches the wire, as something that can be hashed.
+fn print(cell: &Cell, numbers: &[Option<u32>]) -> impl Hash {
+    let number = cell.pic.and_then(|slice| {
+        let id = numbers.get(slice.picture).copied().flatten()?;
+        Some((id, slice.row, slice.col))
+    });
+    let Style {
+        bold,
+        italic,
+        underline,
+    } = cell.style;
+    let colour = |rgb: Rgb| (rgb.r, rgb.g, rgb.b);
+    (
+        cell.ch,
+        colour(cell.fg),
+        colour(cell.bg),
+        (bold, italic, underline),
+        number,
+    )
+}
+
+/// The frame to send for `grid`, given the fingerprints of the rows last sent:
+/// all of the rows, or — when the size is the same and some rows are unchanged
+/// — only the rows that differ, named in `at`.
+pub fn frame(
+    grid: &Grid,
+    transparent: bool,
+    numbers: &[Option<u32>],
+    rows: &[u64],
+    last: Option<&[u64]>,
+) -> Value {
+    let (cols, height) = (grid.cols, grid.rows);
     let changed: Vec<usize> = match last.filter(|last| last.len() == rows.len()) {
         Some(last) => (0..rows.len())
             .filter(|&row| rows[row] != last[row])
             .collect(),
         None => (0..rows.len()).collect(),
     };
+    let lines: Vec<Value> = changed
+        .iter()
+        .map(|&row| row_of(grid, row as u16, transparent, numbers))
+        .collect();
     if changed.len() == rows.len() {
-        return json!({"ev": "frame", "cols": cols, "rows": height, "lines": rows});
+        return json!({"ev": "frame", "cols": cols, "rows": height, "lines": lines});
     }
-    let lines: Vec<&Value> = changed.iter().map(|&row| &rows[row]).collect();
     json!({"ev": "frame", "cols": cols, "rows": height, "at": changed, "lines": lines})
 }
