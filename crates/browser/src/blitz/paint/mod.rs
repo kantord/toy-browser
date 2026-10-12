@@ -42,7 +42,7 @@ mod markers;
 mod outlines;
 mod pass;
 mod phases;
-mod pictures;
+pub(crate) mod pictures;
 mod placed;
 mod rows;
 pub(super) mod words;

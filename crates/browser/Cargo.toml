@@ -30,9 +30,13 @@ cursor-icon = "1.2"
 skrifa = "0.44"
 parley = { version = "0.11.1", default-features = false, features = ["std"] }
 style = { package = "stylo", version = "0.20" }
+# `ElementState`, to put `:hover` on a node the cell grid says is under the pointer.
+style_dom = { package = "stylo_dom", version = "0.20.0" }
 ureq = { version = "3.4.0", default-features = false, features = ["rustls"] }
 serde_json.workspace = true
 toy-browser-engine.workspace = true
+# The terminal-cell renderer: `cellstyle` fills its typed tree from a page.
+toy-browser-cells = { path = "../cells", version = "0.1.0" }
 toy-browser-fetch.workspace = true
 toy-browser-rasterizer.workspace = true
 resvg = "0.48.1"

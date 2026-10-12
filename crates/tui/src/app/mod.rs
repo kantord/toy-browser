@@ -10,10 +10,13 @@
 //! while it grows, and a character has no sharpness to keep. A terminal that
 //! wants a bigger page is given a bigger [`GRID`] instead.
 
+mod cells;
 mod hosting;
 mod pointer;
+mod scroll;
 mod shared;
 
+pub use cells::Layout;
 pub use hosting::Focused;
 pub use pointer::{Hover, Under};
 pub use shared::{Shared, shared_browser};
@@ -32,10 +35,6 @@ const GRID: Monospace = Monospace {
     line_height: 18,
 };
 
-/// The most rows a whole-page grid may have, so a page that never ends cannot
-/// take all the memory there is.
-const MOST_ROWS: u16 = 20_000;
-
 /// A page, and everything needed to show a screenful of it as cells.
 pub struct App {
     browser: Shared,
@@ -43,6 +42,15 @@ pub struct App {
     /// How many CSS pixels one cell covers, across and down — [`GRID`],
     /// measured.
     cell: (f32, f32),
+    layout: Layout,
+    /// In cells mode, the whole page laid out in cells, kept until the page or
+    /// the width changes.
+    flow: Option<toy_browser::cells::Grid>,
+    /// In cells mode, the bytes of the pictures the page has, by name.
+    shown: std::collections::HashMap<
+        toy_browser::rasterizer::Digest,
+        toy_browser::rasterizer::Picture,
+    >,
     cols: u16,
     rows: u16,
     /// How far the window has been moved over the page, in CSS pixels — the
@@ -68,6 +76,9 @@ pub struct App {
     /// showing, or once anything has changed enough that the position might
     /// no longer mean what it did.
     hover: Option<(u16, u16, Hover)>,
+    /// In cells mode, the element the pointer is over: when it changes the
+    /// page is styled again, for its `:hover` rules.
+    hovered: Option<toy_browser::NodeId>,
     scheme: Scheme,
     /// Whether a screenful is the whole page, as tall as the page is, instead
     /// of a window over it. For a host that scrolls for itself.
@@ -105,12 +116,16 @@ impl App {
 
     /// As [`Self::blank`], in a browser other pages are open in too.
     pub fn blank_in(browser: Shared, cols: u16, rows: u16, scheme: Scheme) -> Result<Self> {
-        let cell = shared::measured(&mut browser.borrow_mut())?;
+        let layout = Layout::from_env();
+        let cell = layout.cell(&mut browser.borrow_mut())?;
         let page = browser.borrow_mut().new_page()?;
         let app = Self {
             browser,
             page,
             cell,
+            layout,
+            flow: None,
+            shown: std::collections::HashMap::new(),
             cols,
             rows,
             scrolled: (0.0, 0.0),
@@ -120,6 +135,7 @@ impl App {
             grid: None,
             paints: 0,
             hover: None,
+            hovered: None,
             scheme,
             whole: false,
             logged: Vec::new(),
@@ -173,15 +189,6 @@ impl App {
         self.grid = None;
     }
 
-    /// How many rows the grid has: a screenful, or all of the page.
-    fn grid_rows(&mut self) -> u16 {
-        if !self.whole {
-            return self.rows;
-        }
-        let tall = (self.reaches().1 / self.cell.1).ceil();
-        (tall as u16).clamp(self.rows, MOST_ROWS)
-    }
-
     /// Everything the page's scripts logged since the last call.
     pub fn take_logged(&mut self) -> Vec<String> {
         std::mem::take(&mut self.logged)
@@ -196,12 +203,6 @@ impl App {
             .to_owned()
     }
 
-    /// How many rows a Page Up or Page Down moves — a screen, less one row of
-    /// overlap so a reader can tell where they left off.
-    pub fn page_rows(&self) -> f32 {
-        f32::from(self.rows.saturating_sub(1)).max(1.0)
-    }
-
     fn viewport(&self) -> Viewport {
         Viewport {
             width: (f32::from(self.cols) * self.cell.0).round() as u32,
@@ -212,15 +213,10 @@ impl App {
         }
     }
 
-    /// How much of the document a screenful holds, in CSS pixels.
-    fn windowful(&self) -> (f32, f32) {
-        (
-            f32::from(self.cols) * self.cell.0,
-            f32::from(self.rows) * self.cell.1,
-        )
-    }
-
     pub fn resized(&mut self, cols: u16, rows: u16) {
+        if self.layout == Layout::Cells {
+            return self.resized_cells(cols, rows);
+        }
         let same = (self.cols, self.rows) == (cols, rows);
         self.cols = cols;
         self.rows = rows;
@@ -244,41 +240,9 @@ impl App {
     fn changed(&mut self) {
         self.revision = self.browser.borrow_mut().revision(&self.page);
         self.scene = None;
+        self.flow = None;
         self.grid = None;
         self.reaches = None;
-        self.hover = None;
-    }
-
-    fn reaches(&mut self) -> (f32, f32) {
-        if let Some(reaches) = self.reaches {
-            return reaches;
-        }
-        let mut browser = self.browser.borrow_mut();
-        let reaches = (
-            browser.widest(&self.page).unwrap_or(0.0),
-            browser.height(&self.page).unwrap_or(0.0),
-        );
-        drop(browser);
-        self.reaches = Some(reaches);
-        reaches
-    }
-
-    /// Pulls the scroll back inside the page, which it may have left.
-    fn settle(&mut self) {
-        let reaches = self.reaches();
-        let window = self.windowful();
-        self.scrolled = (
-            self.scrolled.0.clamp(0.0, (reaches.0 - window.0).max(0.0)),
-            self.scrolled.1.clamp(0.0, (reaches.1 - window.1).max(0.0)),
-        );
-    }
-
-    /// Moves the window over the page by this many cells, across and down.
-    pub fn scroll(&mut self, cols: f32, rows: f32) {
-        self.scrolled.0 += cols * self.cell.0;
-        self.scrolled.1 += rows * self.cell.1;
-        self.settle();
-        self.grid = None;
         self.hover = None;
     }
 
@@ -296,6 +260,10 @@ impl App {
     /// The screenful of the page as it stands, painting it again only if
     /// scrolling, a click or a key has left the last one stale.
     pub fn render(&mut self) -> Result<&Grid> {
+        if self.grid.is_none() && self.layout == Layout::Cells {
+            self.grid = Some(self.paint_cells()?);
+            self.paints += 1;
+        }
         if self.grid.is_none() {
             let rows = self.grid_rows();
             if self.scene.is_none() {

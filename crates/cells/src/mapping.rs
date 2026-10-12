@@ -12,7 +12,10 @@ use taffy::prelude::{
     Style, TaffyAuto, TaffyZero, length, percent,
 };
 
-use crate::tree::{AlignItems, Computed, Display, Edges, FlexDirection, JustifyContent, Length};
+use crate::tracks;
+use crate::tree::{
+    AlignItems, Computed, Display, Edges, FlexDirection, JustifyContent, Length, Spacing,
+};
 
 pub fn to_taffy(c: &Computed) -> Style {
     let mut style = Style {
@@ -29,14 +32,18 @@ pub fn to_taffy(c: &Computed) -> Style {
         justify_content: Some(justify(c.justify_content)),
         align_items: Some(align(c.align_items)),
         gap: Size {
-            width: cells(c.gap),
-            height: cells(c.gap),
+            width: cells(c.column_gap),
+            height: cells(c.row_gap),
         },
+        grid_template_columns: tracks::templates(&c.grid_columns),
+        grid_template_rows: tracks::templates(&c.grid_rows),
+        grid_column: tracks::placement(c.grid_column),
+        grid_row: tracks::placement(c.grid_row),
         ..Style::default()
     };
     sizes(c, &mut style);
-    style.margin = rect(c.margin, |n| length(f32::from(n)));
-    style.padding = rect(c.padding, cells);
+    style.margin = spacing(c.margin, auto_or);
+    style.padding = spacing(c.padding, padded);
     style.border = rect(c.border, cells);
     style
 }
@@ -59,6 +66,7 @@ fn sizes(c: &Computed, style: &mut Style) {
 fn display(d: Display) -> TaffyDisplay {
     match d {
         Display::Flex => TaffyDisplay::Flex,
+        Display::Grid => TaffyDisplay::Grid,
         Display::None => TaffyDisplay::None,
         Display::Block | Display::Inline => TaffyDisplay::Block,
     }
@@ -116,5 +124,23 @@ fn rect<T: TaffyZero>(e: Edges, f: impl Fn(u16) -> T) -> Rect<T> {
         right: f(e.right),
         bottom: f(e.bottom),
         left: f(e.left),
+    }
+}
+
+fn spacing<T>(s: Spacing, f: impl Fn(Length) -> T) -> Rect<T> {
+    Rect {
+        top: f(s.top),
+        right: f(s.right),
+        bottom: f(s.bottom),
+        left: f(s.left),
+    }
+}
+
+/// Padding has no `auto`: it is nothing.
+fn padded(l: Length) -> LengthPercentage {
+    match l {
+        Length::Cells(n) => cells(n),
+        Length::Percent(p) => percent(p / 100.0),
+        Length::Auto => LengthPercentage::ZERO,
     }
 }

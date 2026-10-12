@@ -18,13 +18,16 @@ use std::collections::BTreeMap;
 
 use toy_browser::rasterizer::Digest;
 
+mod cluster;
 mod faces;
+mod from_cells;
 mod glyphs;
 mod marks;
 mod pictures;
 pub mod placeholder;
 mod width;
 
+pub use from_cells::slice as from_cells;
 pub use marks::paint;
 pub use pictures::{Placed, Slice};
 pub use width::is_wide;
@@ -38,9 +41,13 @@ pub struct Rgb {
 }
 
 /// One cell of the grid: a character on a background, in a foreground ink.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Cell {
     pub ch: char,
+    /// The rest of a grapheme cluster that `ch` starts (a variation selector,
+    /// combining marks, a ZWJ sequence); see `cluster.rs`. `None` for the
+    /// ordinary one-character cell, so it costs a pointer's worth of space.
+    pub more: Option<Box<str>>,
     pub fg: Rgb,
     pub bg: Rgb,
     /// Where a click on this cell should land in the document, screen-relative
@@ -96,6 +103,7 @@ impl Grid {
     fn blank(cols: u16, rows: u16) -> Self {
         let cell = Cell {
             ch: ' ',
+            more: None,
             fg: INK,
             bg: PAPER,
             hit: None,
@@ -117,8 +125,8 @@ impl Grid {
         &self.pictures
     }
 
-    pub fn cell(&self, col: u16, row: u16) -> Cell {
-        self.cells[usize::from(row) * usize::from(self.cols) + usize::from(col)]
+    pub fn cell(&self, col: u16, row: u16) -> &Cell {
+        &self.cells[usize::from(row) * usize::from(self.cols) + usize::from(col)]
     }
 
     /// Where a click on this cell should land, screen-relative — `None` past

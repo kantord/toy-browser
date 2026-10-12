@@ -10,18 +10,21 @@
 //! There is no dependency on Blitz, Stylo or Parley. See [`tree`] for the
 //! contract with the styler and the README for what is left out.
 
+mod atoms;
 mod grid;
 mod layout;
 mod mapping;
 mod paint;
 mod text;
+mod tracks;
 pub mod tree;
 mod wrap;
 
-pub use grid::{Cell, CellStyle, Grid};
+pub use grid::{Cell, CellStyle, Grid, Picture, Rect};
+pub use tracks::{Placement, Template, Track, TrackSize};
 pub use tree::{
     AlignItems, Computed, Display, Edges, Element, FlexDirection, JustifyContent, Length, Node,
-    Rgb, TextAlign, WhiteSpace,
+    Rgb, Spacing, TextAlign, WhiteSpace,
 };
 
 /// Render `root` into a grid `width` columns wide. The grid is exactly as tall

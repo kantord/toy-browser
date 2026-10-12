@@ -103,12 +103,15 @@ struct Page {
 struct Host {
     pages: HashMap<u64, Page>,
     browser: Shared,
+    /// `--cells`: pages are laid out in whole cells (or `TOY_BROWSER_LAYOUT`).
+    cells: bool,
 }
 
 fn main() -> Result<()> {
     let mut host = Host {
         pages: HashMap::new(),
         browser: app::shared_browser(Resources::new(), true)?,
+        cells: std::env::args().any(|arg| arg == "--cells"),
     };
     let mut out = io::stdout().lock();
     emit(
@@ -130,6 +133,9 @@ impl Host {
             Entry::Vacant(slot) => {
                 let mut app = App::blank_in(self.browser.clone(), 80, 24, Scheme::Light)?;
                 app.leave_navigation(true);
+                if self.cells {
+                    app.set_layout(app::Layout::Cells)?;
+                }
                 Ok(slot.insert(Page {
                     app,
                     transparent: false,

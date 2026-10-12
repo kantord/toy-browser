@@ -6,8 +6,8 @@
 //! engine. Unknown properties are ignored, the way a browser would.
 
 use toy_browser_cells::{
-    AlignItems, Computed, Display, Edges, FlexDirection, JustifyContent, Length, Rgb, TextAlign,
-    WhiteSpace,
+    AlignItems, Computed, Display, Edges, FlexDirection, JustifyContent, Length, Placement, Rgb,
+    Spacing, Template, TextAlign, Track, TrackSize, WhiteSpace,
 };
 
 pub fn apply_declarations(c: &mut Computed, style: &str) {
@@ -24,7 +24,12 @@ fn apply(c: &mut Computed, prop: &str, v: &str) {
 
 fn apply_flex(c: &mut Computed, prop: &str, v: &str) -> bool {
     match prop {
-        "display" => c.display = display(v),
+        "display" => {
+            c.display = display(v);
+            c.atomic = v.starts_with("inline-");
+        }
+        "grid-template-columns" => c.grid_columns = templates(v),
+        "grid-column" => c.grid_column = placement(v),
         "flex-direction" => {
             c.flex_direction = if v == "column" {
                 FlexDirection::Column
@@ -36,7 +41,10 @@ fn apply_flex(c: &mut Computed, prop: &str, v: &str) -> bool {
         "flex-grow" => c.flex_grow = v.parse().unwrap_or(0.0),
         "flex-shrink" => c.flex_shrink = v.parse().unwrap_or(1.0),
         "flex-basis" => c.flex_basis = length(v),
-        "gap" => c.gap = v.parse().unwrap_or(0),
+        "gap" => {
+            c.column_gap = v.parse().unwrap_or(0);
+            c.row_gap = c.column_gap;
+        }
         "justify-content" => c.justify_content = justify(v),
         "align-items" => c.align_items = align(v),
         _ => return false,
@@ -52,8 +60,8 @@ fn apply_box(c: &mut Computed, prop: &str, v: &str) -> bool {
         "min-height" => c.min_height = length(v),
         "max-width" => c.max_width = length(v),
         "max-height" => c.max_height = length(v),
-        "margin" => c.margin = edges(v),
-        "padding" => c.padding = edges(v),
+        "margin" => c.margin = spacing(v),
+        "padding" => c.padding = spacing(v),
         "border" => c.border = edges(v),
         _ => return false,
     }
@@ -77,9 +85,43 @@ fn apply_text(c: &mut Computed, prop: &str, v: &str) -> bool {
 fn display(v: &str) -> Display {
     match v {
         "inline" => Display::Inline,
-        "flex" => Display::Flex,
+        "flex" | "inline-flex" => Display::Flex,
+        "grid" => Display::Grid,
         "none" => Display::None,
         _ => Display::Block,
+    }
+}
+
+/// `20 1fr auto`: cells, fractions and `auto`, one track each.
+fn templates(v: &str) -> Vec<Template> {
+    let track = |s: &str| match (s.strip_suffix("fr"), s.parse::<u16>()) {
+        (Some(f), _) => Track {
+            min: TrackSize::Auto,
+            max: TrackSize::Fr(f.parse().unwrap_or(1.0)),
+        },
+        (None, Ok(n)) => Track {
+            min: TrackSize::Cells(n),
+            max: TrackSize::Cells(n),
+        },
+        _ => Track::AUTO,
+    };
+    v.split_whitespace()
+        .map(|s| Template::Single(track(s)))
+        .collect()
+}
+
+/// `2` (a line) or `span 2`.
+fn placement(v: &str) -> Placement {
+    match v.split_whitespace().collect::<Vec<_>>().as_slice() {
+        ["span", n] => Placement {
+            line: None,
+            span: n.parse().unwrap_or(1),
+        },
+        [line] => Placement {
+            line: line.parse().ok(),
+            span: 1,
+        },
+        _ => Placement::default(),
     }
 }
 
@@ -123,6 +165,33 @@ fn length(v: &str) -> Length {
         return p.trim().parse().map_or(Length::Auto, Length::Percent);
     }
     v.parse().map_or(Length::Auto, Length::Cells)
+}
+
+/// CSS shorthand for margin and padding, where `auto` and `%` are allowed.
+fn spacing(v: &str) -> Spacing {
+    let side = |s: &str| if s == "auto" { Length::Auto } else { length(s) };
+    let n: Vec<Length> = v.split_whitespace().map(side).collect();
+    match n.as_slice() {
+        [all] => Spacing {
+            top: *all,
+            right: *all,
+            bottom: *all,
+            left: *all,
+        },
+        [v, h] => Spacing {
+            top: *v,
+            right: *h,
+            bottom: *v,
+            left: *h,
+        },
+        [top, right, bottom, left] => Spacing {
+            top: *top,
+            right: *right,
+            bottom: *bottom,
+            left: *left,
+        },
+        _ => Spacing::default(),
+    }
 }
 
 /// CSS shorthand: one value for all sides, or vertical then horizontal.

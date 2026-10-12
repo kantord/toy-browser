@@ -4,7 +4,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use serde_json::{Value, json};
-use toy_browser_tui::grid::{Cell, Grid, Rgb, Style, is_wide, placeholder};
+use toy_browser_tui::grid::{Cell, Grid, Rgb, Style, placeholder};
 
 const PAPER: Rgb = Rgb {
     r: 255,
@@ -52,10 +52,10 @@ fn row_of(grid: &Grid, row: u16, transparent: bool, numbers: &[Option<u32>]) -> 
         col += 1;
         // A wide character takes two cells where it is shown, so the blank the
         // layout left after it is not sent.
-        if is_wide(cell.ch) && col < grid.cols && grid.cell(col, row).ch == ' ' {
+        if cell.is_wide() && col < grid.cols && grid.cell(col, row).ch == ' ' {
             col += 1;
         }
-        let (text, fg) = shown(&cell, numbers);
+        let (text, fg) = shown(cell, numbers);
         let key = (fg, cell.bg, cell.style);
         match runs.last_mut() {
             Some((run, run_fg, bg, style)) if (*run_fg, *bg, *style) == key => run.push_str(&text),
@@ -85,7 +85,7 @@ fn shown(cell: &Cell, numbers: &[Option<u32>]) -> (String, Rgb) {
     });
     match number {
         Some((slice, id)) => (placeholder::cell(slice.row, slice.col), number_colour(id)),
-        None => (cell.ch.to_string(), cell.fg),
+        None => (cell.text(), cell.fg),
     }
 }
 
@@ -95,7 +95,7 @@ pub fn hashes(grid: &Grid, numbers: &[Option<u32>]) -> Vec<u64> {
     (0..grid.rows)
         .map(|row| {
             let mut hasher = DefaultHasher::new();
-            (0..grid.cols).for_each(|col| print(&grid.cell(col, row), numbers).hash(&mut hasher));
+            (0..grid.cols).for_each(|col| print(grid.cell(col, row), numbers).hash(&mut hasher));
             hasher.finish()
         })
         .collect()
@@ -114,7 +114,7 @@ fn print(cell: &Cell, numbers: &[Option<u32>]) -> impl Hash {
     } = cell.style;
     let colour = |rgb: Rgb| (rgb.r, rgb.g, rgb.b);
     (
-        cell.ch,
+        cell.text(),
         colour(cell.fg),
         colour(cell.bg),
         (bold, italic, underline),
@@ -147,4 +147,36 @@ pub fn frame(
         return json!({"ev": "frame", "cols": cols, "rows": height, "lines": lines});
     }
     json!({"ev": "frame", "cols": cols, "rows": height, "at": changed, "lines": lines})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use toy_browser_tui::app::{App, Layout};
+
+    #[test]
+    fn a_frame_carries_whole_clusters() {
+        let mut app = App::blank(20, 3, false, toy_browser::Scheme::Light).expect("an app");
+        app.set_layout(Layout::Cells).expect("cells");
+        app.load_markup("<p>é 👍🏽 ❤️</p>", "file:///t.html")
+            .expect("markup");
+        let grid = app.render().expect("painted");
+        let rows = hashes(grid, &[]);
+        let sent = frame(grid, false, &[], &rows, None).to_string();
+        for cluster in ["é", "👍🏽", "❤\u{FE0F}"] {
+            assert!(sent.contains(cluster), "{cluster:?} lost in {sent}");
+        }
+    }
+
+    #[test]
+    fn a_transparent_frame_leaves_the_default_colours_to_the_client() {
+        let mut app = App::blank(20, 3, false, toy_browser::Scheme::Light).expect("an app");
+        app.set_layout(Layout::Cells).expect("cells");
+        app.load_markup("<p>plain</p>", "file:///t.html")
+            .expect("markup");
+        let grid = app.render().expect("painted");
+        let rows = hashes(grid, &[]);
+        let sent = frame(grid, true, &[], &rows, None).to_string();
+        assert!(!sent.contains('#'), "{sent}");
+    }
 }

@@ -135,3 +135,32 @@ fn loose_text_between_blocks_forms_an_anonymous_block() {
         "a\ntail\nb"
     );
 }
+
+// Pins: `margin: 0 auto` on a block with a width centres it (the common
+// centred container), and `margin-left: auto` alone pushes it to the right.
+#[test]
+fn auto_margins_centre_a_block() {
+    assert_eq!(
+        text("<div style='width:6; margin:0 auto'>mid</div>", 20),
+        "       mid"
+    );
+    assert_eq!(
+        text("<div style='width:6; margin:0 0 0 auto'>end</div>", 20),
+        "              end"
+    );
+}
+
+// Pins: an auto margin in a flex row takes the free space, so the last item
+// is pushed to the far edge (the nav bar with its link on the right).
+#[test]
+fn auto_margin_pushes_a_flex_item() {
+    let html = "<div style='display:flex'><div>a</div><div style='margin:0 0 0 auto'>b</div></div>";
+    assert_eq!(text(html, 10), "a        b");
+}
+
+// Pins: percentage padding is a share of the containing block's width, not
+// nothing: 10% of 20 columns is two columns on the left.
+#[test]
+fn percentage_padding_resolves_against_the_container() {
+    assert_eq!(text("<div style='padding:0 10%'>hi</div>", 20), "  hi");
+}

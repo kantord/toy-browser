@@ -18,16 +18,18 @@
 use taffy::compute_leaf_layout;
 use taffy::prelude::{AvailableSpace, NodeId, Size, TaffyTree};
 
+use crate::atoms;
 use crate::grid::CellStyle;
 use crate::mapping::to_taffy;
 use crate::text::Builder;
-use crate::tree::{Computed, Display, Element, Length, Node};
+use crate::tree::{Computed, Display, Element, Length, Node, WhiteSpace};
 use crate::wrap::Paragraph;
 
 /// A laid-out box: its Taffy node, the style to paint it with, and either the
 /// paragraph it shows or the boxes it contains.
 pub struct Item {
     pub id: NodeId,
+    pub key: Option<u64>,
     pub style: Computed,
     pub paragraph: Option<usize>,
     pub children: Vec<Item>,
@@ -58,6 +60,7 @@ pub fn layout(root: &Element, width: u16) -> Laid {
         .expect("taffy");
     let top = Item {
         id,
+        key: None,
         style: viewport,
         paragraph: None,
         children: vec![item],
@@ -105,9 +108,9 @@ fn measure(p: &Paragraph, known: Size<Option<f32>>, avail: Size<AvailableSpace>)
     }
 }
 
-struct Planner {
-    taffy: TaffyTree<usize>,
-    paragraphs: Vec<Paragraph>,
+pub(crate) struct Planner {
+    pub(crate) taffy: TaffyTree<usize>,
+    pub(crate) paragraphs: Vec<Paragraph>,
 }
 
 /// Consecutive inline children, or one block-level child.
@@ -117,16 +120,15 @@ enum Run<'a> {
 }
 
 impl Planner {
-    fn element(&mut self, el: &Element) -> Item {
+    pub(crate) fn element(&mut self, el: &Element) -> Item {
         let runs = partition(&el.children);
-        if let ([Run::Inline(nodes)], false) = (runs.as_slice(), el.style.display == Display::Flex)
+        let container = matches!(el.style.display, Display::Flex | Display::Grid);
+        if let ([Run::Inline(nodes)], false) = (runs.as_slice(), container)
+            && !atoms::any(nodes)
         {
-            return self.leaf(el.style.clone(), &el.style, nodes);
+            return self.leaf(el.style.clone(), el.key, &el.style, nodes);
         }
-        let children: Vec<Item> = runs
-            .iter()
-            .filter_map(|run| self.run(&el.style, run))
-            .collect();
+        let children: Vec<Item> = runs.iter().filter_map(|run| self.run(el, run)).collect();
         let ids: Vec<NodeId> = children.iter().map(|c| c.id).collect();
         let id = self
             .taffy
@@ -134,22 +136,25 @@ impl Planner {
             .expect("taffy");
         Item {
             id,
+            key: el.key,
             style: el.style.clone(),
             paragraph: None,
             children,
         }
     }
 
-    fn run(&mut self, parent: &Computed, run: &Run) -> Option<Item> {
+    fn run(&mut self, owner: &Element, run: &Run) -> Option<Item> {
+        let parent = &owner.style;
         match run {
             Run::Block(el) => Some(self.element(el)),
+            Run::Inline(nodes) if atoms::any(nodes) => Some(self.atoms_row(owner, nodes)),
             Run::Inline(nodes) => {
                 let anon = Computed {
                     white_space: parent.white_space,
                     text_align: parent.text_align,
                     ..Computed::default()
                 };
-                Some(self.leaf(anon, parent, nodes)).filter(|item| self.has_text(item))
+                Some(self.leaf(anon, owner.key, parent, nodes)).filter(|item| self.has_text(item))
             }
         }
     }
@@ -161,9 +166,26 @@ impl Planner {
 
     /// A text leaf. `style` is the box's own, `text` supplies the colours and
     /// attributes of the text directly inside it.
-    fn leaf(&mut self, style: Computed, text: &Computed, nodes: &[&Node]) -> Item {
+    fn leaf(
+        &mut self,
+        style: Computed,
+        key: Option<u64>,
+        text: &Computed,
+        nodes: &[&Node],
+    ) -> Item {
         let mut builder = Builder::new();
-        nodes.iter().for_each(|n| flatten(n, text, &mut builder));
+        let span = (cell_style(text, key), text.white_space);
+        nodes.iter().for_each(|n| flatten(n, span, &mut builder));
+        self.leaf_built(style, key, builder)
+    }
+
+    /// A text leaf from atoms already gathered.
+    pub(crate) fn leaf_built(
+        &mut self,
+        style: Computed,
+        key: Option<u64>,
+        builder: Builder,
+    ) -> Item {
         let index = self.paragraphs.len();
         self.paragraphs
             .push(Paragraph::new(builder.finish(), style.white_space));
@@ -173,6 +195,7 @@ impl Planner {
             .expect("taffy");
         Item {
             id,
+            key,
             style,
             paragraph: Some(index),
             children: Vec::new(),
@@ -189,7 +212,13 @@ fn partition(children: &[Node]) -> Vec<Run<'_>> {
 fn push_node<'a>(runs: &mut Vec<Run<'a>>, node: &'a Node) {
     match node {
         Node::Element(el) if el.style.display == Display::None => {}
-        Node::Element(el) if matches!(el.style.display, Display::Block | Display::Flex) => {
+        Node::Element(el)
+            if !el.style.atomic
+                && matches!(
+                    el.style.display,
+                    Display::Block | Display::Flex | Display::Grid
+                ) =>
+        {
             runs.push(Run::Block(el));
         }
         _ => push_inline(runs, node),
@@ -203,26 +232,27 @@ fn push_inline<'a>(runs: &mut Vec<Run<'a>>, node: &'a Node) {
     }
 }
 
-/// Feed the text under `node` to the builder, each piece in the style of the
-/// element it sits directly inside.
-fn flatten(node: &Node, parent: &Computed, builder: &mut Builder) {
+/// Feed the text under `node` to the builder, each piece in the style (and
+/// white-space mode) of the element it sits directly inside.
+fn flatten(node: &Node, parent: (CellStyle, WhiteSpace), builder: &mut Builder) {
     match node {
-        Node::Text(text) => builder.push_text(text, cell_style(parent), parent.white_space),
+        Node::Text(text) => builder.push_text(text, parent.0, parent.1),
         Node::Element(el) if el.style.display != Display::None => {
-            el.children
-                .iter()
-                .for_each(|c| flatten(c, &el.style, builder));
+            let span = (cell_style(&el.style, el.key), el.style.white_space);
+            el.children.iter().for_each(|c| flatten(c, span, builder));
         }
         Node::Element(_) => {}
     }
 }
 
-pub fn cell_style(c: &Computed) -> CellStyle {
+pub fn cell_style(c: &Computed, key: Option<u64>) -> CellStyle {
     CellStyle {
         fg: c.color,
-        bg: c.background,
+        bg: c.background.filter(|_| c.visible),
         bold: c.bold,
         italic: c.italic,
         underline: c.underline,
+        hidden: !c.visible,
+        key,
     }
 }

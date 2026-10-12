@@ -75,12 +75,26 @@ pub fn point(hover: Option<(u16, u16, Hover)>, out: &mut impl Write) -> Result<(
 }
 
 /// Draws every cell of the grid, a row at a time.
+///
+/// A wide cluster is written once and the blank the grid keeps after it is
+/// skipped. After one whose width terminals disagree on (VS16) the cursor is
+/// put where the grid says the next cell is, so one wrong guess cannot shift
+/// the rest of the row.
 pub fn draw(grid: &Grid, out: &mut impl Write) -> Result<()> {
     let mut last = None;
     for row in 0..grid.rows {
         out.queue(MoveTo(0, row))?;
-        for col in 0..grid.cols {
-            paint_cell(out, grid.cell(col, row), &mut last)?;
+        let mut col = 0;
+        while col < grid.cols {
+            let cell = grid.cell(col, row);
+            paint_cell(out, cell, &mut last)?;
+            col += 1;
+            if cell.is_wide() && col < grid.cols && grid.cell(col, row).ch == ' ' {
+                col += 1;
+            }
+            if cell.is_uncertain() {
+                out.queue(MoveTo(col, row))?;
+            }
         }
     }
     out.queue(ResetColor)?;
@@ -91,13 +105,13 @@ pub fn draw(grid: &Grid, out: &mut impl Write) -> Result<()> {
 /// Writes one cell, changing the ink only when it differs from the last one
 /// written — repainting the colours between every character would send more
 /// escape codes than text.
-fn paint_cell(out: &mut impl Write, cell: Cell, last: &mut Option<Cell>) -> Result<()> {
-    if last.map(|it| (it.fg, it.bg)) != Some((cell.fg, cell.bg)) {
+fn paint_cell(out: &mut impl Write, cell: &Cell, last: &mut Option<(Rgb, Rgb)>) -> Result<()> {
+    if *last != Some((cell.fg, cell.bg)) {
         out.queue(SetForegroundColor(colour(cell.fg)))?;
         out.queue(SetBackgroundColor(colour(cell.bg)))?;
     }
-    out.queue(Print(cell.ch))?;
-    *last = Some(cell);
+    out.queue(Print(cell.text()))?;
+    *last = Some((cell.fg, cell.bg));
     Ok(())
 }
 

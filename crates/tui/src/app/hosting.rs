@@ -4,7 +4,7 @@
 use anyhow::Result;
 use toy_browser::{Images, NodeId, Remote, Scheme};
 
-use super::App;
+use super::{App, Layout};
 
 impl App {
     /// Has links the page lets be followed reported (see [`Self::take_navigation`])
@@ -85,7 +85,10 @@ impl App {
         &self,
         digest: &toy_browser::rasterizer::Digest,
     ) -> Option<&toy_browser::rasterizer::Picture> {
-        self.scene.as_ref()?.pictures.get(digest)
+        match self.scene.as_ref() {
+            Some(scene) => scene.pictures.get(digest),
+            None => self.shown.get(digest),
+        }
     }
 
     /// Moves focus: to the element with this `data-key` if one is named,
@@ -106,6 +109,19 @@ impl App {
         };
         self.browser.borrow_mut().focus(&self.page, Some(node))?;
         self.changed();
+        let (col, row) = self.start_of(node)?;
+        Ok(Some(Focused {
+            col,
+            row,
+            key: self.data_key(node),
+        }))
+    }
+
+    /// The cell an element starts at in the page.
+    pub(super) fn start_of(&mut self, node: NodeId) -> Result<(u16, u16)> {
+        if self.layout == Layout::Cells {
+            return Ok(self.cells_start(node).unwrap_or_default());
+        }
         let at = self
             .browser
             .borrow_mut()
@@ -116,11 +132,10 @@ impl App {
                 width: 0.0,
                 height: 0.0,
             });
-        Ok(Some(Focused {
-            col: (at.x / self.cell.0).round().max(0.0) as u16,
-            row: (at.y / self.cell.1).round().max(0.0) as u16,
-            key: self.data_key(node),
-        }))
+        Ok((
+            (at.x / self.cell.0).round().max(0.0) as u16,
+            (at.y / self.cell.1).round().max(0.0) as u16,
+        ))
     }
 
     /// What a Tab (or Shift-Tab) from where focus is would reach.

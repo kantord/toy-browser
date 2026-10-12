@@ -27,6 +27,8 @@
 //!
 //! What a `Computed` cannot say is out of scope on purpose: see the README.
 
+use crate::tracks::{Placement, Template};
+
 /// A 24-bit colour. `None` wherever a colour is optional means "leave the
 /// terminal's own default alone", which is not the same as black or white.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -73,12 +75,43 @@ impl Edges {
     }
 }
 
+/// Four per-side [`Length`]s, for margin and padding. `Auto` is only
+/// meaningful for a margin (it takes the free space, which centres a block
+/// with a width, or pushes a flex item away); on padding it counts as nothing.
+/// The default is zero on every side, not `Auto`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Spacing {
+    pub top: Length,
+    pub right: Length,
+    pub bottom: Length,
+    pub left: Length,
+}
+
+impl Default for Spacing {
+    fn default() -> Self {
+        Edges::default().into()
+    }
+}
+
+impl From<Edges> for Spacing {
+    fn from(e: Edges) -> Self {
+        let cells = |n| Length::Cells(n);
+        Self {
+            top: cells(e.top),
+            right: cells(e.right),
+            bottom: cells(e.bottom),
+            left: cells(e.left),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Display {
     #[default]
     Block,
     Inline,
     Flex,
+    Grid,
     None,
 }
 
@@ -135,8 +168,19 @@ pub struct Computed {
     pub flex_grow: f32,
     pub flex_shrink: f32,
     pub flex_basis: Length,
-    /// Cells between flex items, on both axes.
-    pub gap: u16,
+    /// Cells between flex items or grid tracks, across and down.
+    pub column_gap: u16,
+    pub row_gap: u16,
+    /// `grid-template-columns` / `-rows`; empty means one implicit `auto`.
+    pub grid_columns: Vec<Template>,
+    pub grid_rows: Vec<Template>,
+    /// Where this item sits in a grid parent.
+    pub grid_column: Placement,
+    pub grid_row: Placement,
+    /// An inline-level box that lays out as a unit (`inline-block`,
+    /// `inline-flex`) instead of flowing with the text around it. Its
+    /// `display` says what is inside.
+    pub atomic: bool,
     pub justify_content: JustifyContent,
     pub align_items: AlignItems,
     pub width: Length,
@@ -145,8 +189,8 @@ pub struct Computed {
     pub min_height: Length,
     pub max_width: Length,
     pub max_height: Length,
-    pub margin: Edges,
-    pub padding: Edges,
+    pub margin: Spacing,
+    pub padding: Spacing,
     /// A width of 1 or more draws a single box-drawing line; the width
     /// itself is still reserved in full.
     pub border: Edges,
@@ -158,6 +202,14 @@ pub struct Computed {
     pub underline: bool,
     pub white_space: WhiteSpace,
     pub text_align: TextAlign,
+    /// `visibility: visible`. A hidden box keeps its space but paints nothing:
+    /// no background, no border, and its text becomes blank cells.
+    pub visible: bool,
+    /// A replaced box shown as a picture, named by its source. The box is
+    /// sized by `width` and `height` (the styler gives it whole cells) and
+    /// paints nothing of its own; the grid records where it is, see
+    /// [`crate::Grid::pictures`].
+    pub picture: Option<std::sync::Arc<str>>,
 }
 
 impl Default for Computed {
@@ -169,7 +221,13 @@ impl Default for Computed {
             flex_grow: 0.0,
             flex_shrink: 1.0,
             flex_basis: Length::Auto,
-            gap: 0,
+            column_gap: 0,
+            row_gap: 0,
+            grid_columns: Vec::new(),
+            grid_rows: Vec::new(),
+            grid_column: Placement::default(),
+            grid_row: Placement::default(),
+            atomic: false,
             justify_content: JustifyContent::Start,
             align_items: AlignItems::Stretch,
             width: Length::Auto,
@@ -178,8 +236,8 @@ impl Default for Computed {
             min_height: Length::Auto,
             max_width: Length::Auto,
             max_height: Length::Auto,
-            margin: Edges::default(),
-            padding: Edges::default(),
+            margin: Spacing::default(),
+            padding: Spacing::default(),
             border: Edges::default(),
             color: None,
             background: None,
@@ -188,6 +246,8 @@ impl Default for Computed {
             underline: false,
             white_space: WhiteSpace::Normal,
             text_align: TextAlign::Left,
+            visible: true,
+            picture: None,
         }
     }
 }
@@ -195,7 +255,7 @@ impl Default for Computed {
 /// An element or a run of text.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node {
-    Element(Element),
+    Element(Box<Element>),
     Text(String),
 }
 
@@ -206,7 +266,8 @@ pub struct Element {
     pub tag: String,
     pub style: Computed,
     pub children: Vec<Node>,
-    /// A stable identity the styler can use to map cells back to DOM nodes
-    /// once hit-testing exists. Unused by the renderer today.
+    /// A stable identity the styler can use to map cells back to DOM nodes.
+    /// The renderer only copies it onto the cells the element covers, see
+    /// [`crate::Grid::key_at`].
     pub key: Option<u64>,
 }

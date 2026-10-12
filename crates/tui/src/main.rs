@@ -50,12 +50,20 @@ struct Cli {
     /// Which colour scheme the page is shown in.
     #[arg(long, value_parser = scheme, default_value = "light")]
     scheme: Scheme,
+
+    /// Lay pages out in whole cells instead of pixels (also
+    /// `TOY_BROWSER_LAYOUT=cells`).
+    #[arg(long)]
+    cells: bool,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let (cols, rows) = crossterm::terminal::size().context("reading the terminal's size")?;
     let mut app = App::open(&cli.url, cols, rows, !cli.no_scripts, cli.scheme)?;
+    if cli.cells {
+        app.set_layout(app::Layout::Cells)?;
+    }
 
     let screen = terminal::Screen::entered()?;
     let result = run(&mut app);

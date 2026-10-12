@@ -11,6 +11,7 @@
 //! and renders it.
 
 pub mod blitz;
+mod cellstyle;
 mod dom;
 mod drawing;
 mod frames;
@@ -47,7 +48,7 @@ use toy_browser_engine::{Engine, Handle, SessionId};
 pub use accesskit;
 // The rasterizer entire, so that a front end can start one without naming a
 // crate this one already depends on.
-pub use blitz::{LaidOut, lay_out};
+pub use blitz::{LaidOut, lay_out, style};
 pub use cursor_icon::CursorIcon;
 pub use drawing::{Drawn, Waker};
 pub use hovering::Hovering;
@@ -57,6 +58,9 @@ pub use navigate::{Loaded, NavigationError};
 pub use reading::Reading;
 pub use resvg::tiny_skia;
 pub use toy_browser_engine::{Budget, ElementBox, NodeId, Point, ScriptSurvey};
+// The cell renderer, so `Browser::cells` can be used without naming it.
+pub use cellstyle::{CELL_HEIGHT, CELL_WIDTH};
+pub use toy_browser_cells as cells;
 pub use toy_browser_fetch::{Resources, Url};
 pub use toy_browser_rasterizer as rasterizer;
 pub use toy_browser_rasterizer::{

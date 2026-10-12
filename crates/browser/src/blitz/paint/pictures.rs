@@ -118,10 +118,38 @@ pub(super) fn known(
     src: &str,
     resources: &toy_browser_fetch::Resources,
 ) -> Option<Known> {
+    known_at(&page.base, src, resources)
+}
+
+/// A picture for a cell grid, which has a base address and no page laid out:
+/// its name, and the bytes the Scene would have carried.
+pub(crate) fn fetched_picture(
+    base: &str,
+    src: &str,
+    resources: &toy_browser_fetch::Resources,
+) -> Option<(Digest, toy_browser_rasterizer::Picture)> {
+    let known = known_at(base, src, resources)?;
+    let picture = toy_browser_rasterizer::Picture {
+        bytes: Arc::clone(&known.bytes),
+        format: known.format,
+    };
+    Some((known.digest, picture))
+}
+
+/// How big the picture is in its own right, where the decoder will say.
+pub(crate) fn natural_size(
+    base: &str,
+    src: &str,
+    resources: &toy_browser_fetch::Resources,
+) -> Option<(f32, f32)> {
+    known_at(base, src, resources)?.natural
+}
+
+fn known_at(base: &str, src: &str, resources: &toy_browser_fetch::Resources) -> Option<Known> {
     thread_local! {
         static KNOWN: RefCell<HashMap<String, Known>> = RefCell::new(HashMap::new());
     }
-    let (key, source) = sourced(page, src, resources)?;
+    let (key, source) = sourced(base, src, resources)?;
     if let Some(held) = KNOWN.with(|known| known.borrow().get(&key).cloned())
         && held.came_from(source.as_ref())
     {
@@ -147,14 +175,14 @@ pub(super) fn known(
 /// nothing to fetch. Anything else is resolved against the page and looked up
 /// in Resources, where laying the page out has already put it.
 fn sourced(
-    page: &LaidOut,
+    base: &str,
     src: &str,
     resources: &toy_browser_fetch::Resources,
 ) -> Option<(String, Option<Arc<toy_browser_fetch::Resource>>)> {
     if src.starts_with("data:") {
         return Some((src.to_owned(), None));
     }
-    let base = url::Url::parse(&page.base).ok()?;
+    let base = url::Url::parse(base).ok()?;
     let url = base.join(src).ok()?;
     let resource = resources.get(&url).ok()?;
     Some((url.to_string(), Some(resource)))

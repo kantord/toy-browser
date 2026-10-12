@@ -45,15 +45,20 @@ impl Painter<'_> {
             w: layout.size.width as i64,
             h: layout.size.height as i64,
         };
-        if let Some(bg) = item.style.background {
-            self.grid.fill_bg(rect, bg);
+        if let Some(key) = item.key {
+            self.grid.claim(rect, key);
         }
-        self.border(rect, item.style.border, cell_style(&item.style));
-        let inset = |e: Edges, side: fn(&Edges) -> u16| i64::from(side(&e));
-        let (pad, bor) = (item.style.padding, item.style.border);
-        let left = inset(pad, |e| e.left) + inset(bor, |e| e.left);
-        let top = inset(pad, |e| e.top) + inset(bor, |e| e.top);
-        let right = inset(pad, |e| e.right) + inset(bor, |e| e.right);
+        if item.style.visible {
+            self.decorate(item, rect);
+        }
+        // Taffy's own resolved insets: a percentage padding is only a number
+        // once the containing block's width is known.
+        let inset = |pad: f32, border: f32| (pad + border).round() as i64;
+        let (left, top, right) = (
+            inset(layout.padding.left, layout.border.left),
+            inset(layout.padding.top, layout.border.top),
+            inset(layout.padding.right, layout.border.right),
+        );
         if let Some(index) = item.paragraph {
             let content = Rect {
                 x: x + left,
@@ -66,6 +71,16 @@ impl Painter<'_> {
         for child in &item.children {
             self.item(child, (x, y));
         }
+    }
+
+    fn decorate(&mut self, item: &Item, rect: Rect) {
+        if let Some(bg) = item.style.background {
+            self.grid.fill_bg(rect, bg);
+        }
+        if let Some(source) = &item.style.picture {
+            self.grid.place_picture(rect, source.clone());
+        }
+        self.border(rect, item.style.border, cell_style(&item.style, item.key));
     }
 
     fn text(&mut self, paragraph: &Paragraph, content: Rect, align: TextAlign) {

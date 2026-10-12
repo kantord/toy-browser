@@ -10,7 +10,7 @@ mod css;
 use html5ever::tendril::TendrilSink;
 use html5ever::{ParseOpts, parse_document};
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
-use toy_browser_cells::{Computed, Display, Edges, Element, Grid, Node, WhiteSpace};
+use toy_browser_cells::{Computed, Display, Edges, Element, Grid, Length, Node, WhiteSpace};
 
 /// Render the body content `html` into a grid `width` columns wide.
 pub fn render_html(html: &str, width: u16) -> Grid {
@@ -55,12 +55,12 @@ fn convert(handle: &Handle, parent: &Computed) -> Option<Node> {
                 .iter()
                 .filter_map(|c| convert(c, &style))
                 .collect();
-            Some(Node::Element(Element {
+            Some(Node::Element(Box::new(Element {
                 tag,
                 style,
                 children,
                 key: None,
-            }))
+            })))
         }
         _ => None,
     }
@@ -79,8 +79,8 @@ fn tag_defaults(tag: &str, parent: &Computed) -> Computed {
     };
     match tag {
         "span" | "a" | "b" | "i" | "u" | "em" | "strong" | "code" => c.display = Display::Inline,
-        "p" => c.margin = Edges::vh(1, 0),
-        "ul" | "ol" => c.padding.left = 2,
+        "p" => c.margin = Edges::vh(1, 0).into(),
+        "ul" | "ol" => c.padding.left = Length::Cells(2),
         "pre" => c.white_space = WhiteSpace::Pre,
         "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => c.bold = true,
         _ => {}

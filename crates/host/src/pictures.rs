@@ -117,7 +117,32 @@ fn base64(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::base64;
+    use super::{Announced, base64};
+    use toy_browser::{Images, Scheme};
+    use toy_browser_tui::app::{App, Layout};
+
+    #[test]
+    fn a_picture_in_cells_mode_is_announced_once_scaled_to_its_cells() {
+        let file = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/fixtures/noise.png"
+        );
+        let mut app = App::blank(40, 20, false, Scheme::Light).expect("an app");
+        app.set_layout(Layout::Cells).expect("cells");
+        app.set_images(Images::Real);
+        app.load_markup(&format!("<img src='file://{file}'>"), "file:///t.html")
+            .expect("markup");
+        app.render().expect("painted");
+        let grid = app.rendered().expect("a grid");
+        let (mut sent, mut next, mut announced) = (Vec::new(), 256, Announced::default());
+        let numbers = announced.numbers(&app, grid, &mut next, |event| sent.push(event));
+        assert_eq!(numbers, vec![Some(256)]);
+        assert_eq!(sent.len(), 1);
+        let size = (sent[0]["cols"].as_u64(), sent[0]["rows"].as_u64());
+        assert_eq!(size, (Some(16), Some(8)));
+        announced.numbers(&app, grid, &mut next, |event| sent.push(event));
+        assert_eq!(sent.len(), 1, "once");
+    }
 
     #[test]
     fn nothing_is_nothing() {

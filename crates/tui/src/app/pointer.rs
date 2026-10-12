@@ -4,9 +4,9 @@
 //! Split from `mod.rs`, which keeps what a page *is* and how it is shown; this
 //! changes when the input vocabulary does.
 
-use toy_browser::{CursorIcon, Held, NodeId, Point, Remote, Url};
+use toy_browser::{CursorIcon, Emitted, Held, NodeId, Point, Remote, Url};
 
-use super::App;
+use super::{App, Layout};
 
 /// The two shapes worth telling a terminal's own text cursor to become.
 ///
@@ -76,6 +76,9 @@ impl App {
     /// cursor icon this also gets back, [`Hover::of`] turns into the one
     /// thing a terminal can be told instead — see `main.rs::redrawn`.
     pub fn moved(&mut self, col: u16, row: u16) {
+        if self.layout == Layout::Cells {
+            return self.moved_cells(col, row);
+        }
         let at = self.at(col, row);
         let Ok(hovering) = self.browser.borrow_mut().hover(&self.page, at) else {
             return;
@@ -98,10 +101,9 @@ impl App {
     }
 
     pub fn clicked(&mut self, down: bool, col: u16, row: u16) {
-        let at = self.at(col, row);
-        let emitted = match down {
-            true => self.browser.borrow_mut().pointer_down(&self.page, at),
-            false => self.browser.borrow_mut().pointer_up(&self.page, at),
+        let emitted = match self.layout {
+            Layout::Cells => self.press_cells(down, col, row),
+            Layout::Pixels => self.press_pixels(down, col, row),
         };
         if let Ok(emitted) = emitted {
             self.logged.extend(emitted.console);
@@ -111,6 +113,14 @@ impl App {
             self.watch_address(false);
         }
         self.changed_if_revised();
+    }
+
+    fn press_pixels(&mut self, down: bool, col: u16, row: u16) -> anyhow::Result<Emitted> {
+        let at = self.at(col, row);
+        match down {
+            true => self.browser.borrow_mut().pointer_down(&self.page, at),
+            false => self.browser.borrow_mut().pointer_up(&self.page, at),
+        }
     }
 
     pub fn keyed(&mut self, down: bool, key: &str, code: &str, held: Held) {
@@ -145,21 +155,26 @@ impl App {
             .ok()?
             .into_iter()
             .next()?;
-        let top = self
-            .browser
-            .borrow_mut()
-            .bounding_box(&self.page, &found)
-            .ok()??
-            .y;
-        Some((top / self.cell.1).round().max(0.0) as u16)
+        let Remote::Element(node) = found else {
+            return None;
+        };
+        Some(self.start_of(node).ok()?.1)
+    }
+
+    /// The element covering a cell, as the engine knows it.
+    fn node_at(&mut self, col: u16, row: u16) -> Option<NodeId> {
+        if self.layout == Layout::Cells {
+            return self.cells_node(col, row);
+        }
+        let at = self.at(col, row);
+        self.browser.borrow_mut().hit_test(&self.page, at).ok()?
     }
 
     /// What a cell is of: the element under it, and what that element and the
     /// ones around it say — a link it is inside, a `data-key` a client stamped on
     /// the markup to name it. `None` where there is nothing.
     pub fn under(&mut self, col: u16, row: u16) -> Option<Under> {
-        let at = self.at(col, row);
-        let mut node = self.browser.borrow_mut().hit_test(&self.page, at).ok()??;
+        let mut node = self.node_at(col, row)?;
         let mut found = None;
         loop {
             self.note(node, &mut found);

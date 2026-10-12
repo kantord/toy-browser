@@ -34,6 +34,7 @@ mod held;
 pub(crate) mod implied;
 mod net;
 mod order;
+mod styled;
 
 use agent::{CURSORS, LINE_HEIGHT};
 use fonts::context;
@@ -42,6 +43,8 @@ use export::{colour, font_size};
 pub mod paint;
 
 pub use held::{Kind, Source, Webview};
+pub(crate) use styled::restyle;
+pub use styled::style;
 
 /// A document, laid out.
 pub struct LaidOut {
@@ -56,19 +59,15 @@ pub struct LaidOut {
     pub base: String,
 }
 
-/// Parses and lays out `html` at `viewport`, with `sheets` applied on top of
-/// the engine's own user-agent rules.
-///
-/// `base` is what the page's own relative references resolve against. Without
-/// one a page that names an image beside itself has nothing to resolve against
-/// and the parse gives up, so it is required rather than optional.
-pub fn lay_out(
+/// Parses `html` into a document with the engine's own rules and `sheets`
+/// applied, and the reader that fetches what it names. Nothing is resolved.
+fn parsed(
     html: &str,
     sheets: &[String],
     viewport: Viewport,
     base: &str,
     resources: &toy_browser_fetch::Resources,
-) -> Result<LaidOut> {
+) -> (BaseDocument, Arc<net::Files>) {
     let height = viewport.height.unwrap_or(DEFAULT_HEIGHT);
     let files = Arc::new(net::Files::new(resources.clone()));
     let mut document = toy_browser_engine::parse_document(
@@ -99,6 +98,23 @@ pub fn lay_out(
     for sheet in sheets {
         document.add_user_agent_stylesheet(sheet);
     }
+    (document, files)
+}
+
+/// Parses and lays out `html` at `viewport`, with `sheets` applied on top of
+/// the engine's own user-agent rules.
+///
+/// `base` is what the page's own relative references resolve against. Without
+/// one a page that names an image beside itself has nothing to resolve against
+/// and the parse gives up, so it is required rather than optional.
+pub fn lay_out(
+    html: &str,
+    sheets: &[String],
+    viewport: Viewport,
+    base: &str,
+    resources: &toy_browser_fetch::Resources,
+) -> Result<LaidOut> {
+    let (mut document, files) = parsed(html, sheets, viewport, base, resources);
     // The whole pipeline, not just the layout pass: the cascade has to run
     // first because it is what layout is driven by, and anonymous boxes have to
     // be constructed before there is a tree to lay out.

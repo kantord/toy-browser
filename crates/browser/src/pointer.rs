@@ -60,6 +60,18 @@ impl Browser {
             return self.moved(&child, inside);
         }
         let over = self.hit_test(page, point)?;
+        self.moved_over(page, over, point)
+    }
+
+    /// As [`Self::pointer_move`], for a front end that has already worked out
+    /// which element is under the pointer (a character grid knows from its
+    /// cells). `point` is only where the page's events say it happened.
+    pub fn moved_over(
+        &mut self,
+        page: &PageId,
+        over: Option<NodeId>,
+        point: Point,
+    ) -> Result<Emitted> {
         let mut pointer = self.pointer(page);
         let buttons = held(pointer);
         let mut emitted = Emitted::default();
@@ -87,6 +99,16 @@ impl Browser {
             return self.pointer_down(&child, inside);
         }
         let over = self.hit_test(page, point)?;
+        self.pressed_on(page, over, point)
+    }
+
+    /// As [`Self::pointer_down`], with the element already known.
+    pub fn pressed_on(
+        &mut self,
+        page: &PageId,
+        over: Option<NodeId>,
+        point: Point,
+    ) -> Result<Emitted> {
         let mut emitted = Emitted::default();
 
         self.raise(page, over, at("pointerdown", point, HELD), &mut emitted)?;
@@ -113,6 +135,16 @@ impl Browser {
             return self.pointer_up(&child, inside);
         }
         let over = self.hit_test(page, point)?;
+        self.released_on(page, over, point)
+    }
+
+    /// As [`Self::pointer_up`], with the element already known.
+    pub fn released_on(
+        &mut self,
+        page: &PageId,
+        over: Option<NodeId>,
+        point: Point,
+    ) -> Result<Emitted> {
         let pressed = self.pointer(page).pressed;
         let mut emitted = Emitted::default();
 
@@ -196,7 +228,7 @@ impl Browser {
         Ok(())
     }
 
-    fn pointer(&self, page: &PageId) -> Pointer {
+    pub(crate) fn pointer(&self, page: &PageId) -> Pointer {
         self.pages
             .get(page)
             .map(|page| page.pointer)
