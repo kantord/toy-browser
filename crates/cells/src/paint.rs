@@ -8,13 +8,17 @@
 //!
 //! Borders are drawn with box-drawing characters in the outermost cell of the
 //! box. A border wider than one cell reserves its full width but draws one
-//! line; double and thick borders are not modelled.
+//! line; double and thick borders are not modelled. Each side is drawn in its
+//! own colour, blended over the cell's background like text. A corner cell
+//! belongs to two sides and a cell cannot be split diagonally the way a
+//! browser mitres the join, so it takes the horizontal side's colour: top for
+//! `┌ ┐`, bottom for `└ ┘`.
 
 use taffy::prelude::TaffyTree;
 
 use crate::grid::{CellStyle, Grid, Rect};
 use crate::layout::{Item, Laid, cell_style};
-use crate::tree::{Edges, TextAlign};
+use crate::tree::{Edges, Ink, Inks, TextAlign};
 use crate::wrap::Paragraph;
 
 pub fn paint(laid: &Laid, grid: &mut Grid) {
@@ -141,7 +145,12 @@ impl Painter<'_> {
         if let Some(source) = &item.style.picture {
             self.grid.place_picture(rect, source.clone());
         }
-        self.border(rect, item.style.border, cell_style(&item.style, item.key));
+        self.border(
+            rect,
+            item.style.border,
+            item.style.border_color,
+            cell_style(&item.style, item.key),
+        );
     }
 
     fn text(&mut self, paragraph: &Paragraph, content: Rect, align: TextAlign) {
@@ -161,12 +170,18 @@ impl Painter<'_> {
         }
     }
 
-    fn border(&mut self, rect: Rect, edges: Edges, style: CellStyle) {
+    fn border(&mut self, rect: Rect, edges: Edges, inks: Inks, style: CellStyle) {
         let style = CellStyle { bg: None, ..style };
         for dy in 0..rect.h {
             for dx in 0..rect.w {
                 let sides = Sides::at(edges, (dx, dy), (rect.w, rect.h));
                 if let Some(glyph) = sides.glyph() {
+                    let ink = sides.ink(inks);
+                    let style = CellStyle {
+                        fg: ink.color,
+                        fg_alpha: ink.alpha.0,
+                        ..style
+                    };
                     self.grid.put(rect.x + dx, rect.y + dy, glyph, 1, style);
                 }
             }
@@ -199,6 +214,16 @@ impl Sides {
             bottom: pos.1 == size.1 - 1 && edges.bottom > 0,
             left: pos.0 == 0 && edges.left > 0,
             right: pos.0 == size.0 - 1 && edges.right > 0,
+        }
+    }
+
+    /// The colour of those sides: the horizontal side on a corner.
+    fn ink(&self, inks: Inks) -> Ink {
+        match (self.top, self.bottom, self.left) {
+            (true, ..) => inks.top,
+            (_, true, _) => inks.bottom,
+            (.., true) => inks.left,
+            _ => inks.right,
         }
     }
 

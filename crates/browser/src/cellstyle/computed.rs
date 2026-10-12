@@ -26,6 +26,7 @@ fn inflow(style: &ComputedValues, page: f32) -> Computed {
     let (flex_grow, flex_shrink, flex_basis) = flex::factors(style, page);
     let (column_gap, row_gap) = boxes::gaps(style, page);
     let pos = style.get_position();
+    let (border, padding) = boxes::frame(style, page);
     let mut computed = Computed {
         display: flex::display(style),
         flex_direction: flex::direction(style),
@@ -49,8 +50,8 @@ fn inflow(style: &ComputedValues, page: f32) -> Computed {
         max_width,
         max_height,
         margin: boxes::margin(style, page),
-        padding: boxes::padding(style, page),
-        border: boxes::border(style),
+        padding,
+        border,
         bold: looks::bold(style),
         italic: looks::italic(style),
         underline: looks::underline(style),

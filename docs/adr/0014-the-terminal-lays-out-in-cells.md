@@ -54,7 +54,8 @@ paragraph's `margin: 1em 0` is one blank row. Lengths floor, so a layout is neve
 wider than the page said it could be; margins, padding and gaps across the page
 round, so the 4px between two inline items is a column and not nothing; any
 visible border is one cell, since a border that floors to nothing is a different
-page and not a smaller one. The Scene seam of ADR 0012 is untouched: the window
+page and not a smaller one, and it is counted together with its padding (see
+the consequences). The Scene seam of ADR 0012 is untouched: the window
 and the rasterizer still go through a Scene, and only the terminal does not.
 
 `toy-browser-tui` shows the result through the same `Grid` it always had, so
@@ -79,6 +80,13 @@ Degraded, on purpose:
   `inline-block` is a unit in the line.
 - A float narrows the whole paragraph beside it, not line by line.
 - An animated GIF is its first frame; `<webview>` routing is not done.
+- A border is one line however wide it is, and costs no cell on top of its
+  padding: a side with a border is `max(1, floor((border px + padding px) /
+  cell px))` cells thick, the border the first and the padding the rest (1px +
+  12px is one column, 1px + 16px two; vertically 1px + 16px is still one row).
+  Each side is drawn in its own colour, and a corner cell takes the colour of
+  the horizontal side because a cell cannot be split diagonally. Percentage
+  padding is not part of this and stays beside a one-cell border.
 - Wide fallback fonts no longer matter: width is the unicode width of the
   cluster, never a font's advance. Inline `svg` with no text and no real
   `width`/`height` is dropped, since a terminal cannot draw it.

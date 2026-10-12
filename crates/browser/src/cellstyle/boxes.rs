@@ -7,11 +7,12 @@
 
 use style::properties::ComputedValues;
 use style::values::computed::length::NonNegativeLengthPercentageOrNormal;
-use style::values::computed::{BorderSideWidth, Color, Margin, MaxSize, Size};
+use style::values::computed::length_percentage::Unpacked;
+use style::values::computed::{BorderSideWidth, Color, LengthPercentage, Margin, MaxSize, Size};
 use style::values::specified::border::BorderStyle;
 use toy_browser_cells::{Edges, Length, Spacing};
 
-use super::units::{Axis, border_cells, length, plain, spaced};
+use super::units::{Axis, bordered_cells, length, plain, spaced};
 
 pub(super) fn sizes(style: &ComputedValues, page: f32) -> [Length; 6] {
     let pos = style.get_position();
@@ -55,47 +56,91 @@ pub(super) fn margin(style: &ComputedValues, page: f32) -> Spacing {
     }
 }
 
-pub(super) fn padding(style: &ComputedValues, page: f32) -> Spacing {
+/// Border and padding together, so that a border costs no cell of its own on
+/// top of its padding. A side with a visible border is
+/// `max(1, floor((border px + padding px) / cell px))` cells thick: the border
+/// takes the first and the padding gets the rest. A side without one keeps the
+/// plain padding conversion. A percentage (or `calc()`) padding stays what it
+/// is and the border is one cell on top of it: the rule is for px, em and rem.
+pub(super) fn frame(style: &ComputedValues, page: f32) -> (Edges, Spacing) {
     let it = style.get_padding();
-    Spacing {
-        top: spaced(&it.padding_top.0, Axis::Y, page),
-        right: spaced(&it.padding_right.0, Axis::X, page),
-        bottom: spaced(&it.padding_bottom.0, Axis::Y, page),
-        left: spaced(&it.padding_left.0, Axis::X, page),
+    let pads = [
+        (&it.padding_top.0, Axis::Y),
+        (&it.padding_right.0, Axis::X),
+        (&it.padding_bottom.0, Axis::Y),
+        (&it.padding_left.0, Axis::X),
+    ];
+    let widths = border_widths(style);
+    let mut border = [0; 4];
+    let mut padding = [Length::Auto; 4];
+    for (i, (pad, axis)) in pads.into_iter().enumerate() {
+        (border[i], padding[i]) = side_frame(pad, axis, widths[i], page);
+    }
+    let [top, right, bottom, left] = border;
+    let edges = Edges {
+        top,
+        right,
+        bottom,
+        left,
+    };
+    let [top, right, bottom, left] = padding;
+    (
+        edges,
+        Spacing {
+            top,
+            right,
+            bottom,
+            left,
+        },
+    )
+}
+
+/// One side: its border cells (0 or 1) and its padding.
+fn side_frame(pad: &LengthPercentage, axis: Axis, width: Option<f32>, page: f32) -> (u16, Length) {
+    let Some(width) = width else {
+        return (0, spaced(pad, axis, page));
+    };
+    match pad.unpack() {
+        Unpacked::Length(px) => {
+            let thick = bordered_cells(width + px.px(), axis);
+            (1, Length::Cells(thick - 1))
+        }
+        _ => (1, length(pad, axis, page)),
     }
 }
 
-/// Any visible border is one cell wide or tall, whatever its pixel width. A
-/// transparent one is not visible: pages reserve room for a focus ring or a
+/// The pixel width of each visible border side (top, right, bottom, left).
+/// A transparent one is not visible: pages reserve room for a focus ring or a
 /// button's edge that way, and drawing it would box every such button.
-pub(super) fn border(style: &ComputedValues) -> Edges {
+fn border_widths(style: &ComputedValues) -> [Option<f32>; 4] {
     let it = style.get_border();
     let side = |width: &BorderSideWidth, line: BorderStyle, color: &Color| {
         let seen = style.resolve_color(color).raw_components()[3] > 0.0;
-        border_cells(width.0.to_f32_px(), seen && !line.none_or_hidden())
+        let px = width.0.to_f32_px();
+        (seen && !line.none_or_hidden() && px > 0.0).then_some(px)
     };
-    Edges {
-        top: side(
+    [
+        side(
             &it.border_top_width,
             it.border_top_style,
             &it.border_top_color,
         ),
-        right: side(
+        side(
             &it.border_right_width,
             it.border_right_style,
             &it.border_right_color,
         ),
-        bottom: side(
+        side(
             &it.border_bottom_width,
             it.border_bottom_style,
             &it.border_bottom_color,
         ),
-        left: side(
+        side(
             &it.border_left_width,
             it.border_left_style,
             &it.border_left_color,
         ),
-    }
+    ]
 }
 
 /// `(column gap, row gap)`: between columns of a grid or items of a row, and

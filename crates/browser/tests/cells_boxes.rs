@@ -136,20 +136,21 @@ fn css_grid_with_fr_tracks() {
     assert_eq!(text("grid", t, 40), "one            two\n\nthree");
 }
 
-// Pins: inline-blocks are units in a row, a column apart, wrapping whole.
+// Pins: inline-blocks are units in a row, a column apart, wrapping whole. The
+// border is the first column of the 1em padding's two, so one column inside.
 #[test]
 fn inline_block_button_row() {
     let t = "<style>body{margin:0} b{display:inline-block;border:1px solid;padding:0 1em}</style>
         <p><b>One</b> <b>Two</b> <b>Three</b></p>";
     let expected = "\
-┌───────┐ ┌───────┐ ┌─────────┐
-│  One  │ │  Two  │ │  Three  │
-└───────┘ └───────┘ └─────────┘
+┌─────┐ ┌─────┐ ┌───────┐
+│ One │ │ Two │ │ Three │
+└─────┘ └─────┘ └───────┘
 ";
     assert_eq!(text("ib", t, 40).trim_start_matches('\n'), expected);
     let narrow = text("ibnarrow", t, 24);
     assert!(
-        narrow.contains("│  Three  │") && narrow.lines().count() > 5,
+        narrow.contains("│ Three │") && narrow.lines().count() > 5,
         "{narrow}"
     );
 }

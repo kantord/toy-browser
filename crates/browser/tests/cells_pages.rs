@@ -80,7 +80,7 @@ fn blog_article_is_a_centred_column() {
     // less its 1em padding: two columns in.
     assert!(page.row("Cells all the way down").starts_with("  Cells"));
     assert!(page.row("Posted by").ends_with("Ada on 2026-10-12"));
-    page.shows(&["│  Round the edges", "• Taffy in whole cells", "────"]);
+    page.shows(&["│ Round the edges", "• Taffy in whole cells", "────"]);
 }
 
 #[test]

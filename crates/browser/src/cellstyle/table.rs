@@ -27,7 +27,8 @@ use blitz_dom::{Node as Dom, local_name};
 use style::properties::ComputedValues;
 use style::values::specified::box_::{DisplayInside, DisplayOutside};
 use toy_browser_cells::{
-    AlignItems, Computed, Display, Edges, Element, Length, Node, Placement, Template, Track,
+    AlignItems, Computed, Display, Edges, Element, Ink, Inks, Length, Node, Placement, Template,
+    Track,
 };
 
 /// What a box is within a table, by its `display`.
@@ -180,16 +181,26 @@ fn shrunk(kept: Computed, grid: Element) -> Element {
 fn outline(table: &mut Element, cells: &mut [Node]) {
     let unruled = |e: &Edges| *e == Edges::default();
     if unruled(&table.style.border) {
-        table.style.border = Edges::all(1);
+        rule_all(&mut table.style);
     }
     for cell in cells.iter_mut().filter_map(|n| match n {
         Node::Element(c) => Some(c),
         Node::Text(_) => None,
     }) {
         if unruled(&cell.style.border) {
-            cell.style.border = Edges::all(1);
+            rule_all(&mut cell.style);
         }
     }
+}
+
+/// A line on every side in the box's own text colour, as `currentcolor`.
+fn rule_all(style: &mut Computed) {
+    style.border = Edges::all(1);
+    let ink = Ink {
+        color: style.color,
+        alpha: style.color_alpha,
+    };
+    style.border_color = Inks::all(ink);
 }
 
 /// The look a table's boxes made up around it share with it.

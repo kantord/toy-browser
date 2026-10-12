@@ -39,6 +39,17 @@ present or absent. The renderer never cascades and never converts units.
   over" at paint time, onto the cell's background or, where it has none, the
   grid's canvas (white, `Grid::set_canvas`). Stacked layers compose in paint
   order and every cell ends up opaque. Pictures are not blended.
+- Borders: a side with a width of 1 or more is one box-drawing line (`─ │`,
+  corners `┌ ┐ └ ┘`) in the outermost cell of the box. Each side carries its
+  own colour (`Computed::border_color`), composited over the cell's
+  background like text. A corner cell belongs to two sides and a cell cannot
+  be split diagonally like a browser's mitred corner, so it takes the
+  horizontal side's colour (top for `┌ ┐`, bottom for `└ ┘`). A side with no
+  border draws and costs nothing. The styler makes a border cost no cell on
+  top of its padding (`max(1, floor((border + padding) / cell))` cells, px,
+  em and rem padding only; a percentage padding stays one, with the border
+  one cell beyond it), so this crate just sees a 1-cell border and the
+  remaining padding.
 - Inline-level boxes (`Computed::atomic`: `inline-block`, `inline-flex`) as
   units in a wrapping row, see `atoms.rs` for what that gives up (no sharing a
   line with the middle of a sentence, no baseline alignment).

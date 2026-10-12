@@ -13,7 +13,7 @@
 
 use blitz_dom::{BaseDocument, NodeId};
 use style_dom::ElementState;
-use toy_browser_cells::{Alpha, Computed, Rgb};
+use toy_browser_cells::{Alpha, Computed, Ink, Inks, Rgb};
 
 use crate::blitz::keyed;
 
@@ -38,7 +38,8 @@ pub(super) fn hover(doc: &mut BaseDocument, over: Option<usize>) {
 }
 
 /// Swaps text and background (alphas with them), taking opaque black on
-/// white for a colour left unsaid.
+/// white for a colour left unsaid. A border side drawn in the text colour
+/// (`currentcolor`) follows the text.
 pub(super) fn reverse(style: &mut Computed) {
     let ink = style
         .color
@@ -48,6 +49,22 @@ pub(super) fn reverse(style: &mut Computed) {
         .map_or((Rgb(255, 255, 255), Alpha(255)), |c| {
             (c, style.background_alpha)
         });
+    let was = Ink {
+        color: style.color,
+        alpha: style.color_alpha,
+    };
+    let now = Ink {
+        color: Some(paper.0),
+        alpha: paper.1,
+    };
+    let follow = |side: Ink| if side == was { now } else { side };
+    let inks = style.border_color;
+    style.border_color = Inks {
+        top: follow(inks.top),
+        right: follow(inks.right),
+        bottom: follow(inks.bottom),
+        left: follow(inks.left),
+    };
     (style.color, style.color_alpha) = (Some(paper.0), paper.1);
     (style.background, style.background_alpha) = (Some(ink.0), ink.1);
 }

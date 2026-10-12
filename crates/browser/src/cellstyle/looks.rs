@@ -10,7 +10,9 @@
 //! really asks for `color: #000` gets the terminal default too, which is
 //! also what its author would want on a dark terminal. Translucent black
 //! stays a colour. A background with no alpha at all is `None`; any other
-//! alpha is passed on beside the colour for the grid to composite. The
+//! alpha is passed on beside the colour for the grid to composite. Each border
+//! side has a colour of its own, read the same way as the text colour (and
+//! `currentcolor` is the text colour). The
 //! `opacity` property is ignored: only alpha inside a colour counts.
 
 use style::color::{AbsoluteColor, ColorSpace};
@@ -19,8 +21,8 @@ use style::computed_values::visibility::T as Visibility;
 use style::computed_values::white_space_collapse::T as Collapse;
 use style::properties::ComputedValues;
 use style::values::computed::text::TextAlign as Align;
-use style::values::computed::{FontStyle, TextDecorationLine};
-use toy_browser_cells::{Alpha, Computed, Rgb, TextAlign, WhiteSpace};
+use style::values::computed::{Color, FontStyle, TextDecorationLine};
+use toy_browser_cells::{Alpha, Computed, Ink, Inks, Rgb, TextAlign, WhiteSpace};
 
 /// The four components of a colour in sRGB, whatever it was written in.
 ///
@@ -38,6 +40,25 @@ pub(super) fn colours(style: &ComputedValues, computed: &mut Computed) {
     computed.color_alpha = Alpha(foreground_alpha(style));
     computed.background = background(style);
     computed.background_alpha = Alpha(background_alpha(style));
+    computed.border_color = border_inks(style);
+}
+
+fn border_inks(style: &ComputedValues) -> Inks {
+    let it = style.get_border();
+    let ink = |colour: &Color| {
+        let [red, green, blue, alpha] = srgb(&style.resolve_color(colour));
+        let opaque = to_byte(alpha) == 255;
+        Ink {
+            color: Some(rgb(red, green, blue)).filter(|c| !opaque || *c != Rgb(0, 0, 0)),
+            alpha: Alpha(to_byte(alpha)),
+        }
+    };
+    Inks {
+        top: ink(&it.border_top_color),
+        right: ink(&it.border_right_color),
+        bottom: ink(&it.border_bottom_color),
+        left: ink(&it.border_left_color),
+    }
 }
 
 fn foreground(style: &ComputedValues) -> Option<Rgb> {

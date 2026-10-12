@@ -103,8 +103,8 @@ fn room(doc: &BaseDocument, node: &Node, page: u16) -> u16 {
 /// Left plus right margin, padding and border of one ancestor, in cells.
 fn side_cells(styles: &style::properties::ComputedValues, page: f32) -> u16 {
     let fixed = |l: Length| if let Length::Cells(n) = l { n } else { 0 };
-    let (margin, padding) = (boxes::margin(styles, page), boxes::padding(styles, page));
-    let border = boxes::border(styles);
+    let margin = boxes::margin(styles, page);
+    let (border, padding) = boxes::frame(styles, page);
     [
         fixed(margin.left),
         fixed(margin.right),

@@ -11,8 +11,9 @@
 //! `spaced`). A length that is not a whole number of cells has to go
 //! somewhere, and down is the one direction that never makes a layout wider
 //! than the page said it could be. The single exception is borders, which are
-//! rounded up to one cell, because a 1px hairline floors to nothing and a
-//! border that disappears is a different page, not a smaller one.
+//! one cell at least, because a 1px hairline floors to nothing and a border
+//! that disappears is a different page, not a smaller one. The border takes the
+//! first cell of its side's thickness and its padding the rest, see `boxes`.
 
 use style::values::computed::length_percentage::Unpacked;
 use style::values::computed::{CSSPixelLength, LengthPercentage};
@@ -44,9 +45,10 @@ pub(super) fn cells(px: f32, axis: Axis) -> u16 {
     (px / axis.cell()).floor().clamp(0.0, f32::from(u16::MAX)) as u16
 }
 
-/// A border of any width is one cell; no width is none.
-pub(super) fn border_cells(px: f32, drawn: bool) -> u16 {
-    u16::from(drawn && px > 0.0)
+/// The cells a visible border and its padding take together, `px` in all:
+/// whole cells, but never less than the one the border itself needs.
+pub(super) fn bordered_cells(px: f32, axis: Axis) -> u16 {
+    cells(px, axis).max(1)
 }
 
 /// A length or percentage. A `calc()` mixing the two needs a containing

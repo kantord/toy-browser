@@ -171,6 +171,34 @@ impl Default for Alpha {
     }
 }
 
+/// A colour with its opacity: `None` is the terminal's own default colour.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct Ink {
+    pub color: Option<Rgb>,
+    pub alpha: Alpha,
+}
+
+/// The [`Ink`] of each border side.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct Inks {
+    pub top: Ink,
+    pub right: Ink,
+    pub bottom: Ink,
+    pub left: Ink,
+}
+
+impl Inks {
+    /// The same ink on all four sides.
+    pub fn all(ink: Ink) -> Self {
+        Self {
+            top: ink,
+            right: ink,
+            bottom: ink,
+            left: ink,
+        }
+    }
+}
+
 /// A flex shrink factor. One by default, as in CSS, where a bare `f32`
 /// would default to not shrinking at all.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -217,7 +245,10 @@ pub struct Computed {
     /// A width of 1 or more draws a single box-drawing line; the width
     /// itself is still reserved in full.
     pub border: Edges,
-    /// Text and border colour.
+    /// The colour each border side is drawn in. A corner cell belongs to two
+    /// sides and takes the horizontal one (top or bottom), see [`crate::paint`].
+    pub border_color: Inks,
+    /// Text colour.
     pub color: Option<Rgb>,
     /// How opaque `color` is, 0 to 255. Painting composites it over the
     /// background already in the cell, see [`crate::Grid`]. `opacity` is not
