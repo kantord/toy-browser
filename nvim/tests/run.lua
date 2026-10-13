@@ -86,5 +86,36 @@ check("pages are dark by default", colours_in_use():find("101820", 1, true), col
 T.scheme("light"); wait_for_colour("ffffff")
 check(":ToyHtmlScheme light re-renders the open page", colours_in_use():find("ffffff", 1, true), colours_in_use())
 
+-- A drag raises a resize per cell: only the last size must reach the host,
+-- and a click in the middle of it must not stop the page being redrawn.
+T.open({ url = "file://" .. pages .. "a.html", here = true })
+wait_for("Page A")
+local sizes = {}
+local real_chansend = vim.fn.chansend
+vim.fn.chansend = function(job, data)
+  local sent = vim.json.decode(data)
+  if sent.op == "resize" then sizes[#sizes + 1] = sent.cols end
+  return real_chansend(job, data)
+end
+vim.cmd("vsplit | wincmd h")
+-- WinResized is only raised by a redraw, which a headless Neovim never does.
+local function drag(width)
+  vim.cmd("vertical resize " .. width)
+  vim.api.nvim_exec_autocmds("WinResized", {})
+end
+sizes = {}
+for width = 50, 31, -1 do drag(width) end
+vim.wait(1000, function() return sizes[#sizes] == 31 end, 20)
+check("the last size of a drag wins", sizes[#sizes] == 31, sizes)
+check("a drag is not sent cell by cell", #sizes < 20, sizes)
+sizes = {}
+drag(45); drag(35)
+press("<CR>")
+drag(33)
+vim.wait(1000, function() return sizes[#sizes] == 33 end, 20)
+check("a resize after a click still goes out", sizes[#sizes] == 33, sizes)
+check("the page is still drawn after them", has("Page A"))
+vim.fn.chansend = real_chansend
+
 io.stdout:write((failures == 0 and "all passed" or (failures .. " failed")) .. "\n")
 vim.cmd(failures == 0 and "qa!" or "cq")

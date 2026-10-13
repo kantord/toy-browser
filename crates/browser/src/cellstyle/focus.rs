@@ -11,11 +11,37 @@
 //! mark that reads on any colour scheme and needs no new attribute on the
 //! wire, since it is only colours by the time a host sees it.
 
-use blitz_dom::{BaseDocument, NodeId};
+use blitz_dom::{BaseDocument, Node, NodeId, local_name};
 use style_dom::ElementState;
 use toy_browser_cells::{Alpha, Computed, Ink, Inks, Rgb};
 
 use crate::blitz::keyed;
+
+/// What a person operates, by tag.
+const CONTROLS: [&str; 7] = ["a", "area", "button", "input", "select", "summary", "textarea"];
+
+/// What a person operates, by `role`, for the `<div>` a page made into one.
+const ROLES: [&str; 12] = [
+    "button", "checkbox", "link", "menuitem", "option", "radio", "searchbox", "slider", "switch",
+    "tab", "textbox", "combobox",
+];
+
+/// Whether focus on this element is worth a mark.
+///
+/// Anything with a `tabindex` takes focus from a press, and pages put one on
+/// the container of their whole content (GitHub's scrolling `<main>` pane, so
+/// that a keyboard can scroll it). A browser draws nothing for those on a
+/// mouse press; reversing the container would turn the page inside out, since
+/// the mark passes down to everything inside.
+pub(super) fn marked(node: &Node) -> bool {
+    let Some(data) = node.element_data() else {
+        return false;
+    };
+    CONTROLS.contains(&data.name.local.as_ref())
+        || node
+            .attr(local_name!("role"))
+            .is_some_and(|role| ROLES.contains(&role))
+}
 
 /// The element with this engine key and everything above it.
 fn chain(doc: &BaseDocument, key: Option<usize>) -> Vec<NodeId> {

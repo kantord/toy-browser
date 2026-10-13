@@ -134,7 +134,8 @@ impl Walk<'_> {
     /// What `node` hands its children, after marking it if it has focus.
     fn passed(&self, node: &Node, style: &mut Computed, down: Down) -> Down {
         let own = keyed(node);
-        let reverse = down.reverse || (own.is_some() && own == self.env.typed.focused);
+        let focused = own.is_some() && own == self.env.typed.focused && focus::marked(node);
+        let reverse = down.reverse || focused;
         if reverse {
             focus::reverse(style);
         }

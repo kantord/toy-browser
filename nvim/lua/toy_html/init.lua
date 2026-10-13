@@ -10,6 +10,9 @@
 
 local M = {}
 
+-- How long a resize is waited for before the next may go.
+local INFLIGHT_MS = 300
+
 local ns = vim.api.nvim_create_namespace("toy_html")
 local groups = {}
 
@@ -83,10 +86,9 @@ local function prepared(runs)
   return table.concat(parts), row, rest
 end
 
--- The highlights of a row that is already in the buffer: one over each run,
+-- The highlights of a row that is already in the buffer, and has none yet: one over each run,
 -- and one behind the whole line for the padding that was trimmed off.
 local function mark_row(view, line, row, rest)
-  vim.api.nvim_buf_clear_namespace(view.buf, ns, line, line + 1)
   if rest and rest[3] ~= "" then
     -- Low priority, so the runs' own colours win where there is text.
     vim.api.nvim_buf_set_extmark(view.buf, ns, line, 0, {
@@ -116,6 +118,7 @@ local function draw(view, frame)
   if first then
     for n, line in ipairs(first) do
       vim.api.nvim_buf_set_lines(view.buf, line, line + 1, false, { text[n] })
+      vim.api.nvim_buf_clear_namespace(view.buf, ns, line, line + 1)
       mark_row(view, line, rows[n], rests[n])
     end
   else
@@ -234,6 +237,7 @@ end
 
 function handle(view, event)
   if event.ev == "frame" then
+    view.flush()
     status(view)
     draw(view, event)
     if view.cursor and window(view) then
@@ -518,9 +522,36 @@ function M.open(opts)
   -- `fresh`: this buffer has none of the page yet, so the frame must be whole.
   local function resize(silent, fresh)
     local win = window(view)
-    if win then
-      local cols, rows = size(win)
-      send(view, { op = "resize", cols = cols, rows = rows, silent = silent, full = fresh })
+    if not win then
+      return
+    end
+    if view.inflight and not silent then
+      -- A drag raises a resize per cell, and the host answers each with a
+      -- whole page: it would lay out sizes nobody will see, one after another.
+      -- Only the last size is kept, to be sent once the frame for the one in
+      -- flight is back.
+      view.queued = { fresh = fresh or (view.queued and view.queued.fresh) }
+      return
+    end
+    local cols, rows = size(win)
+    send(view, { op = "resize", cols = cols, rows = rows, silent = silent, full = fresh })
+    if not silent then
+      view.inflight = {}
+      local mine = view.inflight
+      -- A resize to the size the page already has may bring no frame; the
+      -- gate must not stay shut for it.
+      vim.defer_fn(function()
+        if view.inflight == mine then
+          view.flush()
+        end
+      end, INFLIGHT_MS)
+    end
+  end
+  function view.flush()
+    local queued = view.queued
+    view.inflight, view.queued = nil, nil
+    if queued then
+      resize(false, queued.fresh)
     end
   end
   -- What the host needs to hold the page: sent once, and again if the host
