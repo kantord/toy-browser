@@ -17,17 +17,21 @@
 //! the styler reads may come from Blitz's layout. An `<img>` is sized here from
 //! its computed `width` / `height` and the decoded picture, see `picture`.
 //!
+//! The styled document is kept per page (`cached`), so a width change restyles
+//! it rather than parsing it again.
+//!
 //! The page is styled at `columns * 8` CSS px wide, so media queries and
 //! percentages see the terminal's width, under the colour scheme the page's
 //! viewport was given. What the document cannot know on its own is told to it
-//! first: typed values and focus (`LaidOut::focused`), the hovered element
-//! (`focus`), and pictures (`picture`) are fetched through the same cache the
+//! first: what has focus and the hovered element
+//! (`cached`, `focus`), and pictures (`picture`) are fetched through the same cache the
 //! pixel path draws from. See `units` for the cell size and
 //! the rounding, `flex` for what `display` values are folded together,
 //! `outflow` for floats, positioning and clipping, and `table` (with
 //! `collapse`) and `tracks` for the two that become a grid.
 
 mod boxes;
+mod cached;
 mod collapse;
 mod computed;
 mod finish;
@@ -47,9 +51,10 @@ use anyhow::{Result, anyhow};
 use toy_browser_cells::Grid;
 use toy_browser_engine::Typed;
 
+pub(crate) use cached::Cached;
 pub use units::{CELL_HEIGHT, CELL_WIDTH};
 
-use crate::{Browser, PageId, Viewport};
+use crate::{Browser, PageId};
 
 /// What the walk needs to know beyond the document.
 struct Env<'a> {
@@ -68,35 +73,27 @@ impl Browser {
     /// key for whatever covers it.
     pub fn cells(&mut self, page: &PageId, width: u16) -> Result<Grid> {
         let session = self.session(page)?;
-        let html = self
-            .engine
-            .html_projected(&session, &self.images.rewrites())?;
-        let base = self
-            .base_url(page)
-            .map_or_else(|| "about:blank".to_owned(), |url| url.to_string());
-        let run_scripts = self.pages.get(page).is_none_or(|held| held.run_scripts);
-        let sheets = crate::rules::sheets(run_scripts);
-        let viewport = Viewport {
-            width: u32::from(width) * units::CELL_WIDTH as u32,
-            height: None,
-            scheme: self.viewport(page).scheme,
-            ..Viewport::default()
+        let key = self.key(page, &session)?;
+        let mut cached = match self.reusable(page, &key) {
+            Some(cached) => cached,
+            None => self.built(&session, key, width)?,
         };
-        let mut laid = crate::blitz::style(&html, &sheets, viewport, &base, &self.resources)?;
         let typed = self.engine.fields(&session)?;
-        laid.focused(&typed);
-        focus::hover(&mut laid.document, self.pointer(page).over);
+        cached.settle(width, &typed, self.pointer(page).over);
         let env = Env {
             typed: &typed,
             cols: width,
-            base: &base,
+            base: cached.base(),
             resources: &self.resources,
         };
         let root =
-            walk::tree(&laid.document, &env).ok_or_else(|| anyhow!("the page has no root"))?;
+            walk::tree(cached.document(), &env).ok_or_else(|| anyhow!("the page has no root"))?;
         let mut grid = toy_browser_cells::render(&root, width);
         if let Some(canvas) = root.style.background {
             grid.paint_canvas(canvas);
+        }
+        if let Some(held) = self.pages.get_mut(page) {
+            held.styled = Some(cached);
         }
         Ok(grid)
     }

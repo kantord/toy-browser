@@ -15,10 +15,36 @@
 use anyhow::Result;
 use blitz_dom::BaseDocument;
 
-use super::{LaidOut, ROUNDS, fields, net, parsed};
+use super::{LaidOut, ROUNDS, net, parsed};
 use crate::Viewport;
 
 use std::sync::Arc;
+
+/// A styled document and the reader that fetches what it names, kept together
+/// so the document can be styled again when its width changes.
+pub struct Styled {
+    pub laid: LaidOut,
+    files: Arc<net::Files>,
+}
+
+impl Styled {
+    /// Tells the document it is now `width` px wide, so `@media` queries and
+    /// `vw` units see the new width on the next [`Self::settle`]. Whether it
+    /// was a change.
+    pub fn widen(&mut self, width: u32) -> bool {
+        let document = &mut self.laid.document;
+        if document.viewport().window_size.0 == width {
+            return false;
+        }
+        document.viewport_mut().window_size.0 = width;
+        true
+    }
+
+    /// Styles again, taking delivery of whatever arrived since.
+    pub fn settle(&mut self) {
+        delivered(&mut self.laid.document, &self.files);
+    }
+}
 
 /// Like [`super::lay_out`], up to and including the cascade, and no further.
 pub fn style(
@@ -27,22 +53,23 @@ pub fn style(
     viewport: Viewport,
     base: &str,
     resources: &toy_browser_fetch::Resources,
-) -> Result<LaidOut> {
+) -> Result<Styled> {
     let (mut document, files) = parsed(html, sheets, viewport, base, resources);
     // Not styled before the reads are in: an imported stylesheet that lands on
     // its reader's thread holds the style lock for writing, and taking
     // delivery while it does panics (`already mutably borrowed`).
     delivered(&mut document, &files);
-    Ok(LaidOut {
+    let laid = LaidOut {
         document,
         caret: None,
         base: base.to_owned(),
-    })
+    };
+    Ok(Styled { laid, files })
 }
 
 /// The cascade and box construction, in the order `resolve` runs them, unless
 /// there is no page yet or its stylesheets are still on their way.
-pub(crate) fn restyle(document: &mut BaseDocument) {
+fn restyle(document: &mut BaseDocument) {
     let has_page = document.root_node().children.iter().any(|id| {
         document
             .get_node(*id)
@@ -68,17 +95,6 @@ fn delivered(document: &mut BaseDocument, files: &Arc<net::Files>) {
         restyle(document);
         if files.delivered() == taken && !files.flying() {
             return;
-        }
-    }
-}
-
-impl LaidOut {
-    /// [`LaidOut::typed`] for a document that is only styled: what has focus,
-    /// so `:focus` matches. Typed text is read from `typed` by whoever needs
-    /// it, there being no editor to write it into without a layout.
-    pub fn focused(&mut self, typed: &toy_browser_engine::Typed) {
-        if fields::focus(&mut self.document, typed) {
-            restyle(&mut self.document);
         }
     }
 }

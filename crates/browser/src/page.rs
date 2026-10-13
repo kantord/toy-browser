@@ -53,6 +53,10 @@ pub(crate) struct Page {
     /// for another zone only if it already covers it. `None` means it was
     /// painted whole and answers for anything.
     pub(crate) drawn_for: Option<toy_browser_rasterizer::Area>,
+    /// The document the cell path styled, kept so a new terminal width does not
+    /// parse and cascade the page again; see `cellstyle::cached` for when it
+    /// goes stale. Dropped by a load, and with the page.
+    pub(crate) styled: Option<crate::cellstyle::Cached>,
     /// Where the mouse is and whether it is pressed. A setting of the Page, so
     /// it outlives each event the way a real pointer does.
     pub(crate) pointer: Pointer,

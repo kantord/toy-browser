@@ -173,6 +173,7 @@ impl Browser {
         // already used.
         page.measured = None;
         page.composed = None;
+        page.styled = None;
     }
 
     /// The document behind a URL. `about:` names markup rather than bytes, so

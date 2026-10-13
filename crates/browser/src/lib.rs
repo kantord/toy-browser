@@ -48,7 +48,7 @@ use toy_browser_engine::{Engine, Handle, SessionId};
 pub use accesskit;
 // The rasterizer entire, so that a front end can start one without naming a
 // crate this one already depends on.
-pub use blitz::{LaidOut, lay_out, style};
+pub use blitz::{LaidOut, Styled, lay_out, style};
 pub use cursor_icon::CursorIcon;
 pub use drawing::{Drawn, Waker};
 pub use hovering::Hovering;
@@ -140,6 +140,8 @@ pub struct Browser {
     /// socket. Here unless something asks otherwise — see
     /// [`Self::draw_elsewhere`].
     drawing: crate::drawing::Drawing,
+    /// How many times the cell path built a styled document from markup.
+    styled_builds: usize,
 }
 
 impl Browser {
@@ -157,6 +159,7 @@ impl Browser {
             images: Images::default(),
             leave_navigation: false,
             drawing: crate::drawing::Drawing::default(),
+            styled_builds: 0,
         })
     }
 
@@ -199,6 +202,7 @@ impl Browser {
                 composed: None,
                 drawn: None,
                 drawn_for: None,
+                styled: None,
                 pointer: Pointer::default(),
                 visited: Vec::new(),
                 mounted: HashMap::new(),

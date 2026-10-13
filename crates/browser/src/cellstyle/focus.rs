@@ -4,7 +4,7 @@
 //! pointer is or what has focus, so both are told to it before the cascade is
 //! read: `:hover` for the element the grid says is under the pointer (and its
 //! ancestors, as CSS has it), `:focus` through the pixel path's own
-//! `LaidOut::focused`.
+//! `fields::focus`.
 //!
 //! A terminal has no focus ring to draw, so the focused element is shown in
 //! reverse video: its text and background colours swapped. That is the one
@@ -17,24 +17,32 @@ use toy_browser_cells::{Alpha, Computed, Ink, Inks, Rgb};
 
 use crate::blitz::keyed;
 
-/// Puts `:hover` on the element with this engine key and everything above it.
-pub(super) fn hover(doc: &mut BaseDocument, over: Option<usize>) {
-    let Some(over) = over else { return };
+/// The element with this engine key and everything above it.
+fn chain(doc: &BaseDocument, key: Option<usize>) -> Vec<NodeId> {
+    let Some(key) = key else { return Vec::new() };
     let mut at = None;
     doc.visit(|id, node| {
-        if at.is_none() && keyed(node) == Some(over) {
+        if at.is_none() && keyed(node) == Some(key) {
             at = Some(id);
         }
     });
-    let mut chain: Vec<NodeId> = Vec::new();
+    let mut chain = Vec::new();
     while let Some(id) = at {
         chain.push(id);
         at = doc.get_node(id).and_then(|node| node.parent);
     }
-    for id in chain {
+    chain
+}
+
+/// Moves `:hover` from the element with key `was` to the one with key `over`,
+/// each with everything above it. The cascade is not run: whoever asks does.
+pub(super) fn hover(doc: &mut BaseDocument, was: Option<usize>, over: Option<usize>) {
+    for id in chain(doc, was) {
+        doc.snapshot_node_and(id, ElementState::HOVER, |node| node.unhover());
+    }
+    for id in chain(doc, over) {
         doc.snapshot_node_and(id, ElementState::HOVER, |node| node.hover());
     }
-    crate::blitz::restyle(doc);
 }
 
 /// Swaps text and background (alphas with them), taking opaque black on

@@ -43,8 +43,7 @@ use export::{colour, font_size};
 pub mod paint;
 
 pub use held::{Kind, Source, Webview};
-pub(crate) use styled::restyle;
-pub use styled::style;
+pub use styled::{Styled, style};
 
 /// A document, laid out.
 pub struct LaidOut {
