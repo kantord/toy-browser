@@ -51,7 +51,11 @@ fn pressed(browser: &mut Browser, tab: &PageId, selector: &str) -> Grid {
     browser
         .pressed_on(tab, Some(node), Point { x: 4.0, y: 4.0 })
         .expect("presses");
-    assert_eq!(browser.focused(tab).expect("asks"), Some(node), "{selector}");
+    assert_eq!(
+        browser.focused(tab).expect("asks"),
+        Some(node),
+        "{selector}"
+    );
     browser.cells(tab, 40).expect("renders")
 }
 
@@ -97,6 +101,6 @@ fn a_focused_link_is_in_reverse_video() {
 #[test]
 fn a_focused_role_button_is_in_reverse_video() {
     let (mut browser, tab) = open();
-    let grid = pressed(&mut browser, &tab, "#fake");
+    let grid = tabbed(&mut browser, &tab, "#fake");
     assert_eq!(paper_and_ink(&grid, "press"), (Some(INK), Some(WHITE)));
 }

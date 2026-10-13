@@ -22,6 +22,7 @@ use crate::atoms;
 use crate::flow;
 use crate::grid::CellStyle;
 use crate::mapping::to_taffy;
+use crate::slim;
 use crate::text::Builder;
 use crate::tree::{Computed, Display, Element, Length, Node, WhiteSpace};
 use crate::wrap::Paragraph;
@@ -42,6 +43,9 @@ pub struct Laid {
     pub paragraphs: Vec<Paragraph>,
 }
 
+/// How many times boxes made thin by an earlier squeeze are looked at again.
+const SQUEEZES: usize = 3;
+
 /// Lay `root` out in a viewport `width` cells wide. The height is whatever the
 /// content needs.
 pub fn layout(root: &Element, width: u16) -> Laid {
@@ -59,7 +63,7 @@ pub fn layout(root: &Element, width: u16) -> Laid {
         .taffy
         .new_with_children(to_taffy(&viewport), &[item.id])
         .expect("taffy");
-    let top = Item {
+    let mut top = Item {
         id,
         key: None,
         style: viewport,
@@ -71,6 +75,12 @@ pub fn layout(root: &Element, width: u16) -> Laid {
         paragraphs,
     } = planner;
     compute(&mut taffy, id, width, &paragraphs);
+    for _ in 0..SQUEEZES {
+        if !slim::squeeze(&mut taffy, &mut top) {
+            break;
+        }
+        compute(&mut taffy, id, width, &paragraphs);
+    }
     Laid {
         taffy,
         root: top,
@@ -227,6 +237,7 @@ fn push_node<'a>(runs: &mut Vec<Run<'a>>, node: &'a Node) {
     match node {
         Node::Element(el) if el.style.display == Display::None => {}
         Node::Element(el) if is_block(&el.style) => runs.push(Run::Block(el)),
+        Node::Element(el) if splits(el) => el.children.iter().for_each(|c| push_node(runs, c)),
         _ => push_inline(runs, node),
     }
 }
@@ -238,6 +249,21 @@ fn is_block(style: &Computed) -> bool {
         Display::Block | Display::Flex | Display::Grid
     );
     flow::out_of_flow(style) || (shown && !style.atomic)
+}
+
+/// An inline element with a block somewhere inside it (a custom element, a
+/// `display: contents` wrapper, a link around a `<div>`). Its text cannot be
+/// one run, which would flatten the blocks and flex rows in it into a single
+/// line, so its children take its place among its siblings. What is lost is the
+/// element's own background.
+fn splits(el: &Element) -> bool {
+    let inline = el.style.display == Display::Inline && !el.style.atomic;
+    inline
+        && el.children.iter().any(|child| match child {
+            Node::Element(c) if c.style.display == Display::None => false,
+            Node::Element(c) => is_block(&c.style) || splits(c),
+            Node::Text(_) => false,
+        })
 }
 
 fn push_inline<'a>(runs: &mut Vec<Run<'a>>, node: &'a Node) {

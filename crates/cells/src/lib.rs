@@ -17,6 +17,7 @@ mod grid;
 mod layout;
 mod mapping;
 mod paint;
+mod slim;
 mod text;
 mod tracks;
 pub mod tree;

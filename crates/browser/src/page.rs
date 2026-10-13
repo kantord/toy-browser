@@ -60,6 +60,11 @@ pub(crate) struct Page {
     /// Where the mouse is and whether it is pressed. A setting of the Page, so
     /// it outlives each event the way a real pointer does.
     pub(crate) pointer: Pointer,
+    /// Whether focus last arrived by the keyboard (a Tab, a key press, the
+    /// host's focus step) rather than a pointer press. Only the former is
+    /// drawn in cells, as a browser draws `:focus-visible` and no ring for a
+    /// click.
+    pub(crate) keyboard_focus: bool,
     /// The pages behind this one, oldest first. What Back walks.
     pub(crate) visited: Vec<String>,
     /// The page behind each `<webview>` in this one, by the element holding it.

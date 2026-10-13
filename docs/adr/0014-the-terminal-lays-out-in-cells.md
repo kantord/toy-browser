@@ -87,6 +87,24 @@ Degraded, on purpose:
   Each side is drawn in its own colour, and a corner cell takes the colour of
   the horizontal side because a cell cannot be split diagonally. Percentage
   padding is not part of this and stays beside a one-cell border.
+- A box with a border on every side and no room left inside it (a button the
+  page made 24 or 32px tall: the two rules take the rows and the text lands on
+  the bottom edge) loses its top and bottom rules and its vertical padding, and
+  is as tall as its text: `│Fork 244│`. A boxed line that has room for its text
+  keeps all four sides, and so does a table cell.
+- A `height` or `min-height` of two rows or more is a minimum of half as many
+  (at least one), since it is air round a line of text: a 40px table row is a
+  row and its rule, not the rule and two rows. A box that clips, or has an
+  absolutely placed child with content in it, keeps its height exactly.
+- An inline element with a block inside it (a custom element round a whole
+  header, a `display: contents` wrapper) is not a run of text: its children
+  take its place among its siblings, and it loses its own background.
+- A button's label is one run on the button's line, with `[` and `]` inside its
+  first and last word; a link or button with no text shows its `aria-label`
+  (or `title`).
+- Focus is marked in reverse video only when the keyboard put it there (a Tab,
+  the host's `focus` op, any key); a pointer press still focuses the element
+  but draws no mark, as `:focus-visible` has it.
 - Wide fallback fonts no longer matter: width is the unicode width of the
   cluster, never a font's advance. Inline `svg` with no text and no real
   `width`/`height` is dropped, since a terminal cannot draw it.

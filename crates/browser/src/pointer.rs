@@ -121,6 +121,7 @@ impl Browser {
                 pressed: over,
             },
         );
+        self.set_keyboard_focus(page, false);
         self.settle(page, &mut emitted)?;
         Ok(emitted)
     }
@@ -233,6 +234,17 @@ impl Browser {
             .get(page)
             .map(|page| page.pointer)
             .unwrap_or_default()
+    }
+
+    /// Remembers how focus last arrived; see `Page::keyboard_focus`.
+    pub(crate) fn set_keyboard_focus(&mut self, page: &PageId, keyboard: bool) {
+        if let Some(page) = self.pages.get_mut(page) {
+            page.keyboard_focus = keyboard;
+        }
+    }
+
+    pub(crate) fn keyboard_focus(&self, page: &PageId) -> bool {
+        self.pages.get(page).is_some_and(|page| page.keyboard_focus)
     }
 
     fn set_pointer(&mut self, page: &PageId, pointer: Pointer) {

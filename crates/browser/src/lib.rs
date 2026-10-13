@@ -204,6 +204,7 @@ impl Browser {
                 drawn_for: None,
                 styled: None,
                 pointer: Pointer::default(),
+                keyboard_focus: false,
                 visited: Vec::new(),
                 mounted: HashMap::new(),
             },

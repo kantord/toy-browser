@@ -77,6 +77,7 @@ fn icon(node: &Node, el: &mut Element) {
     style.atomic = false;
     style.width = Length::Auto;
     style.height = Length::Auto;
+    style.min_height = Length::Auto;
     style.margin = Spacing::default();
     style.padding = Spacing::default();
     style.border = Default::default();

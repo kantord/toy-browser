@@ -18,6 +18,7 @@
 //!   content growing beside it, so wrapped lines hang under the text instead
 //!   of under the bullet.
 
+use super::brackets;
 use blitz_dom::node::{ListItemLayout, Marker};
 use toy_browser_cells::{
     Computed, Display, Edges, Element, Length, Node, Shrink, Spacing, WhiteSpace,
@@ -36,7 +37,8 @@ fn by_tag(el: &mut Element) {
         "br" => line_break(el),
         "hr" => rule(el),
         "button" => {
-            bracket(el);
+            brackets::label(&mut el.children);
+            brackets::add(el);
             control(el);
         }
         "input" | "select" | "textarea" => control(el),
@@ -63,6 +65,7 @@ fn rule(el: &mut Element) {
     };
     el.style.padding = Spacing::default();
     el.style.height = Length::Auto;
+    el.style.min_height = Length::Auto;
     el.children.clear();
 }
 
@@ -75,15 +78,11 @@ fn control(el: &mut Element) {
     el.style.padding = Spacing::default();
     el.style.width = Length::Auto;
     el.style.height = Length::Auto;
+    el.style.min_height = Length::Auto;
     if el.style.atomic {
         el.style.atomic = false;
         el.style.display = Display::Inline;
     }
-}
-
-fn bracket(el: &mut Element) {
-    el.children.insert(0, Node::Text("[".to_owned()));
-    el.children.push(Node::Text("]".to_owned()));
 }
 
 /// The inherited look of `parent`, for boxes made up around its content.

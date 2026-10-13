@@ -6,7 +6,8 @@
 //! ancestors, as CSS has it), `:focus` through the pixel path's own
 //! `fields::focus`.
 //!
-//! A terminal has no focus ring to draw, so the focused element is shown in
+//! A terminal has no focus ring to draw, so a keyboard-focused element (not
+//! one a click focused, as with `:focus-visible`) is shown in
 //! reverse video: its text and background colours swapped. That is the one
 //! mark that reads on any colour scheme and needs no new attribute on the
 //! wire, since it is only colours by the time a host sees it.
@@ -18,12 +19,24 @@ use toy_browser_cells::{Alpha, Computed, Ink, Inks, Rgb};
 use crate::blitz::keyed;
 
 /// What a person operates, by tag.
-const CONTROLS: [&str; 7] = ["a", "area", "button", "input", "select", "summary", "textarea"];
+const CONTROLS: [&str; 7] = [
+    "a", "area", "button", "input", "select", "summary", "textarea",
+];
 
 /// What a person operates, by `role`, for the `<div>` a page made into one.
 const ROLES: [&str; 12] = [
-    "button", "checkbox", "link", "menuitem", "option", "radio", "searchbox", "slider", "switch",
-    "tab", "textbox", "combobox",
+    "button",
+    "checkbox",
+    "link",
+    "menuitem",
+    "option",
+    "radio",
+    "searchbox",
+    "slider",
+    "switch",
+    "tab",
+    "textbox",
+    "combobox",
 ];
 
 /// Whether focus on this element is worth a mark.

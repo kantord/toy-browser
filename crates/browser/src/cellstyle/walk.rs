@@ -22,7 +22,7 @@ use super::computed::computed;
 use super::finish::finish;
 use super::table::{self, Part, Parts};
 use super::units::CELL_WIDTH;
-use super::{Env, focus, inline, picture, replaced};
+use super::{Env, airy, focus, inline, labelled, picture, replaced};
 use crate::blitz::keyed;
 use toy_browser_cells::{Computed, Display, Element, Node as Cell};
 
@@ -110,6 +110,8 @@ impl Walk<'_> {
             children,
             key: down.owner,
         };
+        airy::relax(&mut el);
+        labelled::add(node, &mut el);
         finish(&mut el, data.list_item_data.as_deref());
         inline::tidy(node, &mut el, picture.is_some());
         if let Some(boxed) = picture {
@@ -134,7 +136,10 @@ impl Walk<'_> {
     /// What `node` hands its children, after marking it if it has focus.
     fn passed(&self, node: &Node, style: &mut Computed, down: Down) -> Down {
         let own = keyed(node);
-        let focused = own.is_some() && own == self.env.typed.focused && focus::marked(node);
+        let focused = self.env.keyboard_focus
+            && own.is_some()
+            && own == self.env.typed.focused
+            && focus::marked(node);
         let reverse = down.reverse || focused;
         if reverse {
             focus::reverse(style);

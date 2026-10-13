@@ -92,6 +92,7 @@ impl Browser {
     /// Moves focus to an element, or takes it away. Runs no JavaScript.
     pub fn focus(&mut self, page: &PageId, node: Option<NodeId>) -> Result<()> {
         let session = self.session(page)?;
+        self.set_keyboard_focus(page, true);
         self.engine.focus(&session, node)
     }
 

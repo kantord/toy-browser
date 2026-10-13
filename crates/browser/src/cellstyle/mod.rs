@@ -30,7 +30,9 @@
 //! `outflow` for floats, positioning and clipping, and `table` (with
 //! `collapse`) and `tracks` for the two that become a grid.
 
+mod airy;
 mod boxes;
+mod brackets;
 mod cached;
 mod collapse;
 mod computed;
@@ -38,6 +40,7 @@ mod finish;
 mod flex;
 mod focus;
 mod inline;
+mod labelled;
 mod looks;
 mod outflow;
 mod picture;
@@ -60,6 +63,8 @@ use crate::{Browser, PageId};
 struct Env<'a> {
     /// What has been typed, and what has focus.
     typed: &'a Typed,
+    /// Whether focus arrived by the keyboard, the only kind that is marked.
+    keyboard_focus: bool,
     /// The page's width, which a picture is capped to.
     cols: u16,
     /// What a picture's `src` is resolved against, and where it is fetched from.
@@ -82,6 +87,7 @@ impl Browser {
         cached.settle(width, &typed, self.pointer(page).over);
         let env = Env {
             typed: &typed,
+            keyboard_focus: self.keyboard_focus(page),
             cols: width,
             base: cached.base(),
             resources: &self.resources,

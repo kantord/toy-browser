@@ -132,6 +132,7 @@ pub(super) fn apply(el: &mut Element, boxed: Boxed) {
     el.style.width = Length::Cells(boxed.cols);
     el.style.height = Length::Cells(boxed.rows);
     el.style.min_width = Length::Auto;
+    el.style.min_height = Length::Auto;
     el.style.max_width = Length::Auto;
     el.style.flex_shrink = Shrink(0.0);
     el.style.border = Edges::default();

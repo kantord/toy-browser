@@ -63,6 +63,7 @@ impl Browser {
         held: Held,
     ) -> Result<Emitted> {
         let session = self.session(page)?;
+        self.set_keyboard_focus(page, true);
         let outcome = self.engine.raise_key(
             &session,
             Key {

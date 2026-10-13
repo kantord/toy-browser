@@ -50,6 +50,14 @@ present or absent. The renderer never cascades and never converts units.
   em and rem padding only; a percentage padding stays one, with the border
   one cell beyond it), so this crate just sees a 1-cell border and the
   remaining padding.
+- A box with a border on every side that has no room left inside it (its two
+  rules take all its rows, as with a button given a 32px height) is squeezed
+  after layout (`slim.rs`) to `│text│`: no top or bottom rule and no vertical
+  padding, as tall as its text. Boxes with room for their text and table cells
+  (boxes with an explicit grid line) keep all their rules.
+- An inline element with a block inside it is not one run of text: its
+  children take its place among its siblings (`layout::splits`), so a custom
+  element round a header does not flatten the header's flex rows into a line.
 - Inline-level boxes (`Computed::atomic`: `inline-block`, `inline-flex`) as
   units in a wrapping row, see `atoms.rs` for what that gives up (no sharing a
   line with the middle of a sentence, no baseline alignment).
