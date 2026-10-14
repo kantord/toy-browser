@@ -12,9 +12,9 @@ use style::values::computed::{BorderSideWidth, Color, LengthPercentage, Margin, 
 use style::values::specified::border::BorderStyle;
 use toy_browser_cells::{Edges, Length, Spacing};
 
-use super::units::{Axis, bordered_cells, length, plain, spaced};
+use super::units::{Axis, Page, bordered_cells, length, plain, spaced};
 
-pub(super) fn sizes(style: &ComputedValues, page: f32) -> [Length; 6] {
+pub(super) fn sizes(style: &ComputedValues, page: Page) -> [Length; 6] {
     let pos = style.get_position();
     [
         size(&pos.width, Axis::X, page),
@@ -26,21 +26,21 @@ pub(super) fn sizes(style: &ComputedValues, page: f32) -> [Length; 6] {
     ]
 }
 
-fn size(value: &Size, axis: Axis, page: f32) -> Length {
+fn size(value: &Size, axis: Axis, page: Page) -> Length {
     match value {
         Size::LengthPercentage(inner) => length(&inner.0, axis, page),
         _ => Length::Auto,
     }
 }
 
-fn max_size(value: &MaxSize, axis: Axis, page: f32) -> Length {
+fn max_size(value: &MaxSize, axis: Axis, page: Page) -> Length {
     match value {
         MaxSize::LengthPercentage(inner) => length(&inner.0, axis, page),
         _ => Length::Auto,
     }
 }
 
-pub(super) fn margin(style: &ComputedValues, page: f32) -> Spacing {
+pub(super) fn margin(style: &ComputedValues, page: Page) -> Spacing {
     use style::values::generics::length::GenericMargin::{Auto, LengthPercentage as Fixed};
     let it = style.get_margin();
     let side = |value: &Margin, axis| match value {
@@ -62,7 +62,7 @@ pub(super) fn margin(style: &ComputedValues, page: f32) -> Spacing {
 /// takes the first and the padding gets the rest. A side without one keeps the
 /// plain padding conversion. A percentage (or `calc()`) padding stays what it
 /// is and the border is one cell on top of it: the rule is for px, em and rem.
-pub(super) fn frame(style: &ComputedValues, page: f32) -> (Edges, Spacing) {
+pub(super) fn frame(style: &ComputedValues, page: Page) -> (Edges, Spacing) {
     let it = style.get_padding();
     let pads = [
         (&it.padding_top.0, Axis::Y),
@@ -96,13 +96,13 @@ pub(super) fn frame(style: &ComputedValues, page: f32) -> (Edges, Spacing) {
 }
 
 /// One side: its border cells (0 or 1) and its padding.
-fn side_frame(pad: &LengthPercentage, axis: Axis, width: Option<f32>, page: f32) -> (u16, Length) {
+fn side_frame(pad: &LengthPercentage, axis: Axis, width: Option<f32>, page: Page) -> (u16, Length) {
     let Some(width) = width else {
         return (0, spaced(pad, axis, page));
     };
     match pad.unpack() {
         Unpacked::Length(px) => {
-            let thick = bordered_cells(width + px.px(), axis);
+            let thick = bordered_cells(width + px.px(), axis, page);
             (1, Length::Cells(thick - 1))
         }
         _ => (1, length(pad, axis, page)),
@@ -145,7 +145,7 @@ fn border_widths(style: &ComputedValues) -> [Option<f32>; 4] {
 
 /// `(column gap, row gap)`: between columns of a grid or items of a row, and
 /// between rows or wrapped lines.
-pub(super) fn gaps(style: &ComputedValues, page: f32) -> (u16, u16) {
+pub(super) fn gaps(style: &ComputedValues, page: Page) -> (u16, u16) {
     use style::values::generics::length::GenericLengthPercentageOrNormal::LengthPercentage as Fixed;
     let pos = style.get_position();
     let side = |value: &NonNegativeLengthPercentageOrNormal, axis| match value {

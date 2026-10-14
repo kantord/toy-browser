@@ -18,6 +18,7 @@
 //!      {"op":"navigate","url":"https://en.wikipedia.org/wiki/Neovim"}
 //!      {"op":"patch","key":"r3","html":"<b>x</b>"}   replace what is inside the element with that data-key
 //!      {"op":"resize","cols":80,"rows":24}
+//!      {"op":"cell","width":9.6,"height":19.2}   how big a cell is in CSS px (8 by 16 if never said)
 //!      {"op":"click","col":3,"row":1}   a link it follows is answered as a navigate, not loaded
 //!      {"op":"inspect","col":3,"row":1}   what is under a cell: answered with a target
 //!      {"op":"type","text":"hello"}   as if typed into whatever has focus

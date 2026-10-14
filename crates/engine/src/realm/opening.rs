@@ -33,6 +33,7 @@ impl Realm {
         page: crate::LoadPage<'_>,
         init_scripts: &[String],
         resources: Resources,
+        viewport: (u32, u32),
     ) -> Result<Self> {
         let crate::LoadPage {
             source,
@@ -52,7 +53,7 @@ impl Realm {
 
         context.with(|ctx| {
             install_globals(&ctx, &dom, &report)?;
-            Self::furnish(&ctx, &report, relayout, &scheme);
+            Self::furnish(&ctx, &report, relayout, &scheme, viewport);
             for (index, script) in init_scripts.iter().enumerate() {
                 load::evaluate(&ctx, &report, &format!("<init-{index}>"), script);
             }

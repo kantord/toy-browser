@@ -1,7 +1,7 @@
 //! Heights that are air round a line of text.
 //!
 //! A page gives a one-line button, tab or table row 32 to 48px: two or three
-//! rows at the 16px of a nominal cell row, with the line at the top and blank
+//! rows at the 16px of a default cell row, with the line at the top and blank
 //! rows under it. In a terminal that is the most expensive spacing there is, so
 //! a `height` or `min-height` of two rows or more counts at half: a minimum
 //! of one row per two, at least one. A box still grows to fit what is in it, so

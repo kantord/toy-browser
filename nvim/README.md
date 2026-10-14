@@ -44,6 +44,7 @@ Set globally (`vim.g.toy_html_*`) or per page in `require("toy_html").open{...}`
 | `images` | `"alt"` (default), `"none"`, `"real"` | pictures as `[alt text]`, left out, or drawn (kitty graphics protocol: kitty, ghostty; turns on `termguicolors`; inside tmux needs `allow-passthrough on`) |
 | `scheme` | `"dark"` (default; `"light"` if `background` is light), `"light"` | what `prefers-color-scheme` says; `:ToyHtmlScheme [dark\|light\|toggle]` changes it for open pages |
 | `transparent` | boolean | the page's default white and black take Neovim's colours (default: only for `html`, not for fetched pages) |
+| `cell_size` | unset (measured), `{width, height}` or `"WxH"` | how many CSS pixels one terminal cell is, which is what a page's width (`@media`, `vw`, `innerWidth`) is measured in: columns times the width. Only the global `vim.g.toy_html_cell_size` sets it. Left unset it is read from the terminal's pixel size (`TIOCGWINSZ`), which most terminals fill in and which tmux or ssh pass on only if they do; 8 by 16 where it is not reported |
 
 Forms: `<CR>` on a field focuses it, `]f` / `[f` move focus along the tab order (the cursor follows), `i` asks for text and types it into the focused field, `gs` presses Enter there.
 

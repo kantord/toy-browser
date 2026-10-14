@@ -20,7 +20,7 @@
 //! The styled document is kept per page (`cached`), so a width change restyles
 //! it rather than parsing it again.
 //!
-//! The page is styled at `columns * 8` CSS px wide, so media queries and
+//! The page is styled at `columns * cell width` CSS px wide (8 unless the terminal said), so media queries and
 //! percentages see the terminal's width, under the colour scheme the page's
 //! viewport was given. What the document cannot know on its own is told to it
 //! first: what has focus and the hovered element
@@ -58,9 +58,8 @@ use toy_browser_cells::Grid;
 use toy_browser_engine::Typed;
 
 pub(crate) use cached::Cached;
-pub use units::{CELL_HEIGHT, CELL_WIDTH};
 
-use crate::{Browser, PageId};
+use crate::{Browser, CellSize, PageId};
 
 /// What the walk needs to know beyond the document.
 struct Env<'a> {
@@ -70,6 +69,8 @@ struct Env<'a> {
     keyboard_focus: bool,
     /// The page's width, which a picture is capped to.
     cols: u16,
+    /// How big a cell is, in CSS px.
+    cell: CellSize,
     /// What a picture's `src` is resolved against, and where it is fetched from.
     base: &'a str,
     resources: &'a toy_browser_fetch::Resources,
@@ -92,6 +93,7 @@ impl Browser {
             typed: &typed,
             keyboard_focus: self.keyboard_focus(page),
             cols: width,
+            cell: cached.cell(),
             base: cached.base(),
             resources: &self.resources,
         };

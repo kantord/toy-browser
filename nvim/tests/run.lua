@@ -86,6 +86,24 @@ check("pages are dark by default", colours_in_use():find("101820", 1, true), col
 T.scheme("light"); wait_for_colour("ffffff")
 check(":ToyHtmlScheme light re-renders the open page", colours_in_use():find("ffffff", 1, true), colours_in_use())
 
+-- The size of a cell is the page's to be measured in: 80 columns are 640px
+-- at the 8 by 16 nothing is known to be, and 800px at the 10 by 20 the user says.
+T.open({ url = "file://" .. pages .. "cell.html", here = true })
+wait_for("narrow")
+check("a cell of unknown size is 8 by 16", has("narrow") and vim.o.columns == 80, lines())
+vim.g.toy_html_cell_size = "10x20"
+vim.api.nvim_exec_autocmds("VimResized", {})
+wait_for("wide")
+check("vim.g.toy_html_cell_size sets the width the page sees", has("wide"), lines())
+vim.g.toy_html_cell_size = { 8, 16 }
+vim.api.nvim_exec_autocmds("VimResized", {})
+wait_for("narrow")
+check("a table is taken as {width, height}, and the cell is sent again", has("narrow"), lines())
+vim.g.toy_html_cell_size = nil
+local measured = { require("toy_html.cell").of_window(100, 24, 960, 480) }
+check("a window in pixels is a cell size", measured[1] == 9.6 and measured[2] == 20, measured)
+check("a terminal that reports no pixels is no size", require("toy_html.cell").of_window(100, 24, 0, 0) == nil)
+
 -- A drag raises a resize per cell: only the last size must reach the host,
 -- and a click in the middle of it must not stop the page being redrawn.
 T.open({ url = "file://" .. pages .. "a.html", here = true })

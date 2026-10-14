@@ -55,7 +55,10 @@ struct Cli {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let (cols, rows) = crossterm::terminal::size().context("reading the terminal's size")?;
-    let mut app = App::open(&cli.url, cols, rows, !cli.no_scripts, cli.scheme)?;
+    // The cell first, so the page's scripts load into a window of the right width.
+    let mut app = App::blank(cols, rows, !cli.no_scripts, cli.scheme)?;
+    app.set_cell(terminal::cell());
+    app.navigate(&cli.url)?;
 
     let screen = terminal::Screen::entered()?;
     let result = run(&mut app);
@@ -93,7 +96,10 @@ fn redrawn(app: &mut App, out: &mut impl io::Write, shown_title: &mut String) ->
 
 fn handle(app: &mut App, event: Event) {
     match event {
-        Event::Resize(cols, rows) => app.resized(cols, rows),
+        Event::Resize(cols, rows) => {
+            app.set_cell(terminal::cell());
+            app.resized(cols, rows);
+        }
         Event::Key(key) => handle_key(app, key),
         Event::Mouse(mouse) => handle_mouse(app, mouse),
         _ => {}

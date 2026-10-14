@@ -15,6 +15,15 @@ the contract around it.
 - **Replies.** Every command is answered with a frame, except `inspect`,
   `anchor`, `close`, and a command with `"silent":true`. `"full":true` makes the
   frame whole; otherwise frames after the first carry only changed rows (`at`).
+- **Cell size.** `{"op":"cell","width":9.6,"height":19.2}` says how big one cell
+  is in CSS pixels. The page is `cols * width` px wide for `@media`, `vw` and
+  `innerWidth`, a length is divided by that cell, and the root font is as tall
+  as a cell so `1em` is a row. Applied like a `resize`: the page is laid out
+  again. Without the op, or with a side that is zero, negative or not a number,
+  the cell is the default 8 by 16, so a client that never sends it sees what it
+  always saw. A client takes it from the terminal's pixel size divided by its
+  columns and rows (`ws_xpixel`, `ws_ypixel`; 0 is unknown) and sends it again
+  when that changes.
 - **Naming elements.** An element in the markup a client sends may carry
   `data-key="…"`. `target` and `clicked` events say the nearest `data-key` above
   the cell, so a client that builds the markup can route a click to what it

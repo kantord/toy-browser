@@ -13,9 +13,12 @@ use crossterm::cursor::{Hide, MoveTo, SetCursorStyle, Show};
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use crossterm::style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor};
 use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, SetTitle, disable_raw_mode, enable_raw_mode,
+    EnterAlternateScreen, LeaveAlternateScreen, SetTitle, WindowSize, disable_raw_mode,
+    enable_raw_mode,
 };
 use crossterm::{ExecutableCommand, QueueableCommand};
+
+use toy_browser::CellSize;
 
 use crate::app::Hover;
 use crate::grid::{Cell, Grid, Rgb};
@@ -43,6 +46,24 @@ impl Drop for Screen {
         let _ = out.execute(LeaveAlternateScreen);
         let _ = disable_raw_mode();
     }
+}
+
+/// How big one cell is, from the window's size in pixels (`TIOCGWINSZ`'s
+/// `ws_xpixel` and `ws_ypixel`) divided by its size in cells. A terminal that
+/// does not know its pixels reports 0, and so the cell stays the default.
+pub fn cell_of(window: &WindowSize) -> CellSize {
+    let side = |px: u16, cells: u16| (cells > 0).then(|| f32::from(px) / f32::from(cells));
+    side(window.width, window.columns)
+        .zip(side(window.height, window.rows))
+        .and_then(|(width, height)| CellSize::new(width, height))
+        .unwrap_or_default()
+}
+
+/// The size of a cell in this terminal, asked of the operating system.
+pub fn cell() -> CellSize {
+    crossterm::terminal::window_size()
+        .map(|window| cell_of(&window))
+        .unwrap_or_default()
 }
 
 /// Tells the terminal what page this is, the way a window's title bar would.
@@ -120,5 +141,32 @@ fn colour(rgb: Rgb) -> Color {
         r: rgb.r,
         g: rgb.g,
         b: rgb.b,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn window(columns: u16, rows: u16, width: u16, height: u16) -> WindowSize {
+        WindowSize {
+            rows,
+            columns,
+            width,
+            height,
+        }
+    }
+
+    #[test]
+    fn a_window_in_pixels_gives_the_size_of_a_cell() {
+        let cell = cell_of(&window(100, 50, 960, 960));
+        assert_eq!((cell.width(), cell.height()), (9.6, 19.2));
+    }
+
+    #[test]
+    fn a_terminal_that_does_not_know_its_pixels_keeps_the_default() {
+        assert_eq!(cell_of(&window(100, 50, 0, 0)), CellSize::DEFAULT);
+        assert_eq!(cell_of(&window(0, 0, 960, 960)), CellSize::DEFAULT);
+        assert_eq!(cell_of(&window(100, 50, 960, 0)), CellSize::DEFAULT);
     }
 }

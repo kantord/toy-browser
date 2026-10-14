@@ -13,20 +13,20 @@ use style::values::computed::{GridLine, GridTemplateComponent, TrackBreadth, Tra
 use style::values::generics::grid::{RepeatCount, TrackListValue};
 use toy_browser_cells::{Length, Placement, Template, Track, TrackSize as Size};
 
-use super::units::{Axis, length};
+use super::units::{Axis, Page, length};
 
 /// Most tracks a single `repeat(N, ...)` is expanded to.
 const MOST_REPEATED: usize = 64;
 
-pub(super) fn columns(style: &ComputedValues, page: f32) -> Vec<Template> {
+pub(super) fn columns(style: &ComputedValues, page: Page) -> Vec<Template> {
     templates(&style.get_position().grid_template_columns, Axis::X, page)
 }
 
-pub(super) fn rows(style: &ComputedValues, page: f32) -> Vec<Template> {
+pub(super) fn rows(style: &ComputedValues, page: Page) -> Vec<Template> {
     templates(&style.get_position().grid_template_rows, Axis::Y, page)
 }
 
-fn templates(list: &GridTemplateComponent, axis: Axis, page: f32) -> Vec<Template> {
+fn templates(list: &GridTemplateComponent, axis: Axis, page: Page) -> Vec<Template> {
     let GridTemplateComponent::TrackList(list) = list else {
         return Vec::new();
     };
@@ -58,7 +58,7 @@ fn repeated(out: &mut Vec<Template>, tracks: &[Track], times: i32) {
     }
 }
 
-fn track(size: &TrackSize, axis: Axis, page: f32) -> Track {
+fn track(size: &TrackSize, axis: Axis, page: Page) -> Track {
     let end = |b: &TrackBreadth| breadth(b, axis, page);
     match size {
         TrackSize::Breadth(b) => Track {
@@ -84,7 +84,7 @@ fn min_of(size: Size) -> Size {
     }
 }
 
-fn breadth(value: &TrackBreadth, axis: Axis, page: f32) -> Size {
+fn breadth(value: &TrackBreadth, axis: Axis, page: Page) -> Size {
     match value {
         TrackBreadth::Breadth(lp) => match length(lp, axis, page) {
             Length::Cells(n) => Size::Cells(n),

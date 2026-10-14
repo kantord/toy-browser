@@ -49,8 +49,9 @@ HTML + stylesheets --(1) styler--> typed styled tree --(2) cell renderer--> cell
    (`unicode-width`, NFC, VS15/VS16 and ZWJ aware).
 
 The one place a pixel is still named is the conversion in the styler, on a
-**nominal cell of 8 by 16 CSS px**: `1em` is exactly one row and two columns, a
-paragraph's `margin: 1em 0` is one blank row. Lengths floor, so a layout is never
+**cell of 8 by 16 CSS px unless the terminal says otherwise** (see *The size
+of a cell*): `1em` is exactly one row and two columns, a paragraph's
+`margin: 1em 0` is one blank row. Lengths floor, so a layout is never
 wider than the page said it could be; margins, padding and gaps across the page
 round, so the 4px between two inline items is a column and not nothing; any
 visible border is one cell, since a border that floors to nothing is a different
@@ -62,6 +63,33 @@ and the rasterizer still go through a Scene, and only the terminal does not.
 the host protocol and the Neovim plugin did not change. Its scroll position is
 integer rows and columns, and a click is a cell looked up in the page's own
 grid (`Grid::key_at`).
+
+## The size of a cell
+
+A terminal's cells are not 8 by 16 px; they are usually 9 to 10 wide and 18 to
+22 tall. A page laid out for `columns * 8` px is told a width no window of
+that many columns has, so the cell size is one runtime value, `CellSize` (CSS px,
+kept in hundredths so it compares by equality and is part of the styled
+document's cache key), and it is the same number everywhere:
+
+- the viewport is `columns * width` px: `@media`, `vw`, `calc()` and
+  `window.innerWidth` (told to the scripts at load and whenever it changes);
+- a length is divided by the width across and the height down, and a click at a
+  cell is the point at its centre in those units;
+- the root font is as tall as a cell (`html { font-size: N% }` of the default
+  16px, so it stays a keyword-derived size and `monospace` stays smaller), which
+  keeps `1em` one row. Nothing is added at 16px tall;
+- the divisions add a thousandth of a cell, so `57.6px` over `9.6px` is 6 and
+  not 5.9999995.
+
+Where it comes from, in order: `vim.g.toy_html_cell_size` (Neovim plugin), the
+host's `cell` op, the pixel size of the terminal's pty (`TIOCGWINSZ`:
+`ws_xpixel / cols`, `ws_ypixel / rows`, 0 meaning unknown), and then 8 by 16.
+The rounding rules are the same for every size. Lengths authored in px (a 16px
+gap, 8px of padding) are fewer cells on bigger cells, so a page loses some air
+vertically at 19.2px rows; that is what the numbers say and no rule is bent for it.
+A `%` on the root element and the `medium` keyword are still against the engine's
+16px default, as they would be in a browser whose default size was never changed.
 
 ## Consequences
 

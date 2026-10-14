@@ -22,6 +22,9 @@ use crate::{
 struct Session {
     init_scripts: Vec<String>,
     realm: Option<Realm>,
+    /// The window size a page is loaded into, so the scripts that run as it
+    /// loads already read it.
+    viewport: (u32, u32),
 }
 
 /// Owns every Session and serves requests against them.
@@ -59,6 +62,7 @@ impl Engine {
             Session {
                 init_scripts: Vec::new(),
                 realm: None,
+                viewport: (0, 0),
             },
         );
         id
@@ -100,8 +104,9 @@ impl Engine {
         session: &SessionId,
         page: LoadPage<'_>,
     ) -> Result<Outcome<LoadReport>> {
-        let init_scripts = self.session(session)?.init_scripts.clone();
-        let realm = Realm::open(page, &init_scripts, self.resources.clone())?;
+        let held = self.session(session)?;
+        let (init_scripts, viewport) = (held.init_scripts.clone(), held.viewport);
+        let realm = Realm::open(page, &init_scripts, self.resources.clone(), viewport)?;
 
         let report = LoadReport {
             scripts: realm.scripts().clone(),
@@ -157,6 +162,18 @@ impl Engine {
         let realm = self.realm(session)?;
         realm.run_tasks(budget);
         Ok(realm.outcome(()))
+    }
+
+    /// Tells the session how big its window is: the page loaded into it from
+    /// now on reads that as it loads, and a page already loaded is told so
+    /// without waiting for the next full [`Self::set_environment`].
+    pub fn set_viewport(&mut self, session: &SessionId, viewport: (u32, u32)) -> Result<()> {
+        let held = self.session_mut(session)?;
+        held.viewport = viewport;
+        if let Some(realm) = held.realm.as_ref() {
+            realm.set_viewport(viewport);
+        }
+        Ok(())
     }
 
     /// Tells the page how big it is, where it is, and where its elements are.

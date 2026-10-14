@@ -29,3 +29,18 @@ fn scripting(run_scripts: bool) -> Vec<String> {
         false => Vec::new(),
     }
 }
+
+/// The root font of a page shown in cells is as tall as a cell: text in a
+/// terminal really is one row high, so `1em` and `1rem` are one row and a
+/// length in them converts with the real cell. Stated as a share of the default
+/// size (what `medium` is) rather than in px, so it stays derived from a
+/// keyword like the default is, which is what keeps `monospace` smaller. At the
+/// default cell, 16px tall, there is nothing to say.
+pub(crate) fn root_font(cell: crate::CellSize) -> Option<String> {
+    let share = cell.height() / MEDIUM * 100.0;
+    ((cell.height() - MEDIUM).abs() > f32::EPSILON)
+        .then(|| format!("html {{ font-size: {share}% }}"))
+}
+
+/// What the cascade's `medium` font is worth in px.
+const MEDIUM: f32 = 16.0;

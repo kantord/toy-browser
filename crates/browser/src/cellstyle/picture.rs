@@ -4,7 +4,7 @@
 //! and be an image. Anything else keeps the `[alt]` text `replaced` gives it.
 //!
 //! The size is worked out here without a layout, in CSS pixels over the
-//! nominal cell (8 by 16): the computed `width` and `height` (which already
+//! cell (8 by 16 unless the terminal said): the computed `width` and `height` (which already
 //! carry the attributes of the same name), and for whichever is missing the
 //! picture's own size, keeping its shape when only one is given. A picture the
 //! decoder will not size (an SVG) is the 300 by 150 a browser assumes. Then it
@@ -19,7 +19,7 @@ use style::values::computed::Size;
 use style::values::computed::length_percentage::Unpacked;
 use toy_browser_cells::{Display, Edges, Element, Length, Shrink, Spacing};
 
-use super::units::{CELL_HEIGHT, CELL_WIDTH};
+use super::units::Page;
 use super::{Env, boxes};
 use crate::blitz::paint::pictures::{fetched_picture, natural_size};
 
@@ -38,13 +38,14 @@ pub(super) fn of(doc: &BaseDocument, node: &Node, env: &Env) -> Option<Boxed> {
     let src = data.attr(blitz_dom::local_name!("src"))?;
     fetched_picture(env.base, src, env.resources)?;
     let natural = natural_size(env.base, src, env.resources).unwrap_or(UNSIZED);
-    let (width, height) = pixels(node, natural, f32::from(env.cols) * CELL_WIDTH);
-    let cols = (width / CELL_WIDTH).ceil() as u16;
-    let rows = (height / CELL_HEIGHT).ceil() as u16;
+    let page = Page::new(env.cols, env.cell);
+    let (width, height) = pixels(node, natural, page.width);
+    let cols = (width / env.cell.width()).ceil() as u16;
+    let rows = (height / env.cell.height()).ceil() as u16;
     if cols == 0 || rows == 0 {
         return None;
     }
-    let (cols, rows) = capped(cols, rows, room(doc, node, env.cols));
+    let (cols, rows) = capped(cols, rows, room(doc, node, env));
     Some(Boxed {
         source: src.into(),
         cols,
@@ -88,20 +89,21 @@ fn specified(value: &Size, of: f32) -> Option<f32> {
 /// The columns an `<img>` can have: the page's, less the side margins,
 /// padding and borders of everything it is inside. Without a layout this is
 /// the width block flow would leave it, ignoring any ancestor's own `width`.
-fn room(doc: &BaseDocument, node: &Node, page: u16) -> u16 {
+fn room(doc: &BaseDocument, node: &Node, env: &Env) -> u16 {
+    let page = Page::new(env.cols, env.cell);
     let mut taken = 0_u16;
     let mut up = node.parent;
     while let Some(parent) = up.and_then(|id| doc.get_node(id)) {
         if let Some(styles) = parent.primary_styles() {
-            taken = taken.saturating_add(side_cells(&styles, f32::from(page) * CELL_WIDTH));
+            taken = taken.saturating_add(side_cells(&styles, page));
         }
         up = parent.parent;
     }
-    page.saturating_sub(taken).max(1)
+    env.cols.saturating_sub(taken).max(1)
 }
 
 /// Left plus right margin, padding and border of one ancestor, in cells.
-fn side_cells(styles: &style::properties::ComputedValues, page: f32) -> u16 {
+fn side_cells(styles: &style::properties::ComputedValues, page: Page) -> u16 {
     let fixed = |l: Length| if let Length::Cells(n) = l { n } else { 0 };
     let margin = boxes::margin(styles, page);
     let (border, padding) = boxes::frame(styles, page);

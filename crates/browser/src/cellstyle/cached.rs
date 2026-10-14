@@ -12,9 +12,9 @@ use anyhow::Result;
 use blitz_dom::BaseDocument;
 use toy_browser_engine::{SessionId, Typed};
 
-use super::{focus, units};
+use super::focus;
 use crate::blitz::{Styled, style};
-use crate::{Browser, Images, PageId, Scheme, Viewport};
+use crate::{Browser, CellSize, Images, PageId, Scheme, Viewport};
 
 /// What a styled document was built from. A render with a different one builds
 /// again.
@@ -25,6 +25,8 @@ pub(super) struct Key {
     /// starts again with the new realm.
     revision: u64,
     scheme: Scheme,
+    /// A different cell is a different root font size, so a different cascade.
+    cell: CellSize,
     images: Images,
     base: String,
     run_scripts: bool,
@@ -44,6 +46,10 @@ impl Cached {
         &self.styled.laid.document
     }
 
+    pub(super) fn cell(&self) -> CellSize {
+        self.key.cell
+    }
+
     pub(super) fn base(&self) -> &str {
         &self.key.base
     }
@@ -51,7 +57,7 @@ impl Cached {
     /// Brings the document to this width, this pointer and this focus, and
     /// styles it again if any of them moved.
     pub(super) fn settle(&mut self, width: u16, typed: &Typed, over: Option<usize>) {
-        let mut moved = self.styled.widen(px(width));
+        let mut moved = self.styled.widen(self.key.cell.across(width));
         self.width = width;
         if self.hovered != over {
             focus::hover(&mut self.styled.laid.document, self.hovered, over);
@@ -79,10 +85,6 @@ impl Cached {
     }
 }
 
-fn px(width: u16) -> u32 {
-    u32::from(width) * units::CELL_WIDTH as u32
-}
-
 impl Browser {
     /// How many times a styled document was built from markup, for the cell
     /// path. A render that reused one did not count.
@@ -101,6 +103,7 @@ impl Browser {
         Ok(Key {
             revision: self.engine.revision(session)?,
             scheme: self.viewport(page).scheme,
+            cell: self.cell(page),
             images: self.images,
             base: self
                 .base_url(page)
@@ -115,12 +118,13 @@ impl Browser {
             .engine
             .html_projected(session, &self.images.rewrites())?;
         let viewport = Viewport {
-            width: px(width),
+            width: key.cell.across(width),
             height: None,
             scheme: key.scheme,
             ..Viewport::default()
         };
-        let sheets = crate::rules::sheets(key.run_scripts);
+        let mut sheets = crate::rules::sheets(key.run_scripts);
+        sheets.extend(crate::rules::root_font(key.cell));
         let styled = style(&html, &sheets, viewport, &key.base, &self.resources)?;
         self.styled_builds += 1;
         Ok(Cached {

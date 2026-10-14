@@ -14,8 +14,9 @@ italic, underline. Nothing else.
 
 - **Layout.** Flow, flex, grid (tracks and placement by line), tables, floats,
   positioning, `calc()`, custom properties, media queries (`prefers-color-scheme`
-  follows the host's `scheme`). Lengths are whole cells on a nominal 8 by 16 px
-  cell, so `1em` is a row and two columns; a character is one cluster wide by
+  follows the host's `scheme`). Lengths are whole cells on a cell of 8 by 16 px
+  (the terminal's own size in CSS px when it reports one), the root font being as
+  tall as a cell, so `1em` is a row and, at 8 by 16, two columns; a character is one cluster wide by
   its unicode width.
 - **Text and its colour.** `color`, `background-color` on any element.
 - **Weight and style.** `font-weight` at 600 or above is bold. `font-style:

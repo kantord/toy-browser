@@ -3,7 +3,7 @@
 //!
 //! The scroll state is integer rows and columns, and the only place a pixel
 //! appears is `point`, which tells the page's events where a cell is in the
-//! styler's nominal CSS pixels.
+//! styler's CSS pixels, a cell being `App::cell` of them.
 //!
 //! Hover reaches the page's `:hover` rules by naming the element under the
 //! pointer to the browser, which styles the next layout with it; the layout is
@@ -13,7 +13,7 @@
 
 use anyhow::Result;
 use toy_browser::rasterizer::Digest;
-use toy_browser::{CELL_HEIGHT, CELL_WIDTH, Emitted, NodeId, Point, cells};
+use toy_browser::{Emitted, NodeId, Point, cells};
 
 use super::{App, Hover, Under};
 use crate::grid::{self, Grid};
@@ -74,7 +74,11 @@ impl App {
         if (self.cols, self.rows) == (cols, rows) {
             return;
         }
+        let wider = cols != self.cols;
         (self.cols, self.rows) = (cols, rows);
+        if wider {
+            self.announce_width();
+        }
         self.grid = None;
         self.hover = None;
         self.settle();
@@ -83,8 +87,8 @@ impl App {
     /// Where the page's events say a cell is, in the styler's CSS pixels.
     fn point(&self, col: u16, row: u16) -> Point {
         Point {
-            x: (f32::from(col) + 0.5) * CELL_WIDTH,
-            y: ((self.scrolled.1 + usize::from(row)) as f32 + 0.5) * CELL_HEIGHT,
+            x: (f32::from(col) + 0.5) * self.cell.width(),
+            y: ((self.scrolled.1 + usize::from(row)) as f32 + 0.5) * self.cell.height(),
         }
     }
 

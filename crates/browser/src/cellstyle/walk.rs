@@ -21,7 +21,7 @@ use blitz_dom::{BaseDocument, Node, NodeId};
 use super::computed::computed;
 use super::finish::finish;
 use super::table::{self, Part, Parts};
-use super::units::CELL_WIDTH;
+use super::units::Page;
 use super::{Env, airy, contents, focus, hidden, inline, labelled, order, picture, replaced};
 use crate::blitz::keyed;
 use toy_browser_cells::{Computed, Display, Element, Node as Cell};
@@ -80,7 +80,7 @@ impl Walk<'_> {
     /// The computed style of a shown element, with its table cell spans.
     fn styled(&self, node: &Node, down: Down) -> Option<(Computed, Part)> {
         let styles = node.primary_styles()?;
-        let mut style = computed(&styles, f32::from(self.env.cols) * CELL_WIDTH);
+        let mut style = computed(&styles, Page::new(self.env.cols, self.env.cell));
         if style.display == Display::None || hidden::visually_hidden(&styles) {
             return None;
         }

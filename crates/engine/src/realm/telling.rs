@@ -39,19 +39,11 @@ const PRELUDE: [(&str, &str); 16] = [
 impl Realm {
     /// Publishes what the page cannot work out for itself.
     pub fn set_environment(&self, environment: &Environment) {
-        let (width, height) = environment.viewport;
         // The viewport and the URL are plain globals a page reads directly; the
         // boxes are not, because every element asks for its own.
-        //
-        // Outer and inner are the same size here: there is no window furniture
-        // around the page, so nothing is taken off. A caller asking the
-        // difference — which is what a reftest runner does before it sizes a
-        // window — gets zero, which is the truth.
         let script = format!(
-            "globalThis.innerWidth = {width}; globalThis.innerHeight = {height}; \
-             globalThis.outerWidth = {width}; globalThis.outerHeight = {height}; \
-             globalThis.__tb.scheme = {}; \
-             globalThis.location.href = {};",
+            "{} globalThis.__tb.scheme = {}; globalThis.location.href = {};",
+            window(environment.viewport),
             quote(&environment.scheme),
             quote(&environment.url),
         );
@@ -61,6 +53,13 @@ impl Realm {
                 shared.set_styles(environment.styles.clone());
             }
             let _ = ctx.eval::<Value, _>(script);
+        });
+    }
+
+    /// Says how big the window is, ahead of the next full environment.
+    pub fn set_viewport(&self, viewport: (u32, u32)) {
+        self.context.with(|ctx| {
+            let _ = ctx.eval::<Value, _>(window(viewport));
         });
     }
 
@@ -75,6 +74,7 @@ impl Realm {
         report: &Rc<RefCell<Diagnostics>>,
         relayout: Option<node::support::Relayout>,
         scheme: &str,
+        viewport: (u32, u32),
     ) {
         if let Some(relayout) = relayout
             && let Some(shared) = ctx.userdata::<node::Sharing>()
@@ -84,7 +84,11 @@ impl Realm {
         for (name, source) in PRELUDE {
             load::evaluate(ctx, report, &format!("<prelude/{name}>"), source);
         }
-        let _ = ctx.eval::<Value, _>(format!("globalThis.__tb.scheme = {};", quote(scheme)));
+        let _ = ctx.eval::<Value, _>(format!(
+            "{} globalThis.__tb.scheme = {};",
+            window(viewport),
+            quote(scheme)
+        ));
     }
 
     /// Records how this document is to be measured again when a script asks
@@ -96,4 +100,17 @@ impl Realm {
             }
         });
     }
+}
+
+/// The script that sets the window's size.
+///
+/// Outer and inner are the same size here: there is no window furniture around
+/// the page, so nothing is taken off. A caller asking the difference — which is
+/// what a reftest runner does before it sizes a window — gets zero, which is
+/// the truth.
+fn window((width, height): (u32, u32)) -> String {
+    format!(
+        "globalThis.innerWidth = {width}; globalThis.innerHeight = {height}; \
+         globalThis.outerWidth = {width}; globalThis.outerHeight = {height};"
+    )
 }

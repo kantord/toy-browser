@@ -8,6 +8,8 @@
 -- The host answers each command with a whole frame; it is drawn as buffer
 -- lines plus one extmark per run of equal colour.
 
+local cellsize = require("toy_html.cell")
+
 local M = {}
 
 -- How long a resize is waited for before the next may go.
@@ -534,6 +536,14 @@ function M.open(opts)
       return
     end
     local cols, rows = size(win)
+    -- How big a cell is, before the size that is counted in them: said again
+    -- only when it changed, and by saying nothing when it is no longer known.
+    local width, height = cellsize.get()
+    local named = width and (width .. "x" .. height)
+    if named ~= view.cell then
+      view.cell = named
+      send(view, { op = "cell", width = width, height = height, silent = true })
+    end
     send(view, { op = "resize", cols = cols, rows = rows, silent = silent, full = fresh })
     if not silent then
       view.inflight = {}
@@ -566,7 +576,7 @@ function M.open(opts)
       view.page = newpage()
       host.views[view.page] = view
     end
-    view.closed, view.gone = false, false
+    view.closed, view.gone, view.cell = false, false, nil
     send(view, { op = "transparent", on = view.transparent, silent = true })
     if view.images then
       send(view, { op = "images", mode = view.images, silent = true })

@@ -20,6 +20,8 @@ pub(crate) struct Page {
     pub(crate) session: SessionId,
     pub(crate) url: String,
     pub(crate) viewport: Viewport,
+    /// How big a terminal cell is, for the cell path; see [`crate::CellSize`].
+    pub(crate) cell: crate::CellSize,
     /// Whether loads run the page's scripts. A setting, so it survives them.
     pub(crate) run_scripts: bool,
     /// The last measurement, and the state it described. Re-measuring is a full

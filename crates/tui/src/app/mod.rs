@@ -20,7 +20,7 @@ pub use pointer::{Hover, Under};
 pub use shared::{Shared, shared_browser};
 
 use anyhow::Result;
-use toy_browser::{CELL_WIDTH, PageId, Resources, Scheme, Viewport};
+use toy_browser::{CellSize, PageId, Resources, Scheme, Viewport};
 
 use crate::grid::Grid;
 
@@ -38,6 +38,9 @@ pub struct App {
     >,
     cols: u16,
     rows: u16,
+    /// How big one of those cells is in CSS px: what the page's width is
+    /// `cols` of, and what a click's cell is converted to a point with.
+    cell: CellSize,
     /// How far the window has been moved over the page, in columns and rows.
     scrolled: (usize, usize),
     /// The page's revision when the layout was last dropped: what lets an event
@@ -101,6 +104,7 @@ impl App {
             shown: std::collections::HashMap::new(),
             cols,
             rows,
+            cell: CellSize::DEFAULT,
             scrolled: (0, 0),
             revision: 0,
             grid: None,
@@ -119,6 +123,33 @@ impl App {
             .borrow_mut()
             .set_viewport(&app.page, app.viewport());
         Ok(app)
+    }
+
+    /// Tells the page how big a terminal cell is, laying it out again if that
+    /// is news. Everything the page can see of its width follows from it:
+    /// `@media`, `vw`, `innerWidth` and where a click lands.
+    pub fn set_cell(&mut self, cell: CellSize) {
+        if cell == self.cell {
+            return;
+        }
+        self.cell = cell;
+        self.browser.borrow_mut().set_cell(&self.page, cell);
+        self.announce_width();
+        self.flow = None;
+        self.grid = None;
+        self.hover = None;
+        self.settle();
+    }
+
+    /// Tells the page, its scripts included, how wide it now is.
+    pub(super) fn announce_width(&mut self) {
+        let viewport = self.viewport();
+        self.browser.borrow_mut().set_viewport(&self.page, viewport);
+    }
+
+    /// How big one cell is.
+    pub fn cell(&self) -> CellSize {
+        self.cell
     }
 
     /// Replaces the page with this markup, scrolled back to the top.
@@ -176,7 +207,7 @@ impl App {
 
     fn viewport(&self) -> Viewport {
         Viewport {
-            width: (f32::from(self.cols) * CELL_WIDTH).round() as u32,
+            width: self.cell.across(self.cols),
             height: None,
             zoom: Viewport::NORMAL,
             scheme: self.scheme,

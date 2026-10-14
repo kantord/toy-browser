@@ -21,6 +21,7 @@ mod keyboard;
 mod navigate;
 mod pointer;
 
+mod cell_size;
 mod measure;
 mod page;
 mod reading;
@@ -49,6 +50,7 @@ pub use accesskit;
 // The rasterizer entire, so that a front end can start one without naming a
 // crate this one already depends on.
 pub use blitz::{LaidOut, Styled, lay_out, style};
+pub use cell_size::CellSize;
 pub use cursor_icon::CursorIcon;
 pub use drawing::{Drawn, Waker};
 pub use hovering::Hovering;
@@ -59,7 +61,6 @@ pub use reading::Reading;
 pub use resvg::tiny_skia;
 pub use toy_browser_engine::{Budget, ElementBox, NodeId, Point, ScriptSurvey};
 // The cell renderer, so `Browser::cells` can be used without naming it.
-pub use cellstyle::{CELL_HEIGHT, CELL_WIDTH};
 pub use toy_browser_cells as cells;
 pub use toy_browser_fetch::{Resources, Url};
 pub use toy_browser_rasterizer as rasterizer;
@@ -196,6 +197,7 @@ impl Browser {
                 session: self.engine.create_session(),
                 url: String::new(),
                 viewport: Viewport::default(),
+                cell: CellSize::DEFAULT,
                 run_scripts: self.scripts,
                 measured: None,
                 told: None,
@@ -249,6 +251,12 @@ impl Browser {
     pub fn set_viewport(&mut self, page: &PageId, viewport: Viewport) {
         if let Some(page) = self.pages.get_mut(page) {
             page.viewport = viewport;
+            // The scripts hear it now, not at the next full measure: that is a
+            // layout in pixels, which a page shown in cells never needs.
+            let _ = self.engine.set_viewport(
+                &page.session,
+                (viewport.width, viewport.height.unwrap_or(0)),
+            );
         }
     }
 

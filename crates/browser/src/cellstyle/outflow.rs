@@ -26,9 +26,9 @@ use style::values::computed::Inset as Side;
 use style::values::generics::ClipRectOrAuto;
 use toy_browser_cells::{Clear, Computed, Display, Float, Inset, Position};
 
-use super::units::{Axis, signed};
+use super::units::{Axis, Page, signed};
 
-pub(super) fn apply(style: &ComputedValues, page: f32, c: &mut Computed) {
+pub(super) fn apply(style: &ComputedValues, page: Page, c: &mut Computed) {
     c.position = position(style);
     c.inset = match c.position {
         Position::Static => Inset::default(),
@@ -87,7 +87,7 @@ fn position(style: &ComputedValues) -> Position {
     }
 }
 
-fn inset(style: &ComputedValues, page: f32) -> Inset {
+fn inset(style: &ComputedValues, page: Page) -> Inset {
     let it = style.get_position();
     let side = |value: &Side, axis| match value {
         Side::LengthPercentage(inner) => signed(inner, axis, page),

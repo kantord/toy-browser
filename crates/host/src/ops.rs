@@ -4,7 +4,7 @@ use std::io::Write;
 
 use anyhow::Result;
 use serde_json::{Value, json};
-use toy_browser::{Held, Images, Scheme};
+use toy_browser::{CellSize, Held, Images, Scheme};
 use toy_browser_tui::app::{App, Under};
 
 use crate::emit;
@@ -95,6 +95,13 @@ fn act(app: &mut App, command: &Value) {
     }
 }
 
+/// The size of a cell the command names, in CSS px; the default 8 by 16 if it
+/// names none, or a size no terminal has.
+fn cell(command: &Value) -> CellSize {
+    let side = |name: &str| command[name].as_f64().unwrap_or(0.0) as f32;
+    CellSize::new(side("width"), side("height")).unwrap_or_default()
+}
+
 /// What the page is given: a document, a size, and how it is to be shown.
 fn configure(app: &mut App, op: &str, command: &Value) -> Result<()> {
     match op {
@@ -103,6 +110,7 @@ fn configure(app: &mut App, op: &str, command: &Value) -> Result<()> {
             command["html"].as_str().unwrap_or_default(),
             command["base"].as_str().unwrap_or(BASE),
         )?,
+        "cell" => app.set_cell(cell(command)),
         "resize" => app.resized(number(command, "cols"), number(command, "rows")),
         "whole" => app.show_whole(command["on"].as_bool().unwrap_or(true)),
         "images" => app.set_images(match command["mode"].as_str() {

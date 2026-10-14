@@ -23,7 +23,7 @@ use style::values::specified::align::AlignFlags;
 use style::values::specified::box_::{DisplayInside, DisplayOutside};
 use toy_browser_cells::{AlignItems, Display, FlexDirection, JustifyContent, Length};
 
-use super::units::{Axis, length};
+use super::units::{Axis, Page, length};
 
 pub(super) fn display(style: &ComputedValues) -> Display {
     let shown = style.get_box().display;
@@ -62,7 +62,7 @@ pub(super) fn wraps(style: &ComputedValues) -> bool {
 }
 
 /// `(grow, shrink, basis)`; the basis `content` and every keyword is `Auto`.
-pub(super) fn factors(style: &ComputedValues, page: f32) -> (f32, f32, Length) {
+pub(super) fn factors(style: &ComputedValues, page: Page) -> (f32, f32, Length) {
     let pos = style.get_position();
     let basis = match &pos.flex_basis {
         Basis::Size(Size::LengthPercentage(inner)) => length(&inner.0, Axis::X, page),
