@@ -56,30 +56,33 @@ impl Lines {
 
     /// Rewrites the cells that a neighbouring line meets.
     pub(crate) fn join(&self, grid: &mut Grid) {
-        let shows = |grid: &Grid, at: (i64, i64)| {
-            let glyph = self.0.get(&at).copied()?;
-            let cell = grid.cell(usize::try_from(at.0).ok()?, usize::try_from(at.1).ok()?)?;
-            (cell.symbol == glyph).then_some(glyph)
-        };
-        let mut joined = Vec::new();
-        for &(x, y) in self.0.keys() {
-            let Some(own) = shows(grid, (x, y)).and_then(arms) else {
-                continue;
-            };
-            let mut next = own;
-            for (i, (dx, dy)) in STEP.iter().enumerate() {
-                let toward_us = (i + 2) % 4;
-                let neighbour = shows(grid, (x + dx, y + dy)).and_then(arms);
-                next[i] |= neighbour.is_some_and(|a| a[toward_us]);
-            }
-            if let Some(glyph) = glyph(next).filter(|_| next != own) {
-                joined.push((x, y, glyph));
-            }
-        }
-        for (x, y, glyph) in joined {
+        let joined: Vec<_> = self
+            .0
+            .keys()
+            .filter_map(|&at| Some((at, self.joined(grid, at)?)))
+            .collect();
+        for ((x, y), glyph) in joined {
             if let Some(cell) = grid.cell_mut(x, y) {
                 cell.symbol = glyph.to_owned();
             }
         }
+    }
+
+    /// The glyph for the cell at `at` once its neighbours' arms are added, if that changes it.
+    fn joined(&self, grid: &Grid, at: (i64, i64)) -> Option<&'static str> {
+        let own = self.arms(grid, at)?;
+        let mut next = own;
+        for (i, (dx, dy)) in STEP.iter().enumerate() {
+            let neighbour = self.arms(grid, (at.0 + dx, at.1 + dy));
+            next[i] |= neighbour.is_some_and(|a| a[(i + 2) % 4]);
+        }
+        glyph(next).filter(|_| next != own)
+    }
+
+    /// The arms of the border cell at `at`, while it still shows what was painted.
+    fn arms(&self, grid: &Grid, at: (i64, i64)) -> Option<Arms> {
+        let painted = self.0.get(&at).copied()?;
+        let cell = grid.cell(usize::try_from(at.0).ok()?, usize::try_from(at.1).ok()?)?;
+        arms(painted).filter(|_| cell.symbol == painted)
     }
 }
