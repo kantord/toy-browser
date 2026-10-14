@@ -118,3 +118,45 @@ fn a_page_and_its_script_agree_about_the_colour_scheme() {
         assert_eq!(told, serde_json::json!(wanted), "the script was told wrong");
     }
 }
+
+// Pins: a script asking for a width query is answered from the width the page
+// was laid out at, as the stylesheet's own `@media` is.
+#[test]
+fn a_script_is_answered_width_queries_from_the_viewport() {
+    let mut browser = browser();
+    let page = browser.new_page().unwrap();
+    browser.set_viewport(
+        &page,
+        Viewport {
+            width: 800,
+            height: Some(300),
+            ..Viewport::default()
+        },
+    );
+    browser
+        .navigate(&page, fixture("scheme.html").as_str())
+        .unwrap();
+    let ask = |browser: &mut Browser, query: &str| {
+        let script = format!("matchMedia('{query}').matches");
+        match browser.evaluate(&page, &script, true).unwrap() {
+            Remote::Value(told) => told,
+            _ => panic!("asking about {query} answered nothing"),
+        }
+    };
+    assert_eq!(
+        ask(&mut browser, "(min-width: 600px)"),
+        serde_json::json!(true)
+    );
+    assert_eq!(
+        ask(&mut browser, "(min-width: 1024px)"),
+        serde_json::json!(false)
+    );
+    assert_eq!(
+        ask(&mut browser, "(max-width: 900.5px)"),
+        serde_json::json!(true)
+    );
+    assert_eq!(
+        ask(&mut browser, "(max-width:799px)"),
+        serde_json::json!(false)
+    );
+}

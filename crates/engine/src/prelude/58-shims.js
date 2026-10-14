@@ -13,7 +13,7 @@
   const answers = (query) => {
     const text = String(query);
     const width = (kind) => {
-      const found = text.match(new RegExp(`${kind}-width:\\\\s*(\\\\d+(?:\\\\.\\\\d+)?)px`));
+      const found = text.match(new RegExp(`${kind}-width:\\s*(\\d+(?:\\.\\d+)?)px`));
       return found ? Number(found[1]) : null;
     };
     // Whichever scheme this page is being shown in, which is the same thing
