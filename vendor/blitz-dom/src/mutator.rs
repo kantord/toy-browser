@@ -1075,6 +1075,7 @@ impl<'doc> DocumentMutator<'doc> {
                 guard: self.doc.guard.clone(),
                 net_provider: self.doc.net_provider.clone(),
                 abort_signal: self.doc.abort_signal.clone(),
+                media: node.attr(local_name!("media")).map(str::to_owned), // tb+++---
             },
         );
 

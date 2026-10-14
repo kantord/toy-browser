@@ -146,7 +146,35 @@ pub struct StylesheetHandler {
     pub guard: SharedRwLock,
     pub net_provider: Arc<dyn NetProvider>,
     pub abort_signal: Option<AbortSignal>,
+    // tb+++ the `media` attribute of the `<link>`, so a sheet for another medium is not applied.
+    pub media: Option<String>,
+    // tb---
 }
+
+// tb+++ a `media` attribute as the list Stylo evaluates; an absent one is "all".
+pub(crate) fn media_list(media: Option<&str>, url: &Url) -> MediaList {
+    use style::{context::QuirksMode as Quirks, parser::ParserContext, stylesheets::CssRuleType};
+    use style_traits::ParsingMode;
+    let Some(text) = media.map(str::trim).filter(|text| !text.is_empty()) else {
+        return MediaList::empty();
+    };
+    let extra: style::stylesheets::UrlExtraData = url.clone().into();
+    let mut context = ParserContext::new(
+        Origin::Author,
+        &extra,
+        Some(CssRuleType::Media),
+        ParsingMode::DEFAULT,
+        Quirks::NoQuirks,
+        Default::default(),
+        None,
+        None,
+        Default::default(),
+    );
+    let mut source = cssparser::ParserInput::new(text);
+    let mut input = style::values::Parser::new(&mut source);
+    MediaList::parse(&mut context, &mut input)
+}
+// tb---
 
 impl NetHandler for ResourceHandler<StylesheetHandler> {
     fn bytes(self: Box<Self>, resolved_url: String, bytes: Bytes) {
@@ -164,7 +192,10 @@ impl NetHandler for ResourceHandler<StylesheetHandler> {
             css,
             self.data.source_url.clone().into(),
             Origin::Author,
-            ServoArc::new(self.data.guard.wrap(MediaList::empty())),
+            ServoArc::new(self.data.guard.wrap(media_list(
+                self.data.media.as_deref(),
+                &self.data.source_url,
+            ))), // tb+++---
             self.data.guard.clone(),
             Some(&StylesheetLoader {
                 tx: self.tx.clone(),

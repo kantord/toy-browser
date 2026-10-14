@@ -4,10 +4,11 @@
 //! it) inside an `<a>` or `<button>` with an `aria-label`. Without the label
 //! the control is `[]` or no cells at all: something to click that cannot be
 //! seen. The label is what a screen reader says, so it is what a text browser
-//! shows. A `title` stands in when there is no label.
+//! shows. A `title` stands in when there is no label. The box was sized for
+//! an icon, so the name sets its width instead and stays on one line.
 
 use blitz_dom::{Node, local_name};
-use toy_browser_cells::{Element, Node as Cell};
+use toy_browser_cells::{Element, Length, Node as Cell, WhiteSpace};
 
 /// Gives `el` its `aria-label` (or `title`) as text if it has none of its own.
 pub(super) fn add(node: &Node, el: &mut Element) {
@@ -21,6 +22,9 @@ pub(super) fn add(node: &Node, el: &mut Element) {
         .filter(|name| !name.is_empty());
     if let Some(name) = name {
         el.children.push(Cell::Text(name.to_owned()));
+        el.style.white_space = WhiteSpace::Nowrap;
+        el.style.width = Length::Auto;
+        el.style.max_width = Length::Auto;
     }
 }
 

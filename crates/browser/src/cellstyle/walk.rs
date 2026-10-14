@@ -22,7 +22,7 @@ use super::computed::computed;
 use super::finish::finish;
 use super::table::{self, Part, Parts};
 use super::units::CELL_WIDTH;
-use super::{Env, airy, focus, inline, labelled, picture, replaced};
+use super::{Env, airy, contents, focus, hidden, inline, labelled, order, picture, replaced};
 use crate::blitz::keyed;
 use toy_browser_cells::{Computed, Display, Element, Node as Cell};
 
@@ -81,7 +81,7 @@ impl Walk<'_> {
     fn styled(&self, node: &Node, down: Down) -> Option<(Computed, Part)> {
         let styles = node.primary_styles()?;
         let mut style = computed(&styles, f32::from(self.env.cols) * CELL_WIDTH);
-        if style.display == Display::None {
+        if style.display == Display::None || hidden::visually_hidden(&styles) {
             return None;
         }
         style.underline |= down.underline;
@@ -155,13 +155,11 @@ impl Walk<'_> {
         if let Some(text) = replaced::text(self.doc, node, self.env.typed) {
             return vec![Cell::Text(text)];
         }
-        let ids = node.children.iter();
-        let ids = node
-            .before()
-            .into_iter()
-            .chain(ids.copied())
-            .chain(node.after());
-        ids.filter_map(|id| self.node(id, down)).collect()
+        let ids = contents::lifted(self.doc, contents::inside(node));
+        let ids = order::items(self.doc, node, ids);
+        ids.into_iter()
+            .filter_map(|id| self.node(id, down))
+            .collect()
     }
 }
 

@@ -200,6 +200,65 @@ fn a_linked_stylesheet_is_applied_before_the_tree_is_read() {
     assert_eq!(text("link", html, 20).trim(), "shown");
 }
 
+// Pins: a `<link media>` that does not match this screen is not applied (an
+// IE-only or print sheet must not beat the real one), and one that does is.
+#[test]
+fn a_linked_stylesheet_for_another_medium_is_not_applied() {
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"));
+    std::fs::write(dir.join("boxes-media.css"), "p { display: none }").expect("a place to write");
+    let link = |media: &str| {
+        format!("<link rel=stylesheet href='boxes-media.css' media='{media}'><p>shown</p>")
+    };
+    assert_eq!(text("m1", &link("print"), 20).trim(), "shown");
+    assert_eq!(
+        text("m2", &link("all and (-ms-high-contrast: none)"), 20).trim(),
+        "shown"
+    );
+    assert_eq!(text("m3", &link("(min-width: 100px)"), 20).trim(), "");
+    assert_eq!(text("m4", &link("screen"), 20).trim(), "");
+}
+
+// Pins: CSS `order` reorders flex and grid items (stable, DOM order on ties),
+// and does nothing in a block.
+#[test]
+fn order_reorders_flex_and_grid_items() {
+    let item = |order: i32, word: &str| format!("<p style='order:{order};margin:0'>{word}</p>");
+    let items = format!("{}{}{}", item(2, "one"), item(1, "two"), item(1, "tre"));
+    let flex =
+        format!("<style>body{{margin:0}}</style><div style='display:flex;gap:1em'>{items}</div>");
+    assert_eq!(text("o1", &flex, 30), "two  tre  one");
+    let grid = format!("<style>body{{margin:0}}</style><div style='display:grid'>{items}</div>");
+    assert_eq!(text("o2", &grid, 30), "two\ntre\none");
+    let block = format!("<style>body{{margin:0}}</style><div>{items}</div>");
+    assert_eq!(text("o3", &block, 30), "one\ntwo\ntre");
+}
+
+// Pins: `display: contents` makes no box and its children join the parent's
+// (here a flex row), instead of vanishing.
+#[test]
+fn display_contents_hands_its_children_to_the_parent() {
+    let html = "<style>body{margin:0} .c{display:contents}</style>\
+        <p>a</p><div class=c><p>b</p></div><div style='display:flex;gap:1em'>\
+        <div class=c><p style='margin:0'>c</p><p style='margin:0'>d</p></div><p style='margin:0'>e</p></div>";
+    let shown = text("contents", html, 30);
+    assert!(
+        shown.contains("a\n\nb") && shown.contains("c  d  e"),
+        "{shown:?}"
+    );
+}
+
+// Pins: the screen-reader-only idiom draws nothing, and a name given to an
+// icon-only link stays on one line.
+#[test]
+fn visually_hidden_text_is_skipped_and_icon_names_stay_whole() {
+    let hidden = "<style>body{margin:0} .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(1px,1px,1px,1px)}</style>\
+        <p>seen<span class=sr>unseen</span></p>";
+    let shown = text("sr", hidden, 30);
+    assert_eq!(shown.trim(), "seen");
+    let icon = "<style>body{margin:0}a{display:block;width:16px}</style><a href=x aria-label='Follow us now'><svg></svg></a>";
+    assert_eq!(text("icon", icon, 30).trim(), "Follow us now");
+}
+
 // Pins: buttons in a flex row are flex items (a gap between them, `flex: 1`
 // shares the row), not text in one line.
 #[test]

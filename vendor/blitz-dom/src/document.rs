@@ -1102,6 +1102,7 @@ impl BaseDocument {
                                     guard: self.guard.clone(),
                                     net_provider: self.net_provider.clone(),
                                     abort_signal: self.abort_signal.clone(),
+                                    media: element.attr(local_name!("media")).map(str::to_owned), // tb+++---
                                 },
                             ),
                         );
