@@ -257,6 +257,27 @@ fn visually_hidden_text_is_skipped_and_icon_names_stay_whole() {
     assert_eq!(shown.trim(), "seen");
     let icon = "<style>body{margin:0}a{display:block;width:16px}</style><a href=x aria-label='Follow us now'><svg></svg></a>";
     assert_eq!(text("icon", icon, 30).trim(), "Follow us now");
+    let over = "<style>body{margin:0}nav{position:absolute;right:0}a{display:block;width:16px}</style><p>Caption</p><nav><a href=x aria-label='Go to the Previous Month'><svg></svg></a></nav>";
+    assert!(
+        !text("over", over, 30).contains("Previous"),
+        "a placed control keeps no name over the page"
+    );
+}
+
+// Pins: vertical spacing counts in full up to two rows and half beyond them
+// (96px is four blank rows above the text, not six), for padding and margin alike.
+#[test]
+fn large_vertical_spacing_counts_half_past_two_rows() {
+    let rows_above = |style: &str| {
+        let html = format!("<style>body{{margin:0}}</style><div style='{style}'>x</div>");
+        text("spacing", &html, 10)
+            .lines()
+            .take_while(|row| row.is_empty())
+            .count()
+    };
+    assert_eq!(rows_above("padding:32px 0"), 2, "two rows, as written");
+    assert_eq!(rows_above("padding:96px 0"), 4, "four rows, not six");
+    assert_eq!(rows_above("margin:96px 0"), 4, "a margin the same");
 }
 
 // Pins: buttons in a flex row are flex items (a gap between them, `flex: 1`

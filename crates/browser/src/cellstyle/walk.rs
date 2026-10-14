@@ -111,7 +111,7 @@ impl Walk<'_> {
             key: down.owner,
         };
         airy::relax(&mut el);
-        labelled::add(node, &mut el);
+        labelled::add(self.doc, node, &mut el);
         finish(&mut el, data.list_item_data.as_deref());
         inline::tidy(node, &mut el, picture.is_some());
         if let Some(boxed) = picture {
@@ -157,9 +157,14 @@ impl Walk<'_> {
         }
         let ids = contents::lifted(self.doc, contents::inside(node));
         let ids = order::items(self.doc, node, ids);
-        ids.into_iter()
+        let mut cells: Vec<Cell> = ids
+            .into_iter()
             .filter_map(|id| self.node(id, down))
-            .collect()
+            .collect();
+        if order::is_container(node) {
+            cells.retain(|cell| !matches!(cell, Cell::Text(text) if text.trim().is_empty()));
+        }
+        cells
     }
 }
 

@@ -14,6 +14,7 @@ mod atoms;
 mod blend;
 mod flow;
 mod grid;
+mod junction;
 mod layout;
 mod mapping;
 mod paint;

@@ -1,7 +1,9 @@
 //! CSS `order`. Taffy has no such property, so the items of a flex or grid
 //! container are handed to it already sorted by `(order, DOM position)`: the
 //! sort is stable, text and anything without an element style count as 0,
-//! and outside a flex or grid container `order` does nothing.
+//! and outside a flex or grid container `order` does nothing. Such a
+//! container's whitespace-only text is no item at all (CSS drops it even in
+//! `pre`), which `is_container` lets the walk do.
 
 use blitz_dom::{BaseDocument, Node, NodeId};
 use style::values::specified::box_::DisplayInside;
@@ -14,7 +16,7 @@ pub(super) fn items(doc: &BaseDocument, parent: &Node, mut ids: Vec<NodeId>) -> 
     ids
 }
 
-fn is_container(node: &Node) -> bool {
+pub(super) fn is_container(node: &Node) -> bool {
     node.primary_styles().is_some_and(|styles| {
         matches!(
             styles.get_box().display.inside(),

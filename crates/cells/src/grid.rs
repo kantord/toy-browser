@@ -153,7 +153,7 @@ impl Grid {
         (x < self.width && y < self.height).then(|| &self.cells[y * self.width + x])
     }
 
-    fn cell_mut(&mut self, x: i64, y: i64) -> Option<&mut Cell> {
+    pub(crate) fn cell_mut(&mut self, x: i64, y: i64) -> Option<&mut Cell> {
         self.open(x, y)
             .then(|| &mut self.cells[y as usize * self.width + x as usize])
     }

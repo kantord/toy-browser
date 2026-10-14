@@ -76,18 +76,30 @@ fn overflow_hidden_clips_the_content() {
 }
 
 // Pins: with `border-collapse: collapse` two neighbouring cells share one
-// edge instead of drawing `││`.
+// edge instead of drawing `││`, and where lines meet the corner is the
+// junction (`┬ ├ ┼ ┤ ┴`) rather than the corner of the cell that owns it.
 #[test]
 fn collapsed_cells_share_an_edge() {
     let html = "<style>body{margin:0} table{border-collapse:collapse} td{border:1px solid}</style>
         <table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>";
     let expected = "\
-┌─┐─┐
+┌─┬─┐
 │a│b│
-└─┘─┘
+├─┼─┤
 │c│d│
-└─┘─┘";
+└─┴─┘";
     assert_eq!(text("collapse", html, 20), expected);
+}
+
+// Pins: joins are made only between border lines: two separate boxes side by
+// side keep `┐┌`, and a line of text that is made of `─` and `│` is not touched.
+#[test]
+fn only_borders_join_and_separate_boxes_stay_apart() {
+    let boxes = "<style>body{margin:0} div{display:inline-block;border:1px solid}</style>\
+        <div>a</div><div>b</div>";
+    assert_eq!(text("apart", boxes, 20), "┌─┐┌─┐\n│a││b│\n└─┘└─┘");
+    let art = "<style>body{margin:0}</style><pre>──┐\n  │</pre>";
+    assert_eq!(text("art", art, 20), "──┐\n  │");
 }
 
 // Pins: an empty box with only a border draws nothing, while a rule and a

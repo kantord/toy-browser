@@ -12,11 +12,13 @@
 //! own colour, blended over the cell's background like text. A corner cell
 //! belongs to two sides and a cell cannot be split diagonally the way a
 //! browser mitres the join, so it takes the horizontal side's colour: top for
-//! `┌ ┐`, bottom for `└ ┘`.
+//! `┌ ┐`, bottom for `└ ┘`. Where lines meet, `junction` turns the corner or
+//! line into the `┬ ┴ ├ ┤ ┼` that joins them.
 
 use taffy::prelude::TaffyTree;
 
 use crate::grid::{CellStyle, Grid, Rect};
+use crate::junction::Lines;
 use crate::layout::{Item, Laid, cell_style};
 use crate::tree::{Edges, Ink, Inks, TextAlign};
 use crate::wrap::Paragraph;
@@ -26,14 +28,17 @@ pub fn paint(laid: &Laid, grid: &mut Grid) {
         taffy: &laid.taffy,
         paragraphs: &laid.paragraphs,
         grid,
+        lines: Lines::default(),
     };
     painter.item(&laid.root, (0, 0));
+    painter.lines.join(painter.grid);
 }
 
 struct Painter<'a> {
     taffy: &'a TaffyTree<usize>,
     paragraphs: &'a [Paragraph],
     grid: &'a mut Grid,
+    lines: Lines,
 }
 
 impl Painter<'_> {
@@ -183,6 +188,7 @@ impl Painter<'_> {
                         ..style
                     };
                     self.grid.put(rect.x + dx, rect.y + dy, glyph, 1, style);
+                    self.lines.record(rect.x + dx, rect.y + dy, glyph);
                 }
             }
         }

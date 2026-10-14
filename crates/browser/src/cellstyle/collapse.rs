@@ -6,10 +6,10 @@
 //! touching side, so the line between two cells is one cell wide: the left
 //! (upper) cell's right (bottom) border is the shared edge.
 //!
-//! What this does not do: the junction glyphs `┬ ┤ ┼` (every corner is still a
-//! `┌ ┐ └ ┘` of the cell that owns it), and a conflict between two different
-//! widths or styles, since a border here is one cell and one line whatever the
-//! page asked for. The border of the table's own box is left alone.
+//! The `┬ ┤ ┼` where lines meet are made later, by the cells crate's
+//! `junction`. What this does not do is settle a conflict between two
+//! different widths or styles, since a border here is one cell and one line
+//! whatever the page asked for. The border of the table's own box is left alone.
 
 use std::collections::HashMap;
 

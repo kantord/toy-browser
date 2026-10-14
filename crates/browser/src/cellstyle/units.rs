@@ -70,15 +70,29 @@ pub(super) fn length(value: &LengthPercentage, axis: Axis, page: f32) -> Length 
 
 /// A margin, padding or gap. Across, a length rounds instead of flooring, so
 /// the 4px or 6px a page puts between inline items is a column and not
-/// nothing; sizes still floor, and so does everything down the page.
+/// nothing; sizes still floor. Down the page it floors too, and past
+/// [`ROOMY`] rows each further row counts half: the 96px a section puts
+/// above and below itself is room for a screen of pixels and would be a third of
+/// a terminal's.
 pub(super) fn spaced(value: &LengthPercentage, axis: Axis, page: f32) -> Length {
     match (value.unpack(), axis) {
+        (Unpacked::Length(px), Axis::Y) => Length::Cells(tightened(cells(px.px(), axis))),
         (Unpacked::Length(px), Axis::X) => Length::Cells(
             (px.px() / CELL_WIDTH)
                 .round()
                 .clamp(0.0, f32::from(u16::MAX)) as u16,
         ),
         _ => length(value, axis, page),
+    }
+}
+
+/// Rows of vertical spacing that count in full; each row after them counts half.
+const ROOMY: u16 = 2;
+
+fn tightened(rows: u16) -> u16 {
+    match rows.checked_sub(ROOMY) {
+        Some(extra) => ROOMY + extra / 2,
+        None => rows,
     }
 }
 
