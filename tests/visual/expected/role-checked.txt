@@ -1,0 +1,10 @@
+legend  a=#ffffff  b=#efefef  c=#000000
+text
+
+[Accept] accepted [Spam] not [Wifi] on
+behind
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbaaaaaaaaaabbbbbbaaaaabbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+in front
+................................................................................
+cccccccc.cccccccc.cccccc.ccc.cccccc.cc..........................................

@@ -1,0 +1,12 @@
+<!doctype html>
+<!-- Guards: thin boxes. A box with a background and less than a cell of
+     thickness (a 1px divider, a progress bar, a status dot) is still shown.
+
+     Features:
+     css/thin-background-box: unsupported -->
+<style>
+  body{margin:0;width:300px} .h{height:1px;background:#888}
+  .bar{height:8px;background:#eee} .bar>i{display:block;height:8px;width:40%;background:#06c}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2a2}
+</style>
+<p>above</p><div class="h"></div><p>below</p><div class="bar"><i></i></div><p><span class="dot"></span> online</p>

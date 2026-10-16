@@ -1,7 +1,11 @@
 <!doctype html>
 <!-- Guards: focus. A container made focusable (tabindex) and focused by
      script is not an interactive control: it must not be reversed as one, and
-     here the whole page was. Only a keyboard-focused control gets a ring. -->
+     here the whole page was. Only a keyboard-focused control gets a ring.
+
+     Features:
+     html/tabindex-focus: supported
+-->
 <style>body { margin: 0 } main { background: #fff; color: #222 } a { color: #06c }</style>
 <main tabindex="-1" id="m"><p>Text inside a focusable container.</p><a href="#x">a link</a></main>
 <script>document.getElementById('m').focus()</script>

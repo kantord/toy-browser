@@ -1,6 +1,10 @@
 <!doctype html>
 <!-- Guards: CSS `order` on flex and grid items. Content placed first in the
-     markup but ordered last must be drawn last. -->
+     markup but ordered last must be drawn last.
+
+     Features:
+     css/order: supported
+-->
 <style>
   body { margin: 0 } .row { display: flex; gap: 8px } .grid { display: grid; grid-template-columns: 1fr 1fr 1fr }
   .a { order: 3 } .b { order: 1 } .c { order: 2 }

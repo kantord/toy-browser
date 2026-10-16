@@ -1,5 +1,9 @@
 <!doctype html>
 <!-- Guards: display: contents. A wrapper that generates no box hands its
-     children to the parent, so they lay out as the flex row's own items. -->
+     children to the parent, so they lay out as the flex row's own items.
+
+     Features:
+     css/display-contents: supported
+-->
 <style>body { margin: 0 } .row { display: flex; gap: 8px; background: #eef } .wrap { display: contents }</style>
 <div class="row"><span>left</span><div class="wrap"><span>mid-1</span><span>mid-2</span></div><span>right</span></div>
