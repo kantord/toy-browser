@@ -1,0 +1,16 @@
+legend  a=#ffffff  b=#efefef  c=#000000
+text
+         [____________________]
+             [Search][Lucky]
+                   tag
+              after the tag
+behind
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaabbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+in front
+.........cccccccccccccccccccccc.................................................
+.............ccccccccccccccc....................................................
+...................ccc..........................................................
+..............ccccc.ccc.ccc.....................................................

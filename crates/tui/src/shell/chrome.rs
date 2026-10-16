@@ -39,7 +39,8 @@ pub(super) fn markup(shown: &Shown) -> String {
     format!(
         r#"<!doctype html><title>chrome</title><style>
 body {{ margin: 0; background: #e8e8ec; color: #222 }}
-@media (prefers-color-scheme: dark) {{ body {{ background: #2a2b3a; color: #dde }} }}
+input {{ background: #fff; color: #222 }}
+@media (prefers-color-scheme: dark) {{ body {{ background: #2a2b3a; color: #dde }} input {{ background: #3b3d52; color: #eef }} }}
 #bar {{ display: flex; gap: 8px; padding: 0 1px; border-bottom: 1px solid #889 }}
 a {{ color: inherit; text-decoration: none; font-weight: bold }}
 .off {{ color: #889; font-weight: normal }}

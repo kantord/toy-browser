@@ -5749,6 +5749,7 @@ dependencies = [
 name = "toy-browser-fetch"
 version = "0.1.0"
 dependencies = [
+ "encoding_rs",
  "ureq",
  "url",
 ]

@@ -14,6 +14,7 @@ use std::{
 
 pub use url::Url;
 
+mod charset;
 mod http;
 
 /// Why a Resource could not be produced.
@@ -57,6 +58,8 @@ pub struct Resource {
     /// hcker.news saw, and why it reported "check your connection" about a
     /// request that had arrived and been answered.
     pub status: u16,
+    /// The charset the server named, if it named one. See [`charset`].
+    charset: Option<&'static encoding_rs::Encoding>,
     /// What the file said about itself when it was read, for the schemes where
     /// asking again is cheap. `None` for anything not read off a disk.
     stamp: Option<Stamp>,
@@ -70,10 +73,10 @@ struct Stamp {
 }
 
 impl Resource {
-    /// The bytes as text, lossily. Every document and script this browser reads
+    /// The bytes as text, in the encoding they say they are in. Every document and script this browser reads
     /// is text; nothing yet needs the raw form.
     pub fn text(&self) -> std::borrow::Cow<'_, str> {
-        String::from_utf8_lossy(&self.bytes)
+        std::borrow::Cow::Owned(charset::decode(&self.bytes, self.charset))
     }
 
     /// Whether this is the thing that was asked for, rather than a server
@@ -151,6 +154,7 @@ impl Resources {
                 url,
                 bytes,
                 status: 200,
+                charset: None,
                 stamp,
             };
             cached.insert(made.url.clone(), Arc::new(made));
@@ -184,6 +188,7 @@ impl Resources {
                     url: url.clone(),
                     bytes,
                     status: 200,
+                    charset: None,
                     stamp: stamp_of(url),
                 })
             }
@@ -193,6 +198,7 @@ impl Resources {
                     url: fetched.url,
                     bytes: fetched.bytes,
                     status: fetched.status,
+                    charset: fetched.charset,
                     stamp: None,
                 })
             }

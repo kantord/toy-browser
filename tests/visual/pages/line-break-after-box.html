@@ -1,0 +1,10 @@
+<!doctype html>
+<!-- Guards: a <br> after an inline-block. A search form puts a field in an
+     inline-block, a <br>, then its buttons: the buttons went to the right of the
+     field, and anything after the break was indented by the box's width.
+
+     Features:
+     html/br-after-inline-block: supported -->
+<style>.box{display:inline-block} body{margin:0;width:320px;text-align:center}</style>
+<div><div class="box"><input size="20"></div><br><span class="box"><button>Search</button></span><span class="box"><button>Lucky</button></span></div>
+<div><span class="box">tag</span><br>after the tag</div>

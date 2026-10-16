@@ -24,6 +24,7 @@ pub(crate) struct Fetched {
     pub(crate) url: Url,
     pub(crate) bytes: Vec<u8>,
     pub(crate) status: u16,
+    pub(crate) charset: Option<&'static encoding_rs::Encoding>,
 }
 
 pub(crate) fn get(url: &Url) -> Result<Fetched, FetchError> {
@@ -34,6 +35,11 @@ pub(crate) fn get(url: &Url) -> Result<Fetched, FetchError> {
         .map_err(|error| transport_error(url, &error))?;
 
     let status = response.status().as_u16();
+    let charset = response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .and_then(crate::charset::of_header);
     let landed =
         Url::parse(response.get_uri().to_string().as_str()).unwrap_or_else(|_| url.clone());
     let bytes = response
@@ -50,6 +56,7 @@ pub(crate) fn get(url: &Url) -> Result<Fetched, FetchError> {
         url: landed,
         bytes,
         status,
+        charset,
     })
 }
 

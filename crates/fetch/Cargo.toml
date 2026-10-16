@@ -9,6 +9,7 @@ readme = "README.md"
 
 [dependencies]
 ureq = { version = "3.4.0", default-features = false, features = ["rustls"] }
+encoding_rs = "0.8.35"
 url = "2.5.8"
 
 [lints]

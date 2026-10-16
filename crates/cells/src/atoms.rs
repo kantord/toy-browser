@@ -18,7 +18,7 @@ use crate::grid::CellStyle;
 use crate::layout::{Item, Planner, cell_style, own_text_style};
 use crate::text::Builder;
 use crate::tree::{
-    AlignItems, Computed, Display, Element, JustifyContent, Node, TextAlign, WhiteSpace,
+    AlignItems, Computed, Display, Element, JustifyContent, Length, Node, TextAlign, WhiteSpace,
 };
 
 /// Whether any of these inline nodes (or the inline elements in them) is a box.
@@ -42,6 +42,8 @@ struct Text {
 enum Piece<'a> {
     Text(Text),
     Box(&'a Element),
+    /// A `<br>`: the next piece starts a line of its own.
+    Break,
 }
 
 impl Text {
@@ -79,6 +81,10 @@ fn gather<'a>(
         Node::Element(el) if el.style.atomic => {
             out.push(Piece::Text(std::mem::replace(cur, Text::new())));
             out.push(Piece::Box(el));
+        }
+        Node::Element(el) if el.tag == "br" => {
+            out.push(Piece::Text(std::mem::replace(cur, Text::new())));
+            out.push(Piece::Break);
         }
         Node::Element(el) => {
             let inner = (cell_style(&el.style, el.key), el.style.white_space);
@@ -121,6 +127,13 @@ impl Planner {
         for piece in pieces {
             let (item, lead, trail) = match piece {
                 Piece::Box(el) => (Some(self.element(el)), false, false),
+                Piece::Break => {
+                    // The break is a row's worth of nothing, which only fits
+                    // on a line of its own: what follows wraps under it.
+                    items.push(self.line_end());
+                    spaced = false;
+                    continue;
+                }
                 Piece::Text(text) => {
                     let (lead, trail) = (text.lead, text.trail);
                     (self.words(owner, text), lead, trail)
@@ -134,6 +147,26 @@ impl Planner {
             }
         }
         (items, gapped)
+    }
+
+    /// An empty item as wide as the row, so that nothing shares its line.
+    fn line_end(&mut self) -> Item {
+        let style = Computed {
+            width: Length::Percent(100.0),
+            height: Length::Cells(0),
+            ..Computed::default()
+        };
+        let id = self
+            .taffy
+            .new_leaf(crate::mapping::to_taffy(&style))
+            .expect("taffy");
+        Item {
+            id,
+            key: None,
+            style,
+            paragraph: None,
+            children: Vec::new(),
+        }
     }
 
     /// The text leaf for a stretch between boxes, if it shows anything.
