@@ -83,6 +83,14 @@ impl Browser {
         self.engine.contains(&session, ancestor, node)
     }
 
+    /// What has been typed into a field, or its `value` if nothing has: the text
+    /// in it now. `None` for an element that is not a field.
+    pub fn value(&mut self, page: &PageId, node: NodeId) -> Result<Option<String>> {
+        let session = self.session(page)?;
+        let fields = self.engine.fields(&session)?;
+        Ok(fields.values.get(&node).map(|(text, _, _)| text.clone()))
+    }
+
     /// What has focus.
     pub fn focused(&mut self, page: &PageId) -> Result<Option<NodeId>> {
         let session = self.session(page)?;

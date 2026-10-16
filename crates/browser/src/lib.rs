@@ -207,7 +207,7 @@ impl Browser {
                 styled: None,
                 pointer: Pointer::default(),
                 keyboard_focus: false,
-                visited: Vec::new(),
+                trail: Default::default(),
                 mounted: HashMap::new(),
             },
         );

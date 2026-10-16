@@ -52,6 +52,9 @@ pub struct Loaded {
 enum Remembering {
     Yes,
     No,
+    /// Coming forward again: remembered as somewhere been, and what is still
+    /// ahead stays ahead.
+    Forward,
 }
 
 impl Browser {
@@ -69,13 +72,38 @@ impl Browser {
     /// is not a failure — it is a button that does nothing, which is what a
     /// browser's does at the start of its history.
     pub fn go_back(&mut self, page: &PageId) -> Result<bool, NavigationError> {
-        let Some(before) = self.pages.get_mut(page).and_then(|held| held.visited.pop()) else {
+        let Some(held) = self.pages.get_mut(page) else {
             return Ok(false);
         };
+        let Some(before) = held.trail.visited.pop() else {
+            return Ok(false);
+        };
+        held.trail.ahead.push(held.url.clone());
         // Not remembered: going back to where you were is not going somewhere
         // new, and remembering it would make Back walk between two pages
         // forever.
         self.travel(page, &before, Remembering::No)?;
+        Ok(true)
+    }
+
+    /// How many pages Back would pass, and how many Forward would: what a
+    /// chrome shows its two buttons enabled by.
+    pub fn history(&self, page: &PageId) -> (usize, usize) {
+        self.pages.get(page).map_or((0, 0), |page| {
+            (page.trail.visited.len(), page.trail.ahead.len())
+        })
+    }
+
+    /// Goes forward again to the page Back came from, if it came from one.
+    pub fn go_forward(&mut self, page: &PageId) -> Result<bool, NavigationError> {
+        let Some(next) = self
+            .pages
+            .get_mut(page)
+            .and_then(|held| held.trail.ahead.pop())
+        else {
+            return Ok(false);
+        };
+        self.travel(page, &next, Remembering::Forward)?;
         Ok(true)
     }
 
@@ -163,8 +191,11 @@ impl Browser {
         let Some(page) = self.pages.get_mut(page) else {
             return;
         };
-        if remembering == Remembering::Yes && !page.url.is_empty() {
-            page.visited.push(std::mem::take(&mut page.url));
+        if remembering != Remembering::No && !page.url.is_empty() {
+            page.trail.visited.push(std::mem::take(&mut page.url));
+        }
+        if remembering == Remembering::Yes {
+            page.trail.ahead.clear();
         }
         page.url = url.to_owned();
         // The old document's geometry describes nothing now. Both caches, and by

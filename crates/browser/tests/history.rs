@@ -63,6 +63,58 @@ fn going_back_walks_back_one_at_a_time() {
     );
 }
 
+/// Two pages visited, in the page that has them behind it.
+fn visited_two() -> (toy_browser::Browser, toy_browser::PageId) {
+    let mut browser = browser();
+    let page = browser.new_page().unwrap();
+    for name in ["webview-top.html", "webview-bottom.html"] {
+        browser.navigate(&page, fixture(name).as_str()).unwrap();
+    }
+    (browser, page)
+}
+
+fn file(browser: &toy_browser::Browser, page: &toy_browser::PageId) -> String {
+    browser
+        .url(page)
+        .unwrap()
+        .rsplit('/')
+        .next()
+        .unwrap()
+        .to_owned()
+}
+
+#[test]
+fn forward_returns_to_where_back_came_from() {
+    let (mut browser, page) = visited_two();
+
+    let went = [
+        browser.go_back(&page).unwrap(),
+        browser.go_forward(&page).unwrap(),
+        browser.go_forward(&page).unwrap(),
+    ];
+
+    assert_eq!(went, [true, true, false]);
+    assert_eq!(file(&browser, &page), "webview-bottom.html");
+}
+
+/// Back, then somewhere new: what was ahead is gone, as in any browser.
+#[test]
+fn going_somewhere_new_after_back_drops_what_was_ahead() {
+    let (mut browser, page) = visited_two();
+    browser.go_back(&page).unwrap();
+    browser
+        .navigate(&page, fixture("webview-elsewhere.html").as_str())
+        .unwrap();
+
+    let went = [
+        browser.go_forward(&page).unwrap(),
+        browser.go_back(&page).unwrap(),
+    ];
+
+    assert_eq!(went, [false, true]);
+    assert_eq!(file(&browser, &page), "webview-top.html");
+}
+
 /// The chrome is a page, and the page it is about is the one in its frame.
 #[test]
 fn a_chrome_page_says_which_page_it_is_about() {

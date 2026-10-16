@@ -21,9 +21,8 @@ use crossterm::event::{
     self, Event, KeyEvent, KeyEventKind, MouseButton, MouseEvent, MouseEventKind,
 };
 use toy_browser::Scheme;
-use toy_browser_tui::{app, input, terminal};
-
-use app::App;
+use toy_browser_tui::shell::Shell;
+use toy_browser_tui::{input, terminal};
 
 /// How many rows one notch of the wheel, or one press of an arrow key, moves.
 const LINE: i32 = 3;
@@ -55,10 +54,14 @@ struct Cli {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let (cols, rows) = crossterm::terminal::size().context("reading the terminal's size")?;
-    // The cell first, so the page's scripts load into a window of the right width.
-    let mut app = App::blank(cols, rows, !cli.no_scripts, cli.scheme)?;
-    app.set_cell(terminal::cell());
-    app.navigate(&cli.url)?;
+    let mut app = Shell::open(
+        &cli.url,
+        cols,
+        rows,
+        !cli.no_scripts,
+        cli.scheme,
+        terminal::cell(),
+    )?;
 
     let screen = terminal::Screen::entered()?;
     let result = run(&mut app);
@@ -68,7 +71,7 @@ fn main() -> Result<()> {
 
 /// Draws, then waits for whatever happens next — a redraw is never scheduled
 /// on its own, the way a window's is not either; something has to ask for it.
-fn run(app: &mut App) -> Result<()> {
+fn run(app: &mut Shell) -> Result<()> {
     let mut out = io::stdout();
     let mut shown_title = String::new();
     loop {
@@ -84,17 +87,20 @@ fn run(app: &mut App) -> Result<()> {
 
 /// Puts the page's title up if it changed, then the page itself, then shows
 /// wherever the pointer is as the nearest thing to its shape a terminal owns.
-fn redrawn(app: &mut App, out: &mut impl io::Write, shown_title: &mut String) -> Result<()> {
+fn redrawn(app: &mut Shell, out: &mut impl io::Write, shown_title: &mut String) -> Result<()> {
     let url = app.url();
     if url != *shown_title {
         terminal::set_title(&url, out)?;
         *shown_title = url;
     }
-    terminal::draw(app.render()?, out)?;
+    let top = app.top();
+    let screen = app.render()?;
+    terminal::draw(screen.chrome, out)?;
+    terminal::draw_from(screen.page, top, out)?;
     terminal::point(app.hover(), out)
 }
 
-fn handle(app: &mut App, event: Event) {
+fn handle(app: &mut Shell, event: Event) {
     match event {
         Event::Resize(cols, rows) => {
             app.set_cell(terminal::cell());
@@ -106,13 +112,25 @@ fn handle(app: &mut App, event: Event) {
     }
 }
 
-fn handle_key(app: &mut App, key: KeyEvent) {
+/// A chrome action that failed is a line on stderr, which the alternate screen
+/// keeps until the browser is left.
+fn report(result: Result<()>) {
+    if let Err(error) = result {
+        eprintln!("{error:#}");
+    }
+}
+
+fn handle_key(app: &mut Shell, key: KeyEvent) {
     if key.kind == KeyEventKind::Release {
         return;
     }
     match input::meaning(&key) {
         Some(input::Meaning::Quit) => app.quit = true,
         Some(input::Meaning::Scroll(scroll)) => scroll_by(app, scroll),
+        Some(input::Meaning::Address) => report(app.edit_address()),
+        Some(input::Meaning::Back) => report(app.back()),
+        Some(input::Meaning::Forward) => report(app.forward()),
+        Some(input::Meaning::Reload) => report(app.reload()),
         Some(input::Meaning::Typed { key: name, code }) => type_key(app, &key, &name, code),
         None => {}
     }
@@ -121,13 +139,13 @@ fn handle_key(app: &mut App, key: KeyEvent) {
 /// A press and a release together, the way `Browser::type_text` sends one —
 /// a terminal reports a key typed, not held, so there is no separate release
 /// event to forward.
-fn type_key(app: &mut App, key: &KeyEvent, name: &str, code: &str) {
+fn type_key(app: &mut Shell, key: &KeyEvent, name: &str, code: &str) {
     let held = input::held(key.modifiers, key.kind == KeyEventKind::Repeat);
     app.keyed(true, name, code, held);
     app.keyed(false, name, code, held);
 }
 
-fn scroll_by(app: &mut App, scroll: input::Scroll) {
+fn scroll_by(app: &mut Shell, scroll: input::Scroll) {
     match scroll {
         input::Scroll::Up => app.scroll(0, -LINE),
         input::Scroll::Down => app.scroll(0, LINE),
@@ -140,7 +158,7 @@ fn scroll_by(app: &mut App, scroll: input::Scroll) {
     }
 }
 
-fn handle_mouse(app: &mut App, mouse: MouseEvent) {
+fn handle_mouse(app: &mut Shell, mouse: MouseEvent) {
     match mouse.kind {
         MouseEventKind::Moved | MouseEventKind::Drag(_) => app.moved(mouse.column, mouse.row),
         MouseEventKind::Down(MouseButton::Left) => clicked(app, true, mouse),
@@ -156,7 +174,7 @@ fn handle_mouse(app: &mut App, mouse: MouseEvent) {
 /// A press or a release, at wherever it landed — moved to first, the way a
 /// real pointer would already be there, so `:hover` matches before the click
 /// is raised at it.
-fn clicked(app: &mut App, down: bool, mouse: MouseEvent) {
+fn clicked(app: &mut Shell, down: bool, mouse: MouseEvent) {
     app.moved(mouse.column, mouse.row);
     app.clicked(down, mouse.column, mouse.row);
 }

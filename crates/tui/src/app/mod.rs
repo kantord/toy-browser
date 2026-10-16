@@ -14,6 +14,7 @@ mod hosting;
 mod pointer;
 mod scroll;
 mod shared;
+mod travel;
 
 pub use hosting::Focused;
 pub use pointer::{Hover, Under};

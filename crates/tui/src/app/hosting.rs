@@ -56,7 +56,7 @@ impl App {
     }
 
     /// The element carrying `data-key="key"`, if any.
-    fn keyed_element(&mut self, key: &str) -> Result<Option<Remote>> {
+    pub(super) fn keyed_element(&mut self, key: &str) -> Result<Option<Remote>> {
         let key = key.replace('\\', "\\\\").replace('"', "\\\"");
         let found = self
             .browser

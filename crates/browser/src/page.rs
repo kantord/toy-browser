@@ -67,8 +67,8 @@ pub(crate) struct Page {
     /// drawn in cells, as a browser draws `:focus-visible` and no ring for a
     /// click.
     pub(crate) keyboard_focus: bool,
-    /// The pages behind this one, oldest first. What Back walks.
-    pub(crate) visited: Vec<String>,
+    /// Where this page has been, and where Back came from.
+    pub(crate) trail: Trail,
     /// The page behind each `<webview>` in this one, by the element holding it.
     ///
     /// A whole page, not a frame: its own session, its own DOM, its own realm.
@@ -78,6 +78,15 @@ pub(crate) struct Page {
 }
 
 /// A page put inside another one, and where it was last drawn.
+/// What Back and Forward walk.
+#[derive(Default)]
+pub(crate) struct Trail {
+    /// The pages behind this one, oldest first.
+    pub visited: Vec<String>,
+    /// Where Back came from, most recent last.
+    pub ahead: Vec<String>,
+}
+
 pub(crate) struct Mounted {
     pub(crate) page: PageId,
     /// What the element asked for. Kept so the page is only sent there once: a

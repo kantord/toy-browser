@@ -13,4 +13,5 @@
 pub mod app;
 pub mod grid;
 pub mod input;
+pub mod shell;
 pub mod terminal;

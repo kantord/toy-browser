@@ -5,7 +5,8 @@
 //! the page: nothing in this codebase scrolls a document from the keyboard —
 //! `window/mod.rs` only ever scrolls from a wheel — so a terminal, which
 //! cannot assume anyone has one, is given these instead. Everything else is
-//! forwarded exactly as a keystroke would be.
+//! forwarded exactly as a keystroke would be. Ctrl-L, Ctrl-R, Alt-Left and
+//! Alt-Right are the browser's own: they never reach a page.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use toy_browser::Held;
@@ -27,6 +28,12 @@ pub enum Meaning {
     /// Stop the loop. Raw mode leaves nothing else able to.
     Quit,
     Scroll(Scroll),
+    /// Ctrl-L: the keyboard goes to the address.
+    Address,
+    /// Alt-Left, Alt-Right and Ctrl-R.
+    Back,
+    Forward,
+    Reload,
     /// Forwarded to the page, as this key and this DOM `code`.
     Typed {
         key: String,
@@ -37,17 +44,29 @@ pub enum Meaning {
 /// What `key` means, or `None` for a key with nothing in the DOM to spell —
 /// a bare modifier, a media key, whatever a terminal reports on its own.
 pub fn meaning(key: &KeyEvent) -> Option<Meaning> {
-    if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-        return Some(Meaning::Quit);
-    }
-    if let Some(scroll) = scroll(key.code) {
-        return Some(Meaning::Scroll(scroll));
-    }
-    let key_name = named(key.code)?;
+    chrome(key)
+        .or_else(|| scroll(key.code).map(Meaning::Scroll))
+        .or_else(|| typed(key))
+}
+
+fn typed(key: &KeyEvent) -> Option<Meaning> {
     Some(Meaning::Typed {
-        key: key_name,
+        key: named(key.code)?,
         code: code_name(key.code),
     })
+}
+
+/// The keys the browser answers to itself, and Ctrl-C, which leaves it.
+fn chrome(key: &KeyEvent) -> Option<Meaning> {
+    let held = key.modifiers & (KeyModifiers::CONTROL | KeyModifiers::ALT);
+    match (key.code, held) {
+        (KeyCode::Char('c'), KeyModifiers::CONTROL) => Some(Meaning::Quit),
+        (KeyCode::Char('l'), KeyModifiers::CONTROL) => Some(Meaning::Address),
+        (KeyCode::Char('r'), KeyModifiers::CONTROL) => Some(Meaning::Reload),
+        (KeyCode::Left, KeyModifiers::ALT) => Some(Meaning::Back),
+        (KeyCode::Right, KeyModifiers::ALT) => Some(Meaning::Forward),
+        _ => None,
+    }
 }
 
 fn scroll(code: KeyCode) -> Option<Scroll> {

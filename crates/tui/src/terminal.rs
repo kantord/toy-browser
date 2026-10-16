@@ -104,9 +104,15 @@ pub fn point(hover: Option<(u16, u16, Hover)>, out: &mut impl Write) -> Result<(
 /// put where the grid says the next cell is, so one wrong guess cannot shift
 /// the rest of the row.
 pub fn draw(grid: &Grid, out: &mut impl Write) -> Result<()> {
+    draw_from(grid, 0, out)
+}
+
+/// As [`draw`], with the grid's first row on this row of the screen: how a
+/// page is put under a chrome.
+pub fn draw_from(grid: &Grid, top: u16, out: &mut impl Write) -> Result<()> {
     let mut last = None;
     for row in 0..grid.rows {
-        out.queue(MoveTo(0, row))?;
+        out.queue(MoveTo(0, top + row))?;
         let mut col = 0;
         while col < grid.cols {
             let cell = grid.cell(col, row);
@@ -116,7 +122,7 @@ pub fn draw(grid: &Grid, out: &mut impl Write) -> Result<()> {
                 col += 1;
             }
             if cell.is_uncertain() {
-                out.queue(MoveTo(col, row))?;
+                out.queue(MoveTo(col, top + row))?;
             }
         }
     }
