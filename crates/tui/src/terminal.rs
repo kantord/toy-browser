@@ -11,7 +11,9 @@ use std::io::{self, Write};
 use anyhow::Result;
 use crossterm::cursor::{Hide, MoveTo, SetCursorStyle, Show};
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
-use crossterm::style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor};
+use crossterm::style::{
+    Attribute, Color, Print, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor,
+};
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, SetTitle, WindowSize, disable_raw_mode,
     enable_raw_mode,
@@ -21,7 +23,7 @@ use crossterm::{ExecutableCommand, QueueableCommand};
 use toy_browser::CellSize;
 
 use crate::app::Hover;
-use crate::grid::{Cell, Grid, Rgb};
+use crate::grid::{Cell, Grid, Rgb, Style};
 
 /// The terminal, put into the state a page can be shown in — and back again
 /// once this is dropped.
@@ -123,16 +125,31 @@ pub fn draw(grid: &Grid, out: &mut impl Write) -> Result<()> {
     Ok(())
 }
 
-/// Writes one cell, changing the ink only when it differs from the last one
-/// written — repainting the colours between every character would send more
-/// escape codes than text.
-fn paint_cell(out: &mut impl Write, cell: &Cell, last: &mut Option<(Rgb, Rgb)>) -> Result<()> {
-    if *last != Some((cell.fg, cell.bg)) {
+/// Writes one cell, changing the ink and the style only when they differ from
+/// the last one written — repainting them between every character would send
+/// more escape codes than text.
+fn paint_cell(
+    out: &mut impl Write,
+    cell: &Cell,
+    last: &mut Option<(Rgb, Rgb, Style)>,
+) -> Result<()> {
+    if *last != Some((cell.fg, cell.bg, cell.style)) {
+        out.queue(SetAttribute(Attribute::Reset))?;
         out.queue(SetForegroundColor(colour(cell.fg)))?;
         out.queue(SetBackgroundColor(colour(cell.bg)))?;
+        for (on, attribute) in [
+            (cell.style.bold, Attribute::Bold),
+            (cell.style.italic, Attribute::Italic),
+            (cell.style.underline, Attribute::Underlined),
+            (cell.style.strike, Attribute::CrossedOut),
+        ] {
+            if on {
+                out.queue(SetAttribute(attribute))?;
+            }
+        }
     }
     out.queue(Print(cell.text()))?;
-    *last = Some((cell.fg, cell.bg));
+    *last = Some((cell.fg, cell.bg, cell.style));
     Ok(())
 }
 

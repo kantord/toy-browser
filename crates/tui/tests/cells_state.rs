@@ -55,6 +55,18 @@ fn the_terminal_writes_a_whole_cluster_and_resyncs_after_vs16() {
     assert!(sent.contains(&resync), "{resync:?} missing");
 }
 
+#[test]
+fn the_terminal_is_told_bold_italic_underline_and_strikethrough() {
+    let mut app = shown("<p><b>b</b> <i>i</i> <u>u</u> <s>s</s> p</p>", 20, 3);
+    let grid = app.render().expect("painted");
+    let mut out = Vec::new();
+    toy_browser_tui::terminal::draw(grid, &mut out).expect("drawn");
+    let sent = String::from_utf8_lossy(&out);
+    for (code, name) in [(1, "bold"), (3, "italic"), (4, "underline"), (9, "strike")] {
+        assert!(sent.contains(&format!("\u{1b}[{code}m")), "{name} not sent");
+    }
+}
+
 fn type_text(app: &mut App, text: &str) {
     let held = toy_browser::Held::default();
     for ch in text.chars() {
