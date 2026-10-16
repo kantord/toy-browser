@@ -11,6 +11,7 @@ passes `just visual` says so; **unsupported** is a known limit that a page shows
 | `aria-checked-controls` | supported | role-checked |
 | `aria-label-name` | supported | hidden-text |
 | `br-after-inline-block` | supported | line-break-after-box |
+| `center-table` | supported | center-table |
 | `link-media` | supported | media-link |
 | `meter` | supported | progress-meter |
 | `progress` | supported | progress-meter |

@@ -96,6 +96,7 @@ fn inherit(parent: &Computed) -> Computed {
         strike: parent.strike,
         white_space: parent.white_space,
         text_align: parent.text_align,
+        block_align: parent.block_align,
         hidden: parent.hidden,
         ..Computed::default()
     }

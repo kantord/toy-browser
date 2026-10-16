@@ -27,8 +27,8 @@ use blitz_dom::{Node as Dom, local_name};
 use style::properties::ComputedValues;
 use style::values::specified::box_::{DisplayInside, DisplayOutside};
 use toy_browser_cells::{
-    AlignItems, Computed, Display, Edges, Element, Ink, Inks, Length, Node, Placement, Template,
-    Track,
+    AlignItems, Computed, Display, Edges, Element, Ink, Inks, JustifyContent, Length, Node,
+    Placement, Template, TextAlign, Track,
 };
 
 /// What a box is within a table, by its `display`.
@@ -160,6 +160,28 @@ pub(super) fn assemble(mut table: Element, parts: Parts, rules: Rules) -> Elemen
     }
 }
 
+/// Places the tables among `children` the way the legacy alignment of their
+/// container says: under `<center>` (or `align=center`) a table sits in the
+/// middle of the row, not at its left, though its own text-align is reset.
+pub(super) fn align(parent: &Computed, children: &mut [Node]) {
+    let justify = match (parent.block_align, parent.text_align) {
+        (true, TextAlign::Center) => JustifyContent::Center,
+        (true, TextAlign::Right) => JustifyContent::End,
+        _ => return,
+    };
+    let wraps = children.iter_mut().filter_map(|node| match node {
+        Node::Element(el) if el.tag == "table-box" => Some(&mut el.children),
+        _ => None,
+    });
+    for wrap in wraps.flatten() {
+        if let Node::Element(el) = wrap
+            && el.tag == "table-wrap"
+        {
+            el.style.justify_content = justify;
+        }
+    }
+}
+
 /// The row that lets the table shrink to its content instead of filling the
 /// width of the box it is in.
 fn shrunk(kept: Computed, grid: Element) -> Element {
@@ -214,6 +236,7 @@ fn inherited(parent: &Computed) -> Computed {
         strike: parent.strike,
         white_space: parent.white_space,
         text_align: parent.text_align,
+        block_align: parent.block_align,
         hidden: parent.hidden,
         ..Computed::default()
     }

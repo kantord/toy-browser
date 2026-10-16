@@ -102,6 +102,7 @@ pub(super) fn text(style: &ComputedValues, computed: &mut Computed) {
     computed.strike = strike(style);
     computed.white_space = white_space(style);
     computed.text_align = text_align(style);
+    computed.block_align = block_align(style);
     computed.hidden = hidden(style);
     computed.ellipsis = ellipsis(style);
 }
@@ -154,6 +155,14 @@ pub(super) fn white_space(style: &ComputedValues) -> WhiteSpace {
         (Collapse::Collapse, Wrap::Nowrap) => WhiteSpace::Nowrap,
         _ => WhiteSpace::Pre,
     }
+}
+
+/// Whether the alignment is one of the legacy ones that also place blocks.
+pub(super) fn block_align(style: &ComputedValues) -> bool {
+    matches!(
+        style.get_inherited_text().text_align,
+        Align::MozCenter | Align::MozRight
+    )
 }
 
 /// Left-to-right only: `start` is left and `end` is right.

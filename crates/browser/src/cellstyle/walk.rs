@@ -135,6 +135,7 @@ impl Walk<'_> {
             children,
             key: down.owner,
         };
+        table::align(&el.style, &mut el.children);
         indent::apply(node, Page::new(self.env.cols, self.env.cell), &mut el);
         airy::relax(&mut el);
         labelled::add(self.doc, node, &mut el);

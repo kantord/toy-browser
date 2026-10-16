@@ -268,6 +268,10 @@ pub struct Computed {
     pub ellipsis: bool,
     pub white_space: WhiteSpace,
     pub text_align: TextAlign,
+    /// The alignment is the legacy `-moz-center` of `<center>` and
+    /// `align=center`, which moves a table or a box with a width of its own
+    /// as well as the text.
+    pub block_align: bool,
     /// `visibility: hidden | collapse`. A hidden box keeps its space but
     /// paints nothing: no background, no border, and its text becomes blank
     /// cells.
