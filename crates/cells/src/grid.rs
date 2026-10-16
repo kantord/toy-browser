@@ -32,6 +32,7 @@ pub struct CellStyle {
     pub bold: bool,
     pub italic: bool,
     pub underline: bool,
+    pub strike: bool,
     /// Blank the symbol (keeping its width): `visibility: hidden` text.
     pub hidden: bool,
     /// The element that painted this; copied onto [`Cell::key`].
@@ -48,6 +49,7 @@ impl Default for CellStyle {
             bold: false,
             italic: false,
             underline: false,
+            strike: false,
             hidden: false,
             key: None,
         }

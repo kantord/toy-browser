@@ -32,6 +32,7 @@ local function group(fg, bg, flags)
       bold = flags:find("b") ~= nil or nil,
       italic = flags:find("i") ~= nil or nil,
       underline = flags:find("u") ~= nil or nil,
+      strikethrough = flags:find("s") ~= nil or nil,
     })
     groups[name] = true
   end

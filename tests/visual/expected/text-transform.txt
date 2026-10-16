@@ -1,11 +1,11 @@
 legend  a=#ffffff  b=#000000
 text
 
-upper me
+UPPER ME
 
-LOWER ME
+lower me
 
-capital letters here
+Capital Letters Here
 behind
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

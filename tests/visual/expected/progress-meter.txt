@@ -1,9 +1,9 @@
 legend  a=#ffffff  b=#000000
 text
 
-Upload
+Upload ████████░░░░░░░░░░░░
 
-Disk
+Disk ██████████░░░░░░░░░░
 behind
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -11,6 +11,6 @@ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 in front
 ................................................................................
-bbbbbb..........................................................................
+bbbbbb.bbbbbbbbbbbbbbbbbbbb.....................................................
 ................................................................................
-bbbb............................................................................
+bbbb.bbbbbbbbbbbbbbbbbbbb.......................................................

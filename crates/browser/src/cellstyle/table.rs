@@ -211,6 +211,7 @@ fn inherited(parent: &Computed) -> Computed {
         bold: parent.bold,
         italic: parent.italic,
         underline: parent.underline,
+        strike: parent.strike,
         white_space: parent.white_space,
         text_align: parent.text_align,
         hidden: parent.hidden,

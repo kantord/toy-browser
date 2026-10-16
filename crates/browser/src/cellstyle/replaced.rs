@@ -5,6 +5,7 @@
 //!
 //! ```text
 //! [alt text]    [value________]    [x]  [ ]    (o)  ( )    [Submit]    [Choice v]
+//! [████░░░░░░░░░░░░░░░░]   (a progress or meter, filled as far as it is)
 //! ```
 //!
 //! Their spaces are no-break spaces, so a line never ends inside a control.
@@ -28,7 +29,11 @@ const FIELD_SIZE: usize = 20;
 pub(super) fn text(doc: &BaseDocument, node: &Node, typed: &Typed) -> Option<String> {
     let value = keyed(node).and_then(|key| typed.values.get(&key));
     let value = value.map(|(value, ..)| value.as_str());
-    match node.element_data()?.name.local.as_ref() {
+    let tag = node.element_data()?.name.local.as_ref();
+    if let Some(state) = checked(node, tag) {
+        return Some(state);
+    }
+    match tag {
         "img" => Some(picture(node)),
         "input" => Some(input(node, value)),
         "textarea" => {
@@ -36,8 +41,49 @@ pub(super) fn text(doc: &BaseDocument, node: &Node, typed: &Typed) -> Option<Str
             Some(field(&written.replace('\n', "\u{21b5}"), FIELD_SIZE))
         }
         "select" => Some(select(doc, node)),
+        "progress" | "meter" => Some(gauge(node, tag)),
         _ => None,
     }
+}
+
+/// A checkbox, switch or radio built from a `button` or a `div` and told to
+/// be one by `role` and `aria-checked`: its state as the native control shows
+/// it. A real `<button>` gets its brackets from the button, so only the mark,
+/// and an empty one is a blank braille cell: a no-break space is blank to the
+/// button, which would then look for its text elsewhere.
+pub(super) fn checked(node: &Node, tag: &str) -> Option<String> {
+    let role = node.attr(local_name!("role"))?;
+    let on = node.attr(local_name!("aria-checked"))? == "true";
+    let mark = |on: bool, yes: &str, no: &str| if on { yes } else { no }.to_owned();
+    match (role, tag) {
+        ("checkbox" | "switch", "button") => Some(mark(on, "x", "\u{2800}")),
+        ("checkbox" | "switch", _) => Some(mark(on, "[x]", "[\u{a0}]")),
+        ("radio", "button") => Some(mark(on, "o", "\u{2800}")),
+        ("radio", _) => Some(mark(on, "(o)", "(\u{a0})")),
+        _ => None,
+    }
+}
+
+/// A `<progress>` or `<meter>` as a bar [`FIELD_SIZE`] cells wide, filled as
+/// far as its value is between its bounds; a progress with no value is empty.
+fn gauge(node: &Node, tag: &str) -> String {
+    let number = |text: Option<&str>, default: f32| {
+        text.and_then(|it| it.trim().parse::<f32>().ok())
+            .unwrap_or(default)
+    };
+    let low = match tag {
+        "meter" => number(node.attr(local_name!("min")), 0.0),
+        _ => 0.0,
+    };
+    let high = number(node.attr(local_name!("max")), 1.0);
+    let value = number(node.attr(local_name!("value")), low);
+    let share = ((value - low) / (high - low)).clamp(0.0, 1.0);
+    let filled = (share * FIELD_SIZE as f32).round() as usize;
+    format!(
+        "{}{}",
+        "\u{2588}".repeat(filled),
+        "\u{2591}".repeat(FIELD_SIZE - filled)
+    )
 }
 
 /// The alt text in brackets; a missing alt is `[img]`, an empty one is nothing.

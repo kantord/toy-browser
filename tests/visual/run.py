@@ -51,7 +51,7 @@ def host_frame(page):
             frame = event
             break
     p.kill()
-    return [[(text[i], fg, bg) for text, fg, bg, _ in row for i in range(len(text))] for row in frame["lines"]]
+    return [[(text[i], fg, bg, flags) for text, fg, bg, flags in row for i in range(len(text))] for row in frame["lines"]]
 
 
 def golden(grid):
@@ -61,12 +61,18 @@ def golden(grid):
     def letter(color):
         return names.setdefault(color, chr(ord("a") + len(names)))
 
-    chars = ["".join(c for c, _, _ in row).rstrip() for row in grid]
-    back = ["".join(letter(bg) for _, _, bg in row) for row in grid]
-    front = ["".join(letter(fg) if c != " " else "." for c, fg, _ in row) for row in grid]
+    chars = ["".join(c for c, *_ in row).rstrip() for row in grid]
+    back = ["".join(letter(bg) for _, _, bg, _ in row) for row in grid]
+    front = ["".join(letter(fg) if c != " " else "." for c, fg, _, _ in row) for row in grid]
     legend = "  ".join(f"{k}={v}" for v, k in names.items())
     last = max((i for i, t in enumerate(chars) if t), default=0) + 1
-    return "\n".join(["legend  " + legend, "text", *chars[:last], "behind", *back[:last], "in front", *front[:last], ""])
+    out = ["legend  " + legend, "text", *chars[:last], "behind", *back[:last], "in front", *front[:last]]
+    # Bold, italic, underline, strike: only when a page has any, as the flags themselves.
+    marks = {}
+    flagged = ["".join(marks.setdefault(f, str(len(marks) + 1)) if f and c != " " else "." for c, _, _, f in row) for row in grid[:last]]
+    if marks:
+        out += ["flags  " + "  ".join(f"{k}={v}" for v, k in marks.items()), *flagged]
+    return "\n".join(out + [""])
 
 
 def screen(page):
@@ -121,9 +127,9 @@ def disagreements(frame, shown):
     """Cells where the terminal's background is not the host's (text rows only)."""
     out = []
     for y, row in enumerate(frame[: min(len(frame), ROWS)]):
-        if not "".join(c for c, _, _ in row).strip():
+        if not "".join(c for c, *_ in row).strip():
             continue
-        for x, (c, fg, bg) in enumerate(row[:COLS]):
+        for x, (c, fg, bg, _) in enumerate(row[:COLS]):
             cell = shown[y][x] if y < len(shown) and x < len(shown[y]) else (" ", None, None)
             if cell[2] != bg or (c != " " and cell[0] != c):
                 out.append(f"row {y} col {x}: host {c!r} on {bg}, terminal {cell[0]!r} on {cell[2]}")

@@ -37,6 +37,7 @@ fn flags(style: Style) -> String {
         (style.bold, 'b'),
         (style.italic, 'i'),
         (style.underline, 'u'),
+        (style.strike, 's'),
     ]
     .into_iter()
     .filter_map(|(on, flag)| on.then_some(flag))
@@ -111,13 +112,14 @@ fn print(cell: &Cell, numbers: &[Option<u32>]) -> impl Hash {
         bold,
         italic,
         underline,
+        strike,
     } = cell.style;
     let colour = |rgb: Rgb| (rgb.r, rgb.g, rgb.b);
     (
         cell.text(),
         colour(cell.fg),
         colour(cell.bg),
-        (bold, italic, underline),
+        (bold, italic, underline, strike),
         number,
     )
 }

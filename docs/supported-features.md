@@ -8,12 +8,12 @@ passes `just visual` says so; **unsupported** is a known limit that a page shows
 
 | Feature | Status | Pinned by |
 |---|---|---|
-| `aria-checked-controls` | unsupported | role-checked |
+| `aria-checked-controls` | supported | role-checked |
 | `aria-label-name` | supported | hidden-text |
 | `link-media` | supported | media-link |
-| `meter` | unsupported | progress-meter |
-| `progress` | unsupported | progress-meter |
-| `strikethrough` | unsupported | strikethrough |
+| `meter` | supported | progress-meter |
+| `progress` | supported | progress-meter |
+| `strikethrough` | supported | strikethrough |
 | `tabindex-focus` | supported | focus-container |
 | `table` | supported | bands |
 
@@ -26,11 +26,14 @@ passes `just visual` says so; **unsupported** is a known limit that a page shows
 | `color-inheritance` | supported | dark-footer |
 | `display-contents` | supported | contents |
 | `inline-gap-minimum` | supported | spacing |
-| `opacity-zero` | unsupported | opacity |
+| `opacity-zero` | supported | opacity |
 | `order` | supported | order |
-| `text-decoration-line-through` | unsupported | strikethrough |
-| `text-indent` | unsupported | text-indent |
-| `text-transform` | unsupported | text-transform |
-| `thin-background-box` | unsupported | thin-box |
+| `text-decoration-line-through` | supported | strikethrough |
+| `text-indent` | supported | text-indent |
+| `text-indent-hanging` | unsupported | text-indent |
+| `text-overflow-ellipsis` | supported | ellipsis |
+| `text-transform` | supported | text-transform |
+| `thin-bar-and-dot` | unsupported | thin-box |
+| `thin-line-box` | supported | thin-box |
 | `vertical-spacing-scaled` | supported | spacing |
 | `visually-hidden-idiom` | supported | hidden-text |

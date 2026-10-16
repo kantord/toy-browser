@@ -295,6 +295,7 @@ pub fn cell_style(c: &Computed, key: Option<u64>) -> CellStyle {
         bold: c.bold,
         italic: c.italic,
         underline: c.underline,
+        strike: c.strike,
         hidden: c.hidden,
         key,
     }

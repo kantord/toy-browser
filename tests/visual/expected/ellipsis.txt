@@ -1,0 +1,13 @@
+legend  a=#ffffff  b=#000000
+text
+A very long title t…
+Short
+Clipped without a ma
+behind
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+in front
+b.bbbb.bbbb.bbbbb.bb............................................................
+bbbbb...........................................................................
+bbbbbbb.bbbbbbb.b.bb............................................................

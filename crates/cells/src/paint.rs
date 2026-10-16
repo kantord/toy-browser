@@ -107,7 +107,8 @@ impl Painter<'_> {
     fn contents(&mut self, item: &Item, content: Rect, at: (i64, i64)) {
         if let Some(index) = item.paragraph {
             let line = Rect { h: 0, ..content };
-            self.text(&self.paragraphs[index], line, item.style.text_align);
+            let paragraph = &self.paragraphs[index];
+            self.text(paragraph, line, item.style.text_align, item.style.ellipsis);
         }
         for child in &item.children {
             self.item(child, at);
@@ -158,19 +159,23 @@ impl Painter<'_> {
         );
     }
 
-    fn text(&mut self, paragraph: &Paragraph, content: Rect, align: TextAlign) {
+    /// `ellipsis`: a line wider than the box ends in `…` where it is cut.
+    fn text(&mut self, paragraph: &Paragraph, content: Rect, align: TextAlign, ellipsis: bool) {
         for (row, line) in paragraph.lines(content.w as usize).iter().enumerate() {
             let spare = content.w - line.width as i64;
+            let cut = ellipsis && spare < 0;
+            let end = content.x + content.w - i64::from(cut);
             let mut x = content.x + offset(align, spare.max(0));
+            let y = content.y + row as i64;
             for atom in &line.atoms {
-                self.grid.put(
-                    x,
-                    content.y + row as i64,
-                    &atom.symbol,
-                    atom.width,
-                    atom.style,
-                );
+                if x + atom.width as i64 > end {
+                    break;
+                }
+                self.grid.put(x, y, &atom.symbol, atom.width, atom.style);
                 x += atom.width as i64;
+            }
+            if let (true, Some(last)) = (cut, line.atoms.last()) {
+                self.grid.put(end, y, "…", 1, last.style);
             }
         }
     }

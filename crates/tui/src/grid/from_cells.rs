@@ -29,6 +29,7 @@ fn cell(from: &cells::Cell) -> Cell {
             bold: style.bold,
             italic: style.italic,
             underline: style.underline,
+            strike: style.strike,
         },
         pic: None,
     };

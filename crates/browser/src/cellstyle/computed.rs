@@ -54,14 +54,9 @@ fn inflow(style: &ComputedValues, page: Page) -> Computed {
         margin: boxes::margin(style, page),
         padding,
         border,
-        bold: looks::bold(style),
-        italic: looks::italic(style),
-        underline: looks::underline(style),
-        white_space: looks::white_space(style),
-        text_align: looks::text_align(style),
-        hidden: looks::hidden(style),
         ..Computed::default()
     };
+    looks::text(style, &mut computed);
     looks::colours(style, &mut computed);
     computed
 }

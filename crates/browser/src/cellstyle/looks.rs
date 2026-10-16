@@ -12,8 +12,9 @@
 //! stays a colour. A background with no alpha at all is `None`; any other
 //! alpha is passed on beside the colour for the grid to composite. Each border
 //! side has a colour of its own, read the same way as the text colour (and
-//! `currentcolor` is the text colour). The
-//! `opacity` property is ignored: only alpha inside a colour counts.
+//! `currentcolor` is the text colour). `opacity` counts only at 0, which
+//! hides the box and everything in it; a partial one is ignored, and only
+//! alpha inside a colour is composited.
 
 use style::color::{AbsoluteColor, ColorSpace};
 use style::computed_values::text_wrap_mode::T as Wrap;
@@ -22,6 +23,7 @@ use style::computed_values::white_space_collapse::T as Collapse;
 use style::properties::ComputedValues;
 use style::values::computed::text::TextAlign as Align;
 use style::values::computed::{Color, FontStyle, TextDecorationLine};
+use style::values::specified::text::TextOverflowSide;
 use toy_browser_cells::{Alpha, Computed, Ink, Inks, Rgb, TextAlign, WhiteSpace};
 
 /// The four components of a colour in sRGB, whatever it was written in.
@@ -91,6 +93,23 @@ fn background_alpha(style: &ComputedValues) -> u8 {
     to_byte(srgb(&fill)[3])
 }
 
+/// How the text looks: weight, slant, decorations, wrapping, alignment, and
+/// whether it is drawn at all.
+pub(super) fn text(style: &ComputedValues, computed: &mut Computed) {
+    computed.bold = bold(style);
+    computed.italic = italic(style);
+    computed.underline = underline(style);
+    computed.strike = strike(style);
+    computed.white_space = white_space(style);
+    computed.text_align = text_align(style);
+    computed.hidden = hidden(style);
+    computed.ellipsis = ellipsis(style);
+}
+
+fn ellipsis(style: &ComputedValues) -> bool {
+    style.get_text().text_overflow.second == TextOverflowSide::Ellipsis
+}
+
 pub(super) fn bold(style: &ComputedValues) -> bool {
     style.clone_font_weight().value() >= 600.0
 }
@@ -106,8 +125,21 @@ pub(super) fn underline(style: &ComputedValues) -> bool {
         .contains(TextDecorationLine::UNDERLINE)
 }
 
+/// `opacity: 0`: the box keeps its room and everything inside it, whatever
+/// its own `visibility`, paints nothing. Other opacities are not modelled.
+pub(super) fn transparent(style: &ComputedValues) -> bool {
+    style.get_effects().opacity == 0.0
+}
+
+pub(super) fn strike(style: &ComputedValues) -> bool {
+    style
+        .get_text()
+        .text_decoration_line
+        .contains(TextDecorationLine::LINE_THROUGH)
+}
+
 pub(super) fn hidden(style: &ComputedValues) -> bool {
-    style.get_inherited_box().visibility != Visibility::Visible
+    style.get_inherited_box().visibility != Visibility::Visible || transparent(style)
 }
 
 /// `pre-wrap` and `pre-line` both count as `pre`: the tree has no mode that

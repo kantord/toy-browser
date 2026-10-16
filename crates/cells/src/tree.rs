@@ -261,6 +261,11 @@ pub struct Computed {
     pub bold: bool,
     pub italic: bool,
     pub underline: bool,
+    /// `text-decoration: line-through` (`<s>`, `<del>`).
+    pub strike: bool,
+    /// `text-overflow: ellipsis`: where a line is cut off at the end of a
+    /// clipping box, its last cell shows `…`.
+    pub ellipsis: bool,
     pub white_space: WhiteSpace,
     pub text_align: TextAlign,
     /// `visibility: hidden | collapse`. A hidden box keeps its space but

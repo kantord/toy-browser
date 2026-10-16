@@ -29,7 +29,7 @@
 //!      {"op":"key","key":"a","code":"KeyA"}
 //!      {"op":"scroll","rows":3}
 //!      {"op":"whole","on":true}   frames are as tall as the page; the host scrolls
-//!      "flags" is any of b (bold) i (italic) u (underline), or ""
+//!      "flags" is any of b (bold) i (italic) u (underline) s (strikethrough), or ""
 //!      {"op":"images","mode":"alt"}   pictures as their alt text (default), "none", or "real":
 //!                                      an `image` event per picture, and its cells as kitty
 //!                                      unicode placeholders in a colour that is its number

@@ -22,7 +22,10 @@ use super::computed::computed;
 use super::finish::finish;
 use super::table::{self, Part, Parts};
 use super::units::Page;
-use super::{Env, airy, contents, focus, hidden, inline, labelled, order, picture, replaced};
+use super::{
+    Env, airy, case, contents, focus, hidden, indent, inline, labelled, looks, order, picture,
+    replaced, thin,
+};
 use crate::blitz::keyed;
 use toy_browser_cells::{Computed, Display, Element, Node as Cell};
 
@@ -57,23 +60,44 @@ struct Walk<'a> {
 }
 
 /// What an element passes to its children: decorations propagate rather than
-/// inherit, focus marks everything inside the focused element, and `owner` is
-/// the key to use when a node has none of its own.
+/// inherit, focus marks everything inside the focused element, `transparent`
+/// is inside an `opacity: 0` box (which hides all of it, unlike `visibility`),
+/// and `owner` is the key to use when a node has none of its own.
 #[derive(Clone, Copy, Default)]
 struct Down {
     underline: bool,
+    strike: bool,
     reverse: bool,
+    transparent: bool,
     owner: Option<u64>,
+}
+
+impl Down {
+    /// What an ancestor's decorations and `opacity: 0` do to `style`.
+    fn reach(self, style: &mut Computed) {
+        style.underline |= self.underline;
+        style.strike |= self.strike;
+        style.hidden |= self.transparent;
+    }
 }
 
 impl Walk<'_> {
     fn node(&self, id: NodeId, down: Down) -> Option<Cell> {
         let node = self.doc.get_node(id)?;
         match node.text_data() {
-            Some(text) => Some(Cell::Text(text.content.clone())),
+            Some(text) => Some(Cell::Text(self.text(node, &text.content))),
             None => self
                 .element(node, down)
                 .map(|el| Cell::Element(Box::new(el))),
+        }
+    }
+
+    /// A run of text as its parent's `text-transform` has it.
+    fn text(&self, node: &Node, content: &str) -> String {
+        let parent = node.parent.and_then(|id| self.doc.get_node(id));
+        match parent.and_then(|parent| parent.primary_styles()) {
+            Some(styles) => case::shown(content, &styles),
+            None => content.to_owned(),
         }
     }
 
@@ -84,7 +108,8 @@ impl Walk<'_> {
         if style.display == Display::None || hidden::visually_hidden(&styles) {
             return None;
         }
-        style.underline |= down.underline;
+        down.reach(&mut style);
+        thin::line(&styles, &mut style);
         let part = table::part(&styles);
         if part == Part::Cell {
             table::spans(node, &mut style);
@@ -110,6 +135,7 @@ impl Walk<'_> {
             children,
             key: down.owner,
         };
+        indent::apply(node, Page::new(self.env.cols, self.env.cell), &mut el);
         airy::relax(&mut el);
         labelled::add(self.doc, node, &mut el);
         finish(&mut el, data.list_item_data.as_deref());
@@ -146,9 +172,17 @@ impl Walk<'_> {
         }
         Down {
             underline: style.underline,
+            strike: style.strike,
             reverse,
+            transparent: self.faded(node, down),
             owner: own.map(|id| id as u64).or(down.owner),
         }
+    }
+
+    /// Whether `node` is inside an `opacity: 0` box, or is one.
+    fn faded(&self, node: &Node, down: Down) -> bool {
+        let own = node.primary_styles();
+        down.transparent || own.is_some_and(|styles| looks::transparent(&styles))
     }
 
     fn children(&self, node: &Node, down: Down) -> Vec<Cell> {

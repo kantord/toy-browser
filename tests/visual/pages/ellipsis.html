@@ -1,0 +1,9 @@
+<!doctype html>
+<!-- Guards: text-overflow: ellipsis. A line cut off by its box says so.
+
+     Features:
+     css/text-overflow-ellipsis: supported -->
+<style>body{margin:0;width:240px} .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:160px}</style>
+<div class="t">A very long title that cannot possibly fit in this box</div>
+<div class="t">Short</div>
+<div class="t" style="text-overflow:clip">Clipped without a mark, however long it is</div>

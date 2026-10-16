@@ -9,6 +9,7 @@
 //! inside a box placed by its offsets is left alone: it sits over other content
 //! (the arrows on a calendar's caption), and a long name would be drawn across it.
 
+use super::replaced::checked;
 use blitz_dom::{BaseDocument, Node, local_name};
 use style::computed_values::position::T as Place;
 use toy_browser_cells::{Element, Length, Node as Cell, WhiteSpace};
@@ -17,6 +18,7 @@ use toy_browser_cells::{Element, Length, Node as Cell, WhiteSpace};
 pub(super) fn add(doc: &BaseDocument, node: &Node, el: &mut Element) {
     if !matches!(el.tag.as_str(), "a" | "button")
         || has_text(&el.children)
+        || checked(node, &el.tag).is_some()
         || over_content(doc, node)
     {
         return;

@@ -48,6 +48,7 @@ pub struct Style {
     /// A thin horizontal line was drawn under it: a link's or
     /// `text-decoration`'s underline.
     pub underline: bool,
+    pub strike: bool,
 }
 
 /// The picture, as characters rather than pixels.
