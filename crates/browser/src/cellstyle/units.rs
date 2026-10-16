@@ -92,23 +92,31 @@ pub(super) fn length(value: &LengthPercentage, axis: Axis, page: Page) -> Length
     }
 }
 
-/// A margin, padding or gap. Across, a length rounds instead of flooring, so
-/// the 4px or 6px a page puts between inline items is a column and not
-/// nothing; sizes still floor. Down the page it floors too, and past
+/// A margin, padding or gap. Across, a length rounds instead of flooring, and
+/// from [`VISIBLE_GAP`] up is at least a column, so the 4px or 6px a page puts
+/// between inline items is a column on any cell size and not words run
+/// together; sizes still floor. Down the page it floors too, and past
 /// [`ROOMY`] rows each further row counts half: the 96px a section puts
 /// above and below itself is room for a screen of pixels and would be a third of
 /// a terminal's.
 pub(super) fn spaced(value: &LengthPercentage, axis: Axis, page: Page) -> Length {
     match (value.unpack(), axis) {
         (Unpacked::Length(px), Axis::Y) => Length::Cells(tightened(cells(px.px(), axis, page))),
-        (Unpacked::Length(px), Axis::X) => Length::Cells(
-            axis.count(px.px(), page.cell)
-                .round()
-                .clamp(0.0, f32::from(u16::MAX)) as u16,
-        ),
+        (Unpacked::Length(px), Axis::X) => {
+            let columns = axis.count(px.px(), page.cell).round();
+            let visible = if px.px() >= VISIBLE_GAP {
+                columns.max(1.0)
+            } else {
+                columns
+            };
+            Length::Cells(visible.clamp(0.0, f32::from(u16::MAX)) as u16)
+        }
         _ => length(value, axis, page),
     }
 }
+
+/// The smallest horizontal spacing, in px, a page means as a visible gap.
+const VISIBLE_GAP: f32 = 4.0;
 
 /// Rows of vertical spacing that count in full; each row after them counts half.
 const ROOMY: u16 = 2;

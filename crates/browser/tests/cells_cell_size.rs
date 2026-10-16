@@ -73,3 +73,17 @@ fn nonsense_is_refused() {
     let refused = [(0.0, 16.0), (8.0, f32::NAN), (8.0, 5000.0)];
     assert!(refused.iter().all(|&(w, h)| CellSize::new(w, h).is_none()));
 }
+
+// Pins: a gap of 4px or more between inline items is at least a column, on a
+// cell wide enough that 4px alone would round to none; a hairline stays none.
+#[test]
+fn a_visible_gap_between_inline_items_is_a_column_on_any_cell() {
+    let row = |gap: &str| {
+        let html = format!(
+            "<style>body{{margin:0}} div{{display:flex;gap:{gap}}}</style><div><b>a</b><b>b</b></div>"
+        );
+        text(&format!("gap-{gap}"), &html, 20, cell(12.0, 24.0))
+    };
+    assert_eq!(row("4px"), "a b");
+    assert_eq!(row("2px"), "ab");
+}
