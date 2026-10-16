@@ -1,0 +1,9 @@
+<!doctype html>
+<!-- Guards: CSS `order` on flex and grid items. Content placed first in the
+     markup but ordered last must be drawn last. -->
+<style>
+  body { margin: 0 } .row { display: flex; gap: 8px } .grid { display: grid; grid-template-columns: 1fr 1fr 1fr }
+  .a { order: 3 } .b { order: 1 } .c { order: 2 }
+</style>
+<div class="row"><span class="a">third</span><span class="b">first</span><span class="c">second</span></div>
+<div class="grid"><b class="a">three</b><b class="b">one</b><b class="c">two</b></div>

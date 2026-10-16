@@ -1,0 +1,19 @@
+legend  a=#ffffff  b=#000000
+text
+┌────┬────┬─────┐
+│one │two │three│
+├────┼────┼─────┤
+│four│five│six  │
+└────┴────┴─────┘
+behind
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+in front
+bbbbbbbbbbbbbbbbb...............................................................
+bbbb.bbbb.bbbbbbb...............................................................
+bbbbbbbbbbbbbbbbb...............................................................
+bbbbbbbbbbbbbb..b...............................................................
+bbbbbbbbbbbbbbbbb...............................................................

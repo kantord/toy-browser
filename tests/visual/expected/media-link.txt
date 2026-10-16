@@ -1,0 +1,19 @@
+legend  a=#222244  b=#ffffff  c=#eeeeee  d=#000000  e=#222222
+text
+Home Docs Blog
+
+The page body stays visible.
+
+Footer text stays readable
+behind
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+in front
+bbbb.bbbb.bbbb..................................................................
+................................................................................
+ddd.dddd.dddd.ddddd.dddddddd....................................................
+................................................................................
+eeeeee.eeee.eeeee.eeeeeeee......................................................

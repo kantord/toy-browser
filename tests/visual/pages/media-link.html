@@ -1,0 +1,9 @@
+<!doctype html>
+<!-- Guards: <link media>. A sheet for print or an old browser must not apply
+     to the screen: once it hid the navigation and painted dark on dark. -->
+<link rel="stylesheet" href="media-link-print.css" media="print">
+<link rel="stylesheet" href="media-link-old.css" media="screen and (max-width: 10px)">
+<style>body { margin: 0 } nav { background: #224 ; color: #fff } footer { background: #eee; color: #222 }</style>
+<nav>Home Docs Blog</nav>
+<p>The page body stays visible.</p>
+<footer>Footer text stays readable</footer>

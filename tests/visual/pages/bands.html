@@ -1,0 +1,17 @@
+<!doctype html>
+<!-- Guards: coloured bands behind text. A page whose own background (white
+     margins) differs from the band behind its text must show the band: the
+     Neovim plugin once let the margin colour of the row win over the runs. -->
+<style>
+  body { margin: 0; background: #fff; font: 16px monospace }
+  table { width: 85%; margin: 0 auto; border-collapse: collapse }
+  .top td { background: #ff6600; color: #000 }
+  .odd td { background: #f6f6ef }
+  .even td { background: #dde8f5 }
+</style>
+<table>
+  <tr class="top"><td>Daily Notes</td><td>new | past | about</td></tr>
+  <tr class="odd"><td>1. Tea</td><td>green</td></tr>
+  <tr class="even"><td>2. Coffee</td><td>black</td></tr>
+  <tr class="odd"><td>3. Water</td><td>cold</td></tr>
+</table>

@@ -1,0 +1,11 @@
+<!doctype html>
+<!-- Guards: screen-reader-only text and icon-only controls. A 1px clipped box
+     draws nothing; a control with only an icon keeps its name on one line. -->
+<style>
+  body { margin: 0 }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+  button { border: 0; background: #ccd; padding: 0 1ch }
+</style>
+<p>Visible line <span class="sr-only">hidden words that must not show</span> goes on.</p>
+<button aria-label="Search"><svg width="16" height="16"></svg></button>
+<button aria-label="Open the main menu"><svg width="16" height="16"></svg></button>

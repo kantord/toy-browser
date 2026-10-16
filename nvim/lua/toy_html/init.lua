@@ -92,9 +92,15 @@ end
 -- and one behind the whole line for the padding that was trimmed off.
 local function mark_row(view, line, row, rest)
   if rest and rest[3] ~= "" then
-    -- Low priority, so the runs' own colours win where there is text.
+    -- A range to the end of the line, at low priority so the runs' own colours
+    -- win where there is text. Not `line_hl_group`: in Neovim 0.12 its
+    -- background beats a range's whatever the priorities.
     vim.api.nvim_buf_set_extmark(view.buf, ns, line, 0, {
-      line_hl_group = backdrop(rest[3]),
+      end_row = line + 1,
+      end_col = 0,
+      strict = false,
+      hl_group = backdrop(rest[3]),
+      hl_eol = true,
       priority = 1,
     })
   end

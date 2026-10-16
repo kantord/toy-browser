@@ -1,0 +1,16 @@
+legend  a=#ffffff  b=#ff6600  c=#f6f6ef  d=#dde8f5  e=#000000
+text
+      Daily Notes new | past | about
+      1. Tea      green
+      2. Coffee   black
+      3. Water    cold
+behind
+aaaaaabbbbbbbbbbbabbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaacccccccccccaccccccccccccccccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaadddddddddddaddddddddddddddddddaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaacccccccccccaccccccccccccccccccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+in front
+......eeeee.eeeee.eee.e.eeee.e.eeeee............................................
+......ee.eee......eeeee.........................................................
+......ee.eeeeee...eeeee.........................................................
+......ee.eeeee....eeee..........................................................

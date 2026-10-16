@@ -1,0 +1,7 @@
+legend  a=#eeeeff  b=#ffffff  c=#000000
+text
+left mid-1 mid-2 right
+behind
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+in front
+cccc.ccccc.ccccc.ccccc..........................................................

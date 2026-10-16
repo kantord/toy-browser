@@ -72,13 +72,25 @@ term url="https://news.ycombinator.com/" *ARGS:
 # loads the plugin from nvim/ and runs :ToyHtml. `q` in the page closes it.
 nvim url="https://news.ycombinator.com":
     cargo build --release -p toy-browser-host
-    TOY_BROWSER_HOST=$PWD/target/release/toy-browser-host nvim -u NONE --cmd 'set rtp+=nvim' --cmd 'set mouse=a showtabline=2' -c 'runtime plugin/toy_html.lua' -c 'ToyHtml {{ url }}'
+    TOY_BROWSER_HOST=$PWD/target/release/toy-browser-host nvim -u NONE --cmd 'set rtp+=nvim' --cmd 'set mouse=a showtabline=2' -c 'runtime plugin/toy_html.lua' -c 'ToyHtmlGo {{ url }}'
 
 # The same with real pictures (kitty or ghostty; in tmux set allow-passthrough
 # on first). The default is Wikipedia's Neovim article, which has plenty.
 nvim-images url="https://en.wikipedia.org/wiki/Neovim":
     cargo build --release -p toy-browser-host
-    TOY_BROWSER_HOST=$PWD/target/release/toy-browser-host nvim -u NONE --cmd 'set rtp+=nvim' --cmd 'set mouse=a showtabline=2' --cmd 'let g:toy_html_images="real"' -c 'runtime plugin/toy_html.lua' -c 'ToyHtml {{ url }}'
+    TOY_BROWSER_HOST=$PWD/target/release/toy-browser-host nvim -u NONE --cmd 'set rtp+=nvim' --cmd 'set mouse=a showtabline=2' --cmd 'let g:toy_html_images="real"' -c 'runtime plugin/toy_html.lua' -c 'ToyHtmlGo {{ url }}'
+
+# Visual regression: made-up pages, each guarding a bug found on a real one,
+# drawn by the host (against tests/visual/expected) and by the Neovim plugin in
+# a real terminal (tmux), which must paint what the host says. `just visual-bless`
+# rewrites the expected files: read the diff.
+visual:
+    cargo build --release -p toy-browser-host
+    python3 tests/visual/run.py
+
+visual-bless:
+    cargo build --release -p toy-browser-host
+    python3 tests/visual/run.py --bless
 
 # Every dependency's licence against deny.toml (what a release may ship).
 licences:
@@ -96,7 +108,7 @@ host-no-js:
 # The same, with pages fetched by happy-dom (cd hosts/happy-dom && npm install first).
 nvim-happy url="https://news.ycombinator.com":
     cargo build --release -p toy-browser-host
-    TOY_BROWSER_HOST_BIN=$PWD/target/release/toy-browser-host TOY_BROWSER_HOST=$PWD/hosts/happy-dom/host.mjs nvim -u NONE --cmd 'set rtp+=nvim' --cmd 'set mouse=a showtabline=2' -c 'runtime plugin/toy_html.lua' -c 'ToyHtml {{ url }}'
+    TOY_BROWSER_HOST_BIN=$PWD/target/release/toy-browser-host TOY_BROWSER_HOST=$PWD/hosts/happy-dom/host.mjs nvim -u NONE --cmd 'set rtp+=nvim' --cmd 'set mouse=a showtabline=2' -c 'runtime plugin/toy_html.lua' -c 'ToyHtmlGo {{ url }}'
 
 # Neovim drawn as HTML: the engine shows it here, and /tmp/nvim.html holds the
 # same page for a web browser.

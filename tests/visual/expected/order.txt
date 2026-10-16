@@ -1,0 +1,10 @@
+legend  a=#ffffff  b=#000000
+text
+first second third
+one                        two                       three
+behind
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+in front
+bbbbb.bbbbbb.bbbbb..............................................................
+bbb........................bbb.......................bbbbb......................
