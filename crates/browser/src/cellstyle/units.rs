@@ -75,6 +75,16 @@ pub(super) fn bordered_cells(px: f32, axis: Axis, page: Page) -> u16 {
     cells(px, axis, page).max(1)
 }
 
+/// A size in cells: floored, but a box that is at least half a cell is a
+/// cell, not nothing. A 32px field on a terminal whose rows are 36px tall is
+/// one row; floored to zero it let what comes next draw over it.
+fn sized(px: f32, axis: Axis, page: Page) -> u16 {
+    match cells(px, axis, page) {
+        0 if axis.count(px, page.cell) >= 0.5 => 1,
+        floored => floored,
+    }
+}
+
 /// A length or percentage. A `calc()` mixing the two needs a containing
 /// block it does not have here, so across it is resolved against the page's
 /// width (`page.width`): exact for a top-level box, an overestimate for one
@@ -82,7 +92,7 @@ pub(super) fn bordered_cells(px: f32, axis: Axis, page: Page) -> u16 {
 /// content, like `auto`.
 pub(super) fn length(value: &LengthPercentage, axis: Axis, page: Page) -> Length {
     match (value.unpack(), axis) {
-        (Unpacked::Length(px), _) => Length::Cells(cells(px.px(), axis, page)),
+        (Unpacked::Length(px), _) => Length::Cells(sized(px.px(), axis, page)),
         (Unpacked::Percentage(share), _) => Length::Percent(share.0 * 100.0),
         (Unpacked::Calc(calc), Axis::X) => {
             let px = calc.resolve(CSSPixelLength::new(page.width)).px();

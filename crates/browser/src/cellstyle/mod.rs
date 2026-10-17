@@ -31,6 +31,7 @@
 //! `collapse`) and `tracks` for the two that become a grid.
 
 mod airy;
+mod areas;
 mod boxes;
 mod brackets;
 mod cached;

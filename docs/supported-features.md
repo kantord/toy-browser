@@ -27,6 +27,7 @@ passes `just visual` says so; **unsupported** is a known limit that a page shows
 | `border-junctions` | supported | borders |
 | `color-inheritance` | supported | dark-footer |
 | `display-contents` | supported | contents |
+| `grid-template-areas` | supported | grid-areas |
 | `inline-gap-minimum` | supported | spacing |
 | `opacity-zero` | supported | opacity |
 | `order` | supported | order |
@@ -35,7 +36,7 @@ passes `just visual` says so; **unsupported** is a known limit that a page shows
 | `text-indent-hanging` | unsupported | text-indent |
 | `text-overflow-ellipsis` | supported | ellipsis |
 | `text-transform` | supported | text-transform |
-| `thin-bar-and-dot` | unsupported | thin-box |
+| `thin-bar-and-dot` | supported | thin-box |
 | `thin-line-box` | supported | thin-box |
 | `vertical-spacing-scaled` | supported | spacing |
 | `visually-hidden-idiom` | supported | hidden-text |

@@ -87,3 +87,14 @@ fn a_visible_gap_between_inline_items_is_a_column_on_any_cell() {
     assert_eq!(row("4px"), "a b");
     assert_eq!(row("2px"), "ab");
 }
+
+// Pins: a box a little shorter than a row is a row, not nothing. A search form's
+// 32px field on a terminal with 36px rows was a box of no height, and the
+// buttons under it were drawn over it.
+#[test]
+fn a_box_of_half_a_row_or_more_keeps_a_row_of_its_own() {
+    let html = "<style>body{margin:0} .b{display:inline-block;height:32px}</style>\
+                <div class=b>field</div><br><span>under</span>";
+    let tall = text("tall-box", html, 20, cell(16.0, 36.0));
+    assert_eq!(tall, "field\nunder");
+}

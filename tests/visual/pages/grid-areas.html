@@ -1,0 +1,14 @@
+<!doctype html>
+<!-- Guards: grid-template-areas. A card whose children say `grid-area: name`
+     has no line numbers anywhere; every child landed in the first cell and the
+     title, text and byline were drawn over each other.
+
+     Features:
+     css/grid-template-areas: supported -->
+<style>
+  body{margin:0;width:480px}
+  a{display:grid;grid-template-areas:"pic pic" "title title" "text text" "by time"}
+  .p{grid-area:pic} h1{grid-area:title;margin:0;font-size:1em}
+  .t{grid-area:text;margin:0} .b{grid-area:by} .m{grid-area:time}
+</style>
+<a href="#"><div class="p">[picture]</div><h1>The title</h1><p class="t">Some text under it.</p><span class="b">Author</span><span class="m">today</span></a>

@@ -20,7 +20,7 @@ use clap::Parser;
 use crossterm::event::{
     self, Event, KeyEvent, KeyEventKind, MouseButton, MouseEvent, MouseEventKind,
 };
-use toy_browser::Scheme;
+use toy_browser::{CellSize, Scheme};
 use toy_browser_tui::shell::Shell;
 use toy_browser_tui::{input, terminal};
 
@@ -30,6 +30,12 @@ const LINE: i32 = 3;
 /// Far enough past any page's reach that Home and End land on an edge of it,
 /// once [`App::scroll`] clamps the result back inside.
 const JUMP: i32 = 1_000_000;
+
+fn cell_size(text: &str) -> Result<CellSize, String> {
+    let (width, height) = text.split_once('x').ok_or("expected WIDTHxHEIGHT")?;
+    let number = |part: &str| part.parse::<f32>().map_err(|error| error.to_string());
+    CellSize::new(number(width)?, number(height)?).ok_or_else(|| "not a size a cell can be".into())
+}
 
 fn scheme(name: &str) -> Result<Scheme, String> {
     name.parse()
@@ -46,6 +52,11 @@ struct Cli {
     #[arg(long)]
     no_scripts: bool,
 
+    /// How big a terminal cell is in pixels, as `WIDTHxHEIGHT` (`9.6x19.2`),
+    /// for a terminal that does not say (tmux does not).
+    #[arg(long, value_parser = cell_size)]
+    cell: Option<CellSize>,
+
     /// Which colour scheme the page is shown in.
     #[arg(long, value_parser = scheme, default_value = "dark")]
     scheme: Scheme,
@@ -54,6 +65,9 @@ struct Cli {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let (cols, rows) = crossterm::terminal::size().context("reading the terminal's size")?;
+    if let Some(cell) = cli.cell {
+        terminal::fix_cell(cell);
+    }
     let mut app = Shell::open(
         &cli.url,
         cols,

@@ -61,8 +61,21 @@ pub fn cell_of(window: &WindowSize) -> CellSize {
         .unwrap_or_default()
 }
 
-/// The size of a cell in this terminal, asked of the operating system.
+/// A size given on the command line, which is believed over anything asked.
+static FIXED: std::sync::OnceLock<CellSize> = std::sync::OnceLock::new();
+
+/// Says what size a cell is, for a terminal that does not (tmux reports no
+/// pixels). Kept for good, resizes included.
+pub fn fix_cell(cell: CellSize) {
+    let _ = FIXED.set(cell);
+}
+
+/// The size of a cell in this terminal: what was given, or asked of the
+/// operating system.
 pub fn cell() -> CellSize {
+    if let Some(fixed) = FIXED.get() {
+        return *fixed;
+    }
     crossterm::terminal::window_size()
         .map(|window| cell_of(&window))
         .unwrap_or_default()

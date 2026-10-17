@@ -1,11 +1,11 @@
 <!doctype html>
 <!-- Guards: thin boxes. A box with a background and less than a cell of
-     thickness is still shown: a 1px divider as a line; a bar or a dot between
-     a line and a cell is a known limit and draws nothing.
+     thickness is still shown: a 1px divider as a line; a bar or a dot of half a cell or
+     more is a cell, and is drawn.
 
      Features:
      css/thin-line-box: supported
-     css/thin-bar-and-dot: unsupported -->
+     css/thin-bar-and-dot: supported -->
 <style>
   body{margin:0;width:300px} .h{height:1px;background:#888}
   .bar{height:8px;background:#eee} .bar>i{display:block;height:8px;width:40%;background:#06c}

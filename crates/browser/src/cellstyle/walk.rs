@@ -23,7 +23,7 @@ use super::finish::finish;
 use super::table::{self, Part, Parts};
 use super::units::Page;
 use super::{
-    Env, airy, case, contents, focus, hidden, indent, inline, labelled, looks, order, picture,
+    Env, airy, areas, case, contents, focus, hidden, indent, inline, labelled, looks, order, picture,
     replaced, thin,
 };
 use crate::blitz::keyed;
@@ -110,6 +110,7 @@ impl Walk<'_> {
         }
         down.reach(&mut style);
         thin::line(&styles, &mut style);
+        areas::place(self.doc, node, &styles, &mut style);
         let part = table::part(&styles);
         if part == Part::Cell {
             table::spans(node, &mut style);
