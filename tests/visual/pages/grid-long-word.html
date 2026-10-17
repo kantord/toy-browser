@@ -1,0 +1,17 @@
+<!doctype html>
+<!-- Guards: a word wider than its grid column. A card in a three-column grid
+     was as wide as its longest word and was drawn over the column beside it;
+     the word is cut at the column's edge instead.
+
+     Features:
+     css/grid-item-shrinks-to-track: supported -->
+<style>
+  body{margin:0;width:320px}
+  .row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.card{display:grid;grid-template-areas:"t"} .card>div{grid-area:t}
+</style>
+<div class="row">
+  <div class="card"><div>incomprehensibilities in one column</div></div>
+  <div class="card"><div>short text here</div></div>
+  <div class="card"><div>another short column</div></div>
+</div>

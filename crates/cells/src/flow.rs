@@ -107,6 +107,15 @@ pub(crate) fn avoid(style: &mut Style) {
     }
 }
 
+/// An item of a grid shrinks to its track. Its automatic minimum width would
+/// be its longest word, so a card with a word wider than its column was as
+/// wide as the word and drawn over the column beside it.
+pub(crate) fn shrink(style: &mut Style) {
+    if style.min_size.width == LengthPercentageAuto::AUTO {
+        style.min_size.width = length(0.0);
+    }
+}
+
 /// Whether the box floats.
 pub(crate) fn floated(c: &Computed) -> bool {
     c.float != Float::None

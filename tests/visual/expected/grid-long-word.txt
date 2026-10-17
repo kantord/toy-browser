@@ -1,0 +1,13 @@
+legend  a=#ffffff  b=#000000
+text
+incomprehens  short text    another
+ibilities in  here          short column
+one column
+behind
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+in front
+bbbbbbbbbbbb..bbbbb.bbbb....bbbbbbb.............................................
+bbbbbbbbb.bb..bbbb..........bbbbb.bbbbbb........................................
+bbb.bbbbbb......................................................................

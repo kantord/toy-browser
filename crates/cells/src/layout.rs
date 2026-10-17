@@ -151,6 +151,11 @@ impl Planner {
                 .iter()
                 .for_each(|c| self.restyle(c.id, flow::avoid));
         }
+        if el.style.display == Display::Grid {
+            children
+                .iter()
+                .for_each(|c| self.restyle(c.id, flow::shrink));
+        }
         let id = self.taffy.new_with_children(style, &ids).expect("taffy");
         Item {
             id,

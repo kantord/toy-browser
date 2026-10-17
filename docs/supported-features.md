@@ -27,6 +27,7 @@ passes `just visual` says so; **unsupported** is a known limit that a page shows
 | `border-junctions` | supported | borders |
 | `color-inheritance` | supported | dark-footer |
 | `display-contents` | supported | contents |
+| `grid-item-shrinks-to-track` | supported | grid-long-word |
 | `grid-template-areas` | supported | grid-areas |
 | `inline-gap-minimum` | supported | spacing |
 | `opacity-zero` | supported | opacity |
